@@ -178,6 +178,43 @@
     if (state.container) state.container.classList.toggle('show-finger', state.fingerGuide);
   }
 
+  /**
+   * にがてな キーを 色の こさで しめします（きろく画面の ヒートマップ）。
+   *
+   * 「どの指が にがてか」は ことばで わかりますが、**キーボードの どこか** は
+   * 図で 見るのが いちばん はやいので、本物と 同じ ならびの 上に かさねます。
+   *
+   * @param {Object} byChar 打つはずだった 文字 → ミスの 数（スペースは 'space'）
+   * @returns {number} いちばん 多かった ミスの 数（0 なら 何も 出て いません）
+   */
+  function heat(byChar) {
+    let max = 0;
+    Object.keys(byChar || {}).forEach(k => { max = Math.max(max, byChar[k]); });
+
+    Object.keys(state.keyEls).forEach(code => {
+      const el = state.keyEls[code];
+      el.classList.remove('is-heat');
+      el.style.removeProperty('--heat');
+      el.removeAttribute('title');
+    });
+    if (max <= 0) return 0;
+
+    const byCode = {};
+    Object.keys(byChar).forEach(ch => {
+      const found = Layout.findKey(state.layoutId, ch === 'space' ? ' ' : ch);
+      if (!found) return;
+      byCode[found.key.code] = (byCode[found.key.code] || 0) + byChar[ch];
+    });
+    Object.keys(byCode).forEach(code => {
+      const el = state.keyEls[code];
+      if (!el) return;
+      el.classList.add('is-heat');
+      el.style.setProperty('--heat', (byCode[code] / max).toFixed(2));
+      el.setAttribute('title', `ミス ${Math.round(byCode[code])} かい`);
+    });
+    return max;
+  }
+
   global.Typa = global.Typa || {};
-  global.Typa.Keyboard = { render, highlight, flash, setFingerGuide, get layoutId() { return state.layoutId; } };
+  global.Typa.Keyboard = { render, highlight, flash, heat, setFingerGuide, get layoutId() { return state.layoutId; } };
 })(window);

@@ -5,15 +5,17 @@
  * アプリの階層は「コース → ステージ → れんしゅう → けっか」の4段です。
  * どの画面からも下部バーの「もどる」で1つ前にもどれます。
  *
- * mode は study.v1 の `mode`（半角小文字・数字・ハイフンのみ）にそのまま使います。
- *   key      … キーの位置をおぼえる（アルファベットをそのまま打つ）
- *   romaji   … ローマ字のきまりをおぼえる（かな1〜2文字ずつ）
- *   word     … ことばを打つ
- *   sentence … 文を打つ
- *   shortcut … ショートカットキーをつかう
+ * mode は練習のしゅるいです。きろくの集計や表示の出しわけに使います。
+ *   key       … キーの位置をおぼえる（アルファベットをそのまま打つ）
+ *   romaji    … ローマ字のきまりをおぼえる（かな1〜2文字ずつ）
+ *   word      … ことばを打つ
+ *   sentence  … 文を打つ
+ *   shortcut  … ショートカットキーをつかう
+ *   challenge … 時間ぎめ（このファイルの下のほうで組み立てます）
  *
- * skill は「にがて」を集計するためのラベルです（study.v1 の items[].skill）。
- * 20文字以内・半角にそろえ、先生の画面で「どの段がにがてか」が見えるようにします。
+ * grade は想定学年です。ステージ一覧に「めやす ○年」として出ます。
+ * skill は「このステージが何を鍛えるか」を半角で書いたラベルで、
+ * このファイルを手なおしする人のための目印です（アプリの動きには使いません）。
  */
 (function (global) {
   'use strict';
@@ -51,7 +53,10 @@
           items: keyItems(['1234', '5678', '90', '1470', '2580', '3690', '1234567890']) },
         { id: 'hp-7', title: 'ぜんぶ ミックス', note: 'どの だんも まぜて',
           mode: 'key', skill: 'mixed-keys', grade: 3,
-          items: keyItems(['fjdksla;', 'qazwsx', 'edcrfv', 'tgbyhn', 'ujmik', 'ol.p;/', 'a1s2d3', 'z9x8c7']) }
+          items: keyItems(['fjdksla;', 'qazwsx', 'edcrfv', 'tgbyhn', 'ujmik', 'ol.p;/', 'a1s2d3', 'z9x8c7']) },
+        { id: 'hp-8', title: 'きごうの キー', note: 'シフトを つかう キー',
+          mode: 'key', skill: 'symbol-shift', grade: 4,
+          items: keyItems(['!!', '??', '()', '!?', '""', '$%', '&*', '()!?', '?!?!']) }
       ] },
 
     // -----------------------------------------------------------------
@@ -132,13 +137,13 @@
           items: [
             w('きょうは、あさから あめが ふって いました。'),
             w('きゅうしょくの カレーが とても おいしかったです。'),
-            w('となりの せきの 人と、いっしょに かんがえました。'),
+            w('となりの せきの ひとと、いっしょに かんがえました。', 'となりの せきの 人と、いっしょに かんがえました。'),
             w('あしたは、はやく おきて じゅんびを します。')
           ] },
         { id: 'st-3', title: 'まなびの ふり返り', note: 'じゅぎょうの あとに 書く 文',
           mode: 'sentence', skill: 'sentence-reflect', grade: 5,
           items: [
-            w('きょうの じゅぎょうで、わかった ことを 書きます。'),
+            w('きょうの じゅぎょうで、わかった ことを かきます。', 'きょうの じゅぎょうで、わかった ことを 書きます。'),
             w('つぎは、じぶんで しらべて はっぴょうしたいです。'),
             w('ともだちの いけんを きいて、かんがえが かわりました。'),
             w('もくひょうに むかって、すこしずつ すすめて います。')
@@ -147,8 +152,10 @@
           mode: 'sentence', skill: 'sentence-long', grade: 6,
           items: [
             w('タイピングは、まいにち すこしずつ れんしゅうすると、かならず じょうずに なります。'),
-            w('キーボードを 見ないで 打てるように なると、かんがえながら 書くことが できます。'),
-            w('ローマ字の きまりが わかると、しらない ことばでも 打てるように なります。')
+            w('キーボードを みないで うてるように なると、かんがえながら かくことが できます。',
+              'キーボードを 見ないで 打てるように なると、かんがえながら 書くことが できます。'),
+            w('ローマじの きまりが わかると、しらない ことばでも うてるように なります。',
+              'ローマ字の きまりが わかると、しらない ことばでも 打てるように なります。')
           ] }
       ] },
 
@@ -238,6 +245,113 @@
   /** ショートカット練習で つかう 文（じっさいに コピーする もとの文） */
   const SHORTCUT_SOURCE = 'きょうの じゅぎょうで、あたらしい ことを おぼえました。';
 
+  // ===================================================================
+  // とくべつ れんしゅう（コース一覧には ならばない、その場で 作る ステージ）
+  // ===================================================================
+  //
+  // ふつうの ステージは 中身が 決まって いますが、この2つは
+  // **そのときの じょうたいから 組み立てます**。
+  //   チャレンジ … 時間ないに どれだけ 打てるか。お題は つきません
+  //   にがて とっくん … これまでの ミスから、その子だけの お題を つくります
+  // どちらも コースの じゅんばんとは べつなので、★は つけません。
+
+  const CHALLENGE_COURSE = {
+    id: 'challenge', title: 'チャレンジ', short: 'チャレンジ',
+    note: '時間ないに どれだけ 打てるか', color: 'amber', icon: 'trophy'
+  };
+
+  const WEAK_COURSE = {
+    id: 'weak', title: 'にがて とっくん', short: 'にがて',
+    note: 'まちがえやすい キーだけ あつめて', color: 'blue', icon: 'finger'
+  };
+
+  /** チャレンジの 時間（びょう）と お題の しゅるい */
+  const CHALLENGE_SECONDS = [30, 60, 120];
+  const CHALLENGE_POOLS = [
+    { id: 'word', title: 'ことば', note: 'みじかい ことばが つぎつぎ 出ます', icon: 'word' },
+    { id: 'sentence', title: '文', note: 'くとうてんの ある 文で', icon: 'text' },
+    { id: 'key', title: 'アルファベット', note: 'ローマ字を つかわず キーだけ', icon: 'keyboard' }
+  ];
+
+  /** コース id から すべての お題を あつめます */
+  function itemsOfCourse(courseId) {
+    const course = findCourse(courseId);
+    if (!course) return [];
+    return course.stages.reduce((all, s) => all.concat(s.items || []), []);
+  }
+
+  function challengeItems(poolId) {
+    if (poolId === 'sentence') return itemsOfCourse('sentences');
+    if (poolId === 'key') return itemsOfCourse('home-position');
+    // ことばは「ことば」コースに、ローマ字コースの ことばも 足して 数を ふやします
+    return itemsOfCourse('words').concat(itemsOfCourse('romaji').filter(i => i.k.length >= 2));
+  }
+
+  /**
+   * チャレンジの ステージを 組み立てます。
+   * items が つきても おわらず、じゅんばんを かえて くりかえします（endless）。
+   */
+  function buildChallengeStage(poolId, seconds) {
+    const pool = CHALLENGE_POOLS.filter(p => p.id === poolId)[0] || CHALLENGE_POOLS[0];
+    const sec = CHALLENGE_SECONDS.indexOf(seconds) >= 0 ? seconds : 60;
+    const items = challengeItems(pool.id);
+    if (items.length === 0) return null;
+    return {
+      course: CHALLENGE_COURSE,
+      stage: {
+        id: `ch-${pool.id}-${sec}`,
+        title: `${sec}びょう ／ ${pool.title}`,
+        note: pool.note,
+        mode: 'challenge',
+        skill: `challenge-${pool.id}`,
+        items,
+        endless: true,
+        limitMs: sec * 1000,
+        noStars: true,
+        pool: pool.id,
+        seconds: sec
+      }
+    };
+  }
+
+  /** ホームポジションの キー。にがてな キーの あいだに はさんで リズムを 作ります */
+  const ANCHORS = ['f', 'j', 'd', 'k', 's', 'l', 'a', ';'];
+
+  /**
+   * これまでの ミスから、その子だけの お題を つくります。
+   *
+   * @param {string[]} weakKeys ミスの おおい じゅんに ならんだ キー（store.missSummary）
+   * @returns {{course: Object, stage: Object}|null} データが 足りなければ null
+   */
+  function buildWeakStage(weakKeys) {
+    const targets = (weakKeys || []).filter(k => /^[a-z0-9;,./-]$/.test(k)).slice(0, 6);
+    if (targets.length < 2) return null;
+
+    const items = [];
+    targets.forEach((t, i) => {
+      const anchor = ANCHORS[i % ANCHORS.length];
+      items.push(t + t + t + t);                 // まず その キーだけを くりかえす
+      items.push(t + anchor + t + anchor);       // ホームポジションに もどる れんしゅう
+    });
+    // さいごに ぜんぶ まぜた お題を 2つ
+    items.push(targets.join(''));
+    items.push(targets.slice().reverse().join('') + targets[0]);
+
+    return {
+      course: WEAK_COURSE,
+      stage: {
+        id: 'weak-drill',
+        title: 'にがて とっくん',
+        note: `${targets.join(' ')} を あつめました`,
+        mode: 'key',
+        skill: 'weak-drill',
+        items: items.map(t => ({ k: t, d: '', raw: true })),
+        noStars: true,
+        targets
+      }
+    };
+  }
+
   /** コースIDから コースを ひきます */
   function findCourse(id) { return COURSES.filter(c => c.id === id)[0] || null; }
 
@@ -254,6 +368,16 @@
     return stage.mode === 'shortcut' ? (SHORTCUT_TASKS[stage.tasks] || []).length : stage.items.length;
   }
 
+  /** ぜんぶの ステージの 数（きろく画面の「すすみぐあい」に つかいます） */
+  function totalStages() {
+    return COURSES.reduce((sum, c) => sum + c.stages.length, 0);
+  }
+
   global.Typa = global.Typa || {};
-  global.Typa.Lessons = { COURSES, SHORTCUT_TASKS, SHORTCUT_SOURCE, findCourse, findStage, stageCount };
+  global.Typa.Lessons = {
+    COURSES, SHORTCUT_TASKS, SHORTCUT_SOURCE,
+    CHALLENGE_COURSE, WEAK_COURSE, CHALLENGE_SECONDS, CHALLENGE_POOLS,
+    buildChallengeStage, buildWeakStage,
+    findCourse, findStage, stageCount, totalStages
+  };
 })(window);
