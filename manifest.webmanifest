@@ -1,0 +1,29 @@
+{
+  "name": "Typa（タイパ） タイピングれんしゅう",
+  "short_name": "Typa",
+  "description": "小学生の Chromebook のための タイピング学習アプリ。どの指で どのキーを 押すかを 見ながら、ローマ字入力と ショートカットキーを 練習できます。",
+  "lang": "ja",
+  "dir": "ltr",
+  "categories": ["education"],
+  "start_url": "./",
+  "scope": "./",
+  "id": "/Typa/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#eef2f9",
+  "theme_color": "#1d4ed8",
+  "icons": [
+    { "src": "icons/favicon-32.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "れんしゅうを はじめる", "short_name": "れんしゅう", "url": "./?tab=courses",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "きろくを 見る", "short_name": "きろく", "url": "./?tab=records",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

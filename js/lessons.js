@@ -1,0 +1,259 @@
+/**
+ * =====================================================================
+ * lessons.js — コースとステージ（練習の中身）
+ * =====================================================================
+ * アプリの階層は「コース → ステージ → れんしゅう → けっか」の4段です。
+ * どの画面からも下部バーの「もどる」で1つ前にもどれます。
+ *
+ * mode は study.v1 の `mode`（半角小文字・数字・ハイフンのみ）にそのまま使います。
+ *   key      … キーの位置をおぼえる（アルファベットをそのまま打つ）
+ *   romaji   … ローマ字のきまりをおぼえる（かな1〜2文字ずつ）
+ *   word     … ことばを打つ
+ *   sentence … 文を打つ
+ *   shortcut … ショートカットキーをつかう
+ *
+ * skill は「にがて」を集計するためのラベルです（study.v1 の items[].skill）。
+ * 20文字以内・半角にそろえ、先生の画面で「どの段がにがてか」が見えるようにします。
+ */
+(function (global) {
+  'use strict';
+
+  /** かな（＋表示用のことば）をまとめて作るヘルパー */
+  const w = (k, d) => ({ k, d: d || '' });
+
+  /** キーの位置をおぼえるステージのお題（アルファベットをそのまま打ちます） */
+  const keyItems = list => list.map(t => ({ k: t, d: '', raw: true }));
+
+  const COURSES = [
+    // -----------------------------------------------------------------
+    { id: 'home-position', title: 'ゆびの ばしょを おぼえる', short: 'ゆびの ばしょ',
+      note: 'ホームポジションから じゅんばんに ひろげます',
+      note2: 'キーボードを 見ないで 打てるように なる いちばんの ちかみちです。',
+      color: 'blue', icon: 'hand',
+      stages: [
+        { id: 'hp-1', title: 'ホームポジション ①', note: 'f と j に ゆびを おく',
+          mode: 'key', skill: 'home-fj', grade: 1,
+          items: keyItems(['ffff', 'jjjj', 'fjfj', 'jfjf', 'ffjj', 'jjff', 'fjjf', 'jffj']) },
+        { id: 'hp-2', title: 'ホームポジション ②', note: 'd k s l を ふやす',
+          mode: 'key', skill: 'home-dksl', grade: 1,
+          items: keyItems(['dddd', 'kkkk', 'dkdk', 'ssss', 'llll', 'slsl', 'dksl', 'lsdk', 'fdjk']) },
+        { id: 'hp-3', title: 'ホームポジション ③', note: 'a と ; まで ぜんぶ',
+          mode: 'key', skill: 'home-all', grade: 2,
+          items: keyItems(['aaaa', ';;;;', 'asdf', 'jkl;', 'fdsa', ';lkj', 'asdfjkl;', 'aslk', 'dfjk']) },
+        { id: 'hp-4', title: 'うえの だん', note: 'q w e r t y u i o p',
+          mode: 'key', skill: 'top-row', grade: 2,
+          items: keyItems(['qwer', 'tyui', 'op', 'quit', 'type', 'were', 'your', 'poet', 'quiet']) },
+        { id: 'hp-5', title: 'したの だん', note: 'z x c v b n m',
+          mode: 'key', skill: 'bottom-row', grade: 3,
+          items: keyItems(['zxcv', 'bnm', 'zxzx', 'cvcv', 'bnbn', 'move', 'zone', 'comb']) },
+        { id: 'hp-6', title: 'すうじの だん', note: '1 から 0 まで',
+          mode: 'key', skill: 'number-row', grade: 3,
+          items: keyItems(['1234', '5678', '90', '1470', '2580', '3690', '1234567890']) },
+        { id: 'hp-7', title: 'ぜんぶ ミックス', note: 'どの だんも まぜて',
+          mode: 'key', skill: 'mixed-keys', grade: 3,
+          items: keyItems(['fjdksla;', 'qazwsx', 'edcrfv', 'tgbyhn', 'ujmik', 'ol.p;/', 'a1s2d3', 'z9x8c7']) }
+      ] },
+
+    // -----------------------------------------------------------------
+    { id: 'romaji', title: 'ローマ字を おぼえる', short: 'ローマ字',
+      note: 'あ行から じゅんばんに、かなを ローマ字で 打ちます',
+      note2: 'し は si でも shi でも、じゃ は ja でも zya でも 正かいです。ならった うちかたで だいじょうぶ。',
+      color: 'teal', icon: 'letter',
+      stages: [
+        { id: 'rm-a', title: 'あ行', note: 'a i u e o',
+          mode: 'romaji', skill: 'row-a', grade: 3,
+          items: [w('あ'), w('い'), w('う'), w('え'), w('お'), w('あお'), w('いえ'), w('うえ'), w('あい')] },
+        { id: 'rm-ka', title: 'か行・が行', note: 'k と g',
+          mode: 'romaji', skill: 'row-ka', grade: 3,
+          items: [w('か'), w('き'), w('く'), w('け'), w('こ'), w('かき'), w('きく'), w('こけ'), w('がっこう', '学校'), w('かぎ')] },
+        { id: 'rm-sa', title: 'さ行・ざ行', note: 's と z（し は si / shi）',
+          mode: 'romaji', skill: 'row-sa', grade: 3,
+          items: [w('さ'), w('し'), w('す'), w('せ'), w('そ'), w('さしすせそ'), w('すし'), w('かぜ'), w('じかん', '時間')] },
+        { id: 'rm-ta', title: 'た行・だ行', note: 't と d（ち は ti / chi）',
+          mode: 'romaji', skill: 'row-ta', grade: 3,
+          items: [w('た'), w('ち'), w('つ'), w('て'), w('と'), w('たちつてと'), w('つくえ', 'つくえ'), w('てつだい', '手つだい')] },
+        { id: 'rm-na', title: 'な行・は行', note: 'n と h（ふ は hu / fu）',
+          mode: 'romaji', skill: 'row-na-ha', grade: 3,
+          items: [w('な'), w('に'), w('ぬ'), w('ね'), w('の'), w('は'), w('ひ'), w('ふ'), w('へ'), w('ほ'), w('はなび', '花火'), w('ふね', '船')] },
+        { id: 'rm-ma', title: 'ま行・や行・ら行・わ行', note: 'm y r w',
+          mode: 'romaji', skill: 'row-ma-wa', grade: 3,
+          items: [w('ま'), w('み'), w('む'), w('め'), w('も'), w('や'), w('ゆ'), w('よ'), w('ら'), w('り'), w('る'), w('れ'), w('ろ'), w('わ'), w('を'), w('やま', '山'), w('みらい', '未来')] },
+        { id: 'rm-dakuten', title: 'てんてん・まる', note: 'ば行・ぱ行',
+          mode: 'romaji', skill: 'dakuten', grade: 3,
+          items: [w('ば'), w('び'), w('ぶ'), w('べ'), w('ぼ'), w('ぱ'), w('ぴ'), w('ぷ'), w('ぺ'), w('ぽ'), w('でんぱ', '電ぱ'), w('たんぽぽ')] },
+        { id: 'rm-n', title: 'ん の うちかた', note: 'nn と 打つのが かくじつ',
+          mode: 'romaji', skill: 'hatsuon-n', grade: 4,
+          items: [w('ほん', '本'), w('えんぴつ'), w('かんじ', '漢字'), w('しんぶん', '新聞'), w('でんわ', '電話'), w('あんない', 'あん内'), w('ぐんて')] },
+        { id: 'rm-sokuon', title: 'ちいさい つ', note: 'つぎの 字を 2かい 打つ',
+          mode: 'romaji', skill: 'sokuon', grade: 4,
+          items: [w('きって', '切手'), w('がっこう', '学校'), w('ざっし'), w('らっぱ'), w('しゅっぱつ', '出ぱつ'), w('まっすぐ'), w('いっしょ')] },
+        { id: 'rm-youon', title: 'ちいさい や ゆ よ', note: 'きゃ しゅ ちょ など',
+          mode: 'romaji', skill: 'youon', grade: 4,
+          items: [w('きゃく', 'お客'), w('しゅくだい', 'しゅく題'), w('ちょきん', 'ちょ金'), w('びょういん', '病院'), w('りょうり', '料理'), w('じゅぎょう', '授業'), w('きょうしつ', '教室')] },
+        { id: 'rm-mix', title: 'ローマ字 ミックス', note: 'ぜんぶ まぜて',
+          mode: 'romaji', skill: 'romaji-mixed', grade: 4,
+          items: [w('とうきょう', '東京'), w('しゃしん', '写真'), w('がっきゅう', '学級'), w('ちいきの', '地いきの'), w('こんしゅう', '今週'), w('はっぴょう', '発表'), w('しゅうかん', '習かん')] }
+      ] },
+
+    // -----------------------------------------------------------------
+    { id: 'words', title: 'ことばを 打つ', short: 'ことば',
+      note: 'みじかい ことばを、リズムよく',
+      note2: '見ないで 打てるように なってきたら、スピードを 上げてみましょう。',
+      color: 'green', icon: 'word',
+      stages: [
+        { id: 'wd-1', title: 'みのまわりの ことば', note: 'みじかい ことば',
+          mode: 'word', skill: 'word-daily', grade: 2,
+          items: [w('あさ', '朝'), w('いぬ', '犬'), w('うみ', '海'), w('えき', '駅'), w('おかし'), w('かさ'), w('くつ'), w('そら', '空'), w('つくえ'), w('とけい', '時計'), w('ねこ', 'ねこ'), w('はな', '花'), w('ほし', '星'), w('みかん'), w('やま', '山'), w('ゆき', '雪'), w('りんご'), w('わたし', '私')] },
+        { id: 'wd-2', title: 'がっこうの ことば', note: 'きょうかや ばしょ',
+          mode: 'word', skill: 'word-school', grade: 3,
+          items: [w('こくご', '国語'), w('さんすう', '算数'), w('りか', '理科'), w('しゃかい', '社会'), w('たいいく', '体育'), w('おんがく', '音楽'), w('ずこう', '図工'), w('きゅうしょく', '給食'), w('としょかん', '図書館'), w('ほけんしつ', '保健室'), w('うんどうかい', '運動会'), w('きょうかしょ', '教科書')] },
+        { id: 'wd-3', title: 'まなびの ことば', note: 'じゅぎょうで つかう ことば',
+          mode: 'word', skill: 'word-learning', grade: 4,
+          items: [w('かんさつ', '観察'), w('じっけん', '実験'), w('けんきゅう', '研究'), w('しりょう', '資料'), w('はっぴょう', '発表'), w('きろく', '記録'), w('もくひょう', '目標'), w('ふりかえり', 'ふり返り'), w('かだい', '課題'), w('かいけつ', '解決'), w('きょうりょく', '協力'), w('せつめい', '説明')] },
+        { id: 'wd-4', title: 'コンピュータの ことば', note: '長めの ことばに ちょうせん',
+          mode: 'word', skill: 'word-ict', grade: 5,
+          items: [w('じょうほう', '情報'), w('けんさく', '検索'), w('ほぞん', '保存'), w('がめん', '画面'), w('にゅうりょく', '入力'), w('へんかん', '変換'), w('ふぁいる', 'ファイル'), w('ふぉるだ', 'フォルダ'), w('ぷろぐらみんぐ', 'プログラミング'), w('いんたーねっと', 'インターネット'), w('きーぼーど', 'キーボード'), w('たいぴんぐ', 'タイピング')] },
+        { id: 'wd-5', title: 'ローマ字で 書く なまえ', note: '地名を ローマ字で',
+          mode: 'word', skill: 'word-place', grade: 4,
+          items: [w('にほん', '日本'), w('とうきょう', '東京'), w('きょうと', '京都'), w('おおさか', '大阪'), w('ほっかいどう', '北海道'), w('おきなわ', '沖縄'), w('ふじさん', '富士山'), w('しんかんせん', '新幹線')] }
+      ] },
+
+    // -----------------------------------------------------------------
+    { id: 'sentences', title: '文を 打つ', short: '文',
+      note: 'くとうてんも いっしょに',
+      note2: '、は「,」、。は「.」で 打てます。あわてずに、まちがえないことを たいせつに。',
+      color: 'violet', icon: 'text',
+      stages: [
+        { id: 'st-1', title: 'あいさつ', note: 'みじかい 文',
+          mode: 'sentence', skill: 'sentence-greeting', grade: 3,
+          items: [w('おはようございます。'), w('ありがとうございます。'), w('いってきます。'), w('よろしくおねがいします。'), w('しつれいします。')] },
+        { id: 'st-2', title: 'きょうの できごと', note: 'にっきの ような 文',
+          mode: 'sentence', skill: 'sentence-diary', grade: 4,
+          items: [
+            w('きょうは、あさから あめが ふって いました。'),
+            w('きゅうしょくの カレーが とても おいしかったです。'),
+            w('となりの せきの 人と、いっしょに かんがえました。'),
+            w('あしたは、はやく おきて じゅんびを します。')
+          ] },
+        { id: 'st-3', title: 'まなびの ふり返り', note: 'じゅぎょうの あとに 書く 文',
+          mode: 'sentence', skill: 'sentence-reflect', grade: 5,
+          items: [
+            w('きょうの じゅぎょうで、わかった ことを 書きます。'),
+            w('つぎは、じぶんで しらべて はっぴょうしたいです。'),
+            w('ともだちの いけんを きいて、かんがえが かわりました。'),
+            w('もくひょうに むかって、すこしずつ すすめて います。')
+          ] },
+        { id: 'st-4', title: 'ながい 文', note: 'さいごまで あきらめないで',
+          mode: 'sentence', skill: 'sentence-long', grade: 6,
+          items: [
+            w('タイピングは、まいにち すこしずつ れんしゅうすると、かならず じょうずに なります。'),
+            w('キーボードを 見ないで 打てるように なると、かんがえながら 書くことが できます。'),
+            w('ローマ字の きまりが わかると、しらない ことばでも 打てるように なります。')
+          ] }
+      ] },
+
+    // -----------------------------------------------------------------
+    { id: 'shortcut', title: 'ショートカットを つかう', short: 'ショートカット',
+      note: 'コピー・はりつけ・もとにもどす',
+      note2: 'キーを くみあわせると、マウスを つかうより ずっと はやく できます。じっさいに 手を うごかして おぼえましょう。',
+      color: 'amber', icon: 'bolt',
+      stages: [
+        { id: 'sc-1', title: 'コピーと はりつけ', note: 'Ctrl+A / C / V',
+          mode: 'shortcut', skill: 'shortcut-copy', grade: 3, tasks: 'copy' },
+        { id: 'sc-2', title: '切りとりと もとにもどす', note: 'Ctrl+X / Z / Y',
+          mode: 'shortcut', skill: 'shortcut-undo', grade: 4, tasks: 'undo' },
+        { id: 'sc-3', title: 'えらぶ・うごかす', note: 'Shift や Ctrl と やじるし',
+          mode: 'shortcut', skill: 'shortcut-select', grade: 5, tasks: 'select' },
+        { id: 'sc-4', title: 'べんりな キー', note: 'ほぞん・さがす・まとめてけす',
+          mode: 'shortcut', skill: 'shortcut-tool', grade: 5, tasks: 'tool' }
+      ] }
+  ];
+
+  /**
+   * ショートカットの課題。
+   *
+   * 「キーを おぼえる」だけで おわらせず、**じっさいに エディタで やってみて、
+   * けっかが 正しいか** で 正かいを 決めます（type: 'do'）。
+   * ブラウザの きのうを よびだして しまう キー（ほぞん・さがす など）は、
+   * ページの ほうで 止めて キーの くみあわせだけを みます（type: 'press'）。
+   */
+  const SHORTCUT_TASKS = {
+    copy: [
+      { id: 'sc-all', name: 'ぜんぶ えらぶ', combo: { ctrl: true, code: 'KeyA' }, type: 'do',
+        instruct: '「もとの文」の 中を クリックしてから、ぜんぶ えらぼう。',
+        hint: 'Ctrl を おしながら A', check: 'selectAll' },
+      { id: 'sc-copy', name: 'コピー', combo: { ctrl: true, code: 'KeyC' }, type: 'do',
+        instruct: 'えらんだ 文を コピーしよう。', hint: 'Ctrl を おしながら C', check: 'copied' },
+      { id: 'sc-paste', name: 'はりつけ', combo: { ctrl: true, code: 'KeyV' }, type: 'do',
+        instruct: '「じぶんの文」の 中を クリックして、はりつけよう。',
+        hint: 'Ctrl を おしながら V', check: 'pasted' },
+      { id: 'sc-paste2', name: 'もう1かい はりつけ', combo: { ctrl: true, code: 'KeyV' }, type: 'do',
+        instruct: 'コピーは なんども つかえます。つづけて もう1かい はりつけよう。',
+        hint: 'Ctrl を おしながら V', check: 'pastedTwice' }
+    ],
+    undo: [
+      { id: 'sc-cut', name: '切りとり', combo: { ctrl: true, code: 'KeyX' }, type: 'do',
+        instruct: '「もとの文」を ぜんぶ えらんで、切りとろう（きえます）。',
+        hint: 'Ctrl+A で えらんでから Ctrl+X', check: 'cut' },
+      { id: 'sc-undo', name: 'もとに もどす', combo: { ctrl: true, code: 'KeyZ' }, type: 'do',
+        instruct: 'まちがえても だいじょうぶ。いまの そうさを もとに もどそう。',
+        hint: 'Ctrl を おしながら Z', check: 'undone' },
+      { id: 'sc-redo', name: 'やりなおす', combo: { ctrl: true, shift: true, code: 'KeyZ' }, type: 'press',
+        alt: [{ ctrl: true, code: 'KeyY' }],
+        instruct: 'もどしすぎたら「やりなおす」。キーを おしてみよう。',
+        hint: 'Ctrl+Shift+Z（Ctrl+Y でも できます）' }
+    ],
+    select: [
+      { id: 'sc-shift-right', name: '1文字ずつ えらぶ', combo: { shift: true, code: 'ArrowRight' }, type: 'press',
+        instruct: '「もとの文」の さいしょを クリックして、右へ 1文字ずつ えらぼう。',
+        hint: 'Shift を おしながら →' },
+      { id: 'sc-ctrl-right', name: 'ことばごと うごく', combo: { ctrl: true, code: 'ArrowRight' }, type: 'press',
+        instruct: 'ことばの かたまりごと、いっきに うごこう。', hint: 'Ctrl を おしながら →' },
+      { id: 'sc-ctrl-shift-right', name: 'ことばごと えらぶ', combo: { ctrl: true, shift: true, code: 'ArrowRight' }, type: 'press',
+        instruct: 'Ctrl と Shift を いっしょに つかうと、ことばごと えらべます。',
+        hint: 'Ctrl+Shift を おしながら →' },
+      { id: 'sc-home', name: '行の はじめへ', combo: { code: 'Home' }, type: 'press',
+        alt: [{ meta: true, code: 'ArrowLeft' }],
+        instruct: '行の いちばん はじめに もどろう。',
+        hint: 'Chromebook は けんさくキー を おしながら ←' },
+      { id: 'sc-end', name: '行の おわりへ', combo: { code: 'End' }, type: 'press',
+        alt: [{ meta: true, code: 'ArrowRight' }],
+        instruct: '行の いちばん おわりへ いこう。',
+        hint: 'Chromebook は けんさくキー を おしながら →' }
+    ],
+    tool: [
+      { id: 'sc-save', name: 'ほぞん', combo: { ctrl: true, code: 'KeyS' }, type: 'press',
+        instruct: 'つくった ものを ほぞんする キーです。', hint: 'Ctrl を おしながら S' },
+      { id: 'sc-find', name: 'さがす', combo: { ctrl: true, code: 'KeyF' }, type: 'press',
+        instruct: 'ページの 中の ことばを さがす キーです。', hint: 'Ctrl を おしながら F' },
+      { id: 'sc-del-word', name: 'ことばを まとめて けす', combo: { ctrl: true, code: 'Backspace' }, type: 'do',
+        instruct: '「じぶんの文」の おわりから、ことばを まとめて けそう。',
+        hint: 'Ctrl を おしながら けすキー', check: 'deletedWord' },
+      { id: 'sc-plain-paste', name: 'かざりなしで はりつけ', combo: { ctrl: true, shift: true, code: 'KeyV' }, type: 'press',
+        instruct: '文字の 大きさや 色を つけずに はりつける キーです。',
+        hint: 'Ctrl+Shift を おしながら V' }
+    ]
+  };
+
+  /** ショートカット練習で つかう 文（じっさいに コピーする もとの文） */
+  const SHORTCUT_SOURCE = 'きょうの じゅぎょうで、あたらしい ことを おぼえました。';
+
+  /** コースIDから コースを ひきます */
+  function findCourse(id) { return COURSES.filter(c => c.id === id)[0] || null; }
+
+  /** ステージIDから コースと ステージを ひきます */
+  function findStage(courseId, stageId) {
+    const course = findCourse(courseId);
+    if (!course) return null;
+    const stage = course.stages.filter(s => s.id === stageId)[0];
+    return stage ? { course, stage } : null;
+  }
+
+  /** ステージの お題の数（ショートカットは 課題の数） */
+  function stageCount(stage) {
+    return stage.mode === 'shortcut' ? (SHORTCUT_TASKS[stage.tasks] || []).length : stage.items.length;
+  }
+
+  global.Typa = global.Typa || {};
+  global.Typa.Lessons = { COURSES, SHORTCUT_TASKS, SHORTCUT_SOURCE, findCourse, findStage, stageCount };
+})(window);
