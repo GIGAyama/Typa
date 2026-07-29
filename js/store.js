@@ -92,6 +92,7 @@
     retry: true,          // まちがえた お題を さいごに もう1回 出す
     hands: true,          // 手の イラストを 出す（押す 指が 光ります）
     buddy: true,          // キャラクターを 出す（打つと うごきます）
+    buddyJob: 'office',   // どの しごとの キャラクターか（buddy.js の JOBS）
     assist: 'custom',     // ヒントの つよさ（0〜3 / 'auto' / 'custom'）
     theme: 'auto'         // auto / light / dark
   };

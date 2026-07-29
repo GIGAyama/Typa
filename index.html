@@ -22,7 +22,7 @@
 
 <link rel="stylesheet" href="./css/style.css">
 </head>
-<body data-screen="home">
+<body data-screen="play">
 
 <!-- 画面の はしから スワイプした ときに 出る しるし（「もどる」の 手ごたえ） -->
 <div id="edge-hint" class="edge-hint" aria-hidden="true"><span class="edge-arrow"></span></div>
@@ -43,15 +43,16 @@
          stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5 8 12l7 7"/></svg>
     <span>もどる</span>
   </button>
-  <button class="nav-btn" type="button" data-tab="home">
-    <svg class="ico" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
-         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h13V10"/></svg>
-    <span>ホーム</span>
-  </button>
-  <button class="nav-btn" type="button" data-tab="courses">
+  <!-- いちばん 左（もどるの つぎ）が「うつ」です。ひらいた ところが ここに なります -->
+  <button class="nav-btn" type="button" data-tab="play">
     <svg class="ico" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
          stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M6 9.5h.01M9.5 9.5h.01M13 9.5h.01M16.5 9.5h.01M6 13h.01M9.5 13h.01M13 13h.01M16.5 13h.01M8 16.2h8"/></svg>
-    <span>れんしゅう</span>
+    <span>うつ</span>
+  </button>
+  <button class="nav-btn" type="button" data-tab="menu">
+    <svg class="ico" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><path d="M3.5 9.5h17M3.5 15h17M9.5 3.5v17M15 3.5v17"/></svg>
+    <span>えらぶ</span>
   </button>
   <button class="nav-btn" type="button" data-tab="records">
     <svg class="ico" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"

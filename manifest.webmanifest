@@ -21,7 +21,7 @@
     { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "れんしゅうを はじめる", "short_name": "れんしゅう", "url": "./?tab=courses",
+    { "name": "れんしゅうを はじめる", "short_name": "れんしゅう", "url": "./?tab=menu",
       "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "チャレンジを する", "short_name": "チャレンジ", "url": "./?screen=challenge",
       "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
