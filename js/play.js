@@ -127,13 +127,18 @@
               <p class="lap-flash" id="play-lap-flash" hidden aria-hidden="true"></p>
             </div>
 
-            <div class="play-finger" id="play-finger" aria-live="polite"></div>
+            <!-- 「つぎの 指」と きろくの 数字。たてが みじかい 画面では
+                 この 2つを よこに ならべて、あいた ぶんを キーボードに
+                 まわします（style.css の .play-status）-->
+            <div class="play-status">
+              <div class="play-finger" id="play-finger" aria-live="polite"></div>
 
-            <div class="play-meter">
-              <div class="meter"><span class="meter-label">はやさ</span><b id="m-kps">0.0</b><span class="meter-unit">打/びょう</span></div>
-              <div class="meter"><span class="meter-label">正かくさ</span><b id="m-acc">100</b><span class="meter-unit">%</span></div>
-              <div class="meter"><span class="meter-label">ミス</span><b id="m-miss">0</b><span class="meter-unit">かい</span></div>
-              <div class="meter meter-combo" id="m-combo-box"><span class="meter-label">れんぞく</span><b id="m-combo">0</b><span class="meter-unit">だ</span></div>
+              <div class="play-meter">
+                <div class="meter"><span class="meter-label">はやさ</span><b id="m-kps">0.0</b><span class="meter-unit">打/びょう</span></div>
+                <div class="meter"><span class="meter-label">正かくさ</span><b id="m-acc">100</b><span class="meter-unit">%</span></div>
+                <div class="meter"><span class="meter-label">ミス</span><b id="m-miss">0</b><span class="meter-unit">かい</span></div>
+                <div class="meter meter-combo" id="m-combo-box"><span class="meter-label">れんぞく</span><b id="m-combo">0</b><span class="meter-unit">だ</span></div>
+              </div>
             </div>
           </div>
 
@@ -148,12 +153,22 @@
 
         <p class="play-ready" id="play-ready">${T.icon('play')} さいしょの 1打で スタートします。10びょうでも きろくは のこります。</p>
 
-        <!-- 手の 絵と キーボードは ひとくみ です。ひろい 画面では よこに
-             ならべます。学校の Chromebook は「よこに ひろく、たてに みじかい」
-             ので、たてに つむと キーボードが 画面の 外に 出て しまいます -->
+        <!-- キーボードと 手の 絵は ひとくみ です。かならず **上下**に かさねます。
+             よこに ならべると、キーの ばしょと 指を 見くらべる たびに 目が
+             左右に いききして、どの 指が どの キーの 下に あるのかも
+             分かりません。上下なら 指先が ホームポジションの キーの
+             まっすぐ 下に 来るので、目は すこし 下を 見るだけ です。
+
+             はばは この かたまり だけ 画面いっぱいに ひろげます（style.css）。
+             ひとつの わく（kb-scroll）の 中に 入れて あるので、せまい 画面で
+             よこに スクロールしても キーボードと 指が いっしょに うごきます -->
         <div class="play-lower">
-          <div class="play-visual"><div id="play-hands"></div></div>
-          <div class="kb-wrap"><div id="play-kb"></div></div>
+          <div class="kb-scroll">
+            <div class="kb-fit">
+              <div class="kb-wrap"><div id="play-kb"></div></div>
+              <div class="play-visual"><div id="play-hands"></div></div>
+            </div>
+          </div>
         </div>
 
         <div class="play-foot">
@@ -267,9 +282,160 @@
     if (pick) pick.addEventListener('click', () => { if (state.onPick) state.onPick(); });
     loadItem();
     renderMeters();
+    fitKeyboard();
     bindKeys();
+    bindFit();
     bindLeaveGuard();
     if (state.limitMs) startTimer();
+  }
+
+  // ------------------------------------------------------------------
+  // キーボードの 大きさを 画面に あわせる
+  // ------------------------------------------------------------------
+
+  /**
+   * キーボードと 手の 絵を、画面に のこって いる ぶんに あわせて
+   * **いちばん 大きく** します。
+   *
+   * ■ なぜ CSS の 数字だけ では 足りないのか
+   * 大きさを vw（画面の はば）で 決めると、よこに ひろく たてに みじかい
+   * 学校の Chromebook で キーボードが 画面の 下に はみ出します。
+   * vh（たかさ）で 決めても、お題の 文の ながさ・「文字を 大きくする」の
+   * せってい・ちびキャラの あるなし で 上の ぶんの たかさが かわるので、
+   * 決めうちの 数字では どこかで あいません。
+   * 打ちながら スクロールは できない ので、ここだけは 実さいに はかります。
+   *
+   * ■ しくみ
+   * キーの たかさは ぜんぶ「1文字ぶん（--kb-em）」の ばいすう なので、
+   * 下の かたまりの たかさは em に **まっすぐ ひれい** します。
+   * そこで 小さい ほうと 大きい ほうの 2つで はかって、
+   * ちょうど 入る em を 出します（はかるのは 2回だけ）。
+   *
+   * ■ 大きさは とちゅうで かえません
+   * お題が かわる たびに キーボードの 大きさが かわると、目が おどろいて
+   * 打てなく なります。そこで **この ステージで いちばん 場所を とる お題**を
+   * いったん 入れて はかり、そのあと もとに もどします。
+   */
+  const EM_MIN = 8;
+  const EM_MAX = 22;
+
+  function fitKeyboard() {
+    const root = $('play-root');
+    const lower = document.querySelector('.play-lower');
+    if (!root || !lower) return;
+    const scroll = lower.querySelector('.kb-scroll');
+    if (!scroll || !lower.offsetHeight) return;      // 見えて いない ときは 何も しません
+
+    let saved = null;
+    try {
+      saved = fillLongest();
+      const setEm = em => root.style.setProperty('--kb-em', `${Math.round(em * 100) / 100}px`);
+      // はばの 上限。キー1つが よこ長に なりすぎない ところで 止めます
+      // （キーボードぜんたいの はば ＝ 88em。style.css の .kb-fit と 同じ 数）
+      const emHi = Math.max(EM_MIN + 2, Math.min(EM_MAX, scroll.clientWidth / 88));
+
+      setEm(EM_MIN);
+      const low = lower.getBoundingClientRect().height;
+      setEm(emHi);
+      const high = lower.getBoundingClientRect().height;
+      const slope = (high - low) / (emHi - EM_MIN);
+
+      const rect = root.getBoundingClientRect();
+      const nav = document.querySelector('.navbar');
+      const navH = nav ? nav.getBoundingClientRect().height : 62;
+      // 本文の 下の すきま（.view の padding-bottom）も 画面を つかいます
+      const view = root.parentElement;
+      const pad = view ? parseFloat(getComputedStyle(view).paddingBottom) || 0 : 0;
+      // 下部バーの 上まで。すこし（4px）ゆとりを のこします
+      const room = global.innerHeight - navH - (rect.top + global.scrollY) - pad - 4;
+      const em = Math.max(EM_MIN, Math.min(emHi, slope > 0 ? emHi + (room - rect.height) / slope : emHi));
+      setEm(em);
+      stretchRows(root, lower, room);
+    } finally {
+      restoreQuestion(saved);
+    }
+  }
+
+  /**
+   * よこの はばを つかい切っても たかさに ゆとりが のこる とき
+   * （大きな モニターなど）は、キーを **たてに** のばします。
+   *
+   * 本物の キーは ほぼ ましかく です。よこに ながい 長方形の キーボードは
+   * 手もとと 見くらべた ときに 形が ちがって しまうので、
+   * ましかくを こえては のばしません。
+   */
+  function stretchRows(root, lower, room) {
+    root.style.removeProperty('--kb-row');
+    const spare = room - root.getBoundingClientRect().height;
+    if (spare < 6) return;
+    const kb = lower.querySelector('.kb');
+    const key = kb && kb.querySelector('.kb-key:not(.is-top)');
+    if (!key) return;
+    const now = key.getBoundingClientRect().height;               // いまの キーの たかさ
+    const square = kb.getBoundingClientRect().width / 15 - 4;     // ましかくに なる たかさ
+    // 6行ぶん（いちばん上の 行は 0.73ばい なので あわせて 5.73行ぶん）
+    const row = Math.min(square, now + spare / 5.73);
+    if (row > now + 1) root.style.setProperty('--kb-row', `${Math.round(row * 10) / 10}px`);
+  }
+
+  /** この ステージで いちばん 場所を とる お題を、いったん 画面に 入れます */
+  function fillLongest() {
+    const kana = $('q-kana'), label = $('q-label'), romaji = $('q-romaji');
+    if (!kana || !label || !romaji) return null;
+    let item = null, score = -1;
+    state.pool.forEach(it => {
+      const s = (it.k || '').length * 2 + (it.d || '').length;
+      if (s > score) { score = s; item = it; }
+    });
+    if (!item) return null;
+
+    // ローマ字の ヒントは 先に 作って おきます。入れかえた あとで しくじると
+    // お題が もどらなく なる ので、しくじる かもしれない ことは 先に します
+    let hint = '';
+    if (!item.raw && state.view.romajiHint) {
+      try { hint = T.Romaji.createMatcher(item.k).hint().rest; } catch (e) { hint = ''; }
+    }
+
+    const saved = {
+      kana: kana.innerHTML, label: label.textContent, labelHidden: label.hidden,
+      romaji: romaji.innerHTML, romajiHidden: romaji.hidden
+    };
+    kana.textContent = item.k;
+    label.textContent = item.d || '';
+    label.hidden = !item.d;
+    if (hint) {
+      romaji.hidden = false;
+      romaji.textContent = hint;
+    }
+    return saved;
+  }
+
+  function restoreQuestion(saved) {
+    if (!saved) return;
+    $('q-kana').innerHTML = saved.kana;
+    $('q-label').textContent = saved.label;
+    $('q-label').hidden = saved.labelHidden;
+    $('q-romaji').innerHTML = saved.romaji;
+    $('q-romaji').hidden = saved.romajiHidden;
+  }
+
+  let fitHandler = null;
+
+  /** 画面の 大きさが かわった とき（回転・ウィンドウ）だけ はかりなおします */
+  function bindFit() {
+    unbindFit();
+    let waiting = false;
+    fitHandler = () => {
+      if (waiting) return;
+      waiting = true;
+      global.requestAnimationFrame(() => { waiting = false; if (state.running) fitKeyboard(); });
+    };
+    global.addEventListener('resize', fitHandler);
+  }
+
+  function unbindFit() {
+    if (fitHandler) global.removeEventListener('resize', fitHandler);
+    fitHandler = null;
   }
 
   /**
@@ -817,6 +983,7 @@
     state.running = false;
     stopTimer();
     unbindKeys();
+    unbindFit();
     unbindLeaveGuard();
     T.Buddy.stop();
 

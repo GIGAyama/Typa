@@ -27,7 +27,7 @@
   const esc = s => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-  const APP_VERSION = '3.1.0';
+  const APP_VERSION = '3.2.0';
 
   let view = null;
   let installPrompt = null;

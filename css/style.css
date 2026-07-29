@@ -47,6 +47,20 @@
   --radius: 16px;
   --radius-s: 10px;
 
+  /* 指の 色分けの こさ。あかるい 教室の Chromebook では 色が とんで
+     見えなく なるので、うすくし すぎません（キーの 文字は 読めるはば で）*/
+  --finger-tint: 22%;
+
+  /* 画面の キーボードの 大きさの もとに なる「1文字ぶん」。
+     キー1つの たかさは この 2.6ばい、キーボードぜんたいの たかさは
+     およそ この 15ばい に なります。
+
+     ■ よこ と たて の 両方を 見ます
+     はば だけで 決めると、よこに ひろく たてに みじかい 学校の
+     Chromebook（1366×768）で キーボードが 画面の 下に はみ出します。
+     そこで vw（はば）と vh（たかさ）の **小さい ほう**を つかいます。 */
+  --kb-em: clamp(9px, min(1.25vw, 2vh), 20px);
+
   /* 学校の 端末に よく 入っている UD フォントを 先に します */
   --font: "BIZ UDPGothic", "BIZ UDGothic", "UD デジタル 教科書体 NP-R",
           "Hiragino Maru Gothic ProN", "ヒラギノ丸ゴ ProN", "Yu Gothic UI", "Meiryo",
@@ -73,6 +87,8 @@ html[data-theme="dark"] {
   --ng-soft: #3a1c1c;
   --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 28px rgba(0, 0, 0, .35);
   --c-blue: #7aa2ff; --c-teal: #4ec9b8; --c-green: #a3d160; --c-violet: #b294ff; --c-amber: #f0b45e;
+  /* くらい 画面では 同じ こさでも 色が しずんで 見えるので、すこし こく します */
+  --finger-tint: 34%;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -83,6 +99,7 @@ html[data-theme="dark"] {
     --ok: #4ad3a5; --ok-soft: #12312a; --ng: #ff8f83; --ng-soft: #3a1c1c; --warn: #e0a458;
     --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 28px rgba(0, 0, 0, .35);
     --c-blue: #7aa2ff; --c-teal: #4ec9b8; --c-green: #a3d160; --c-violet: #b294ff; --c-amber: #f0b45e;
+    --finger-tint: 34%;
   }
 }
 
@@ -280,6 +297,22 @@ b, strong { font-weight: 700; }
 
 .play { display: flex; flex-direction: column; gap: 12px; }
 
+/* 打つ 画面だけ、キーボードに 画面の はば ぜんぶを つかわせます。
+
+   ほかの 画面は 読みやすさの ために 1080px で 止めて いますが、
+   キーボードは **手もとの キーボードと 見くらべる 図**なので、
+   大きければ 大きい ほど 分かりやすく なります。
+   そこで .view の わくを 外し、キーボード いがいの ものだけを
+   まんなかに そろえて おきます。
+
+   お題の わくを 1080px より すこし ひろく して いるのは、長い 文が
+   2行に おれると その ぶん キーボードが 小さく なる からです
+   （大きさは play.js が 画面を はかって きめます）。 */
+body[data-screen="play"] .view { width: 100%; }
+body[data-screen="play"] .play > *:not(.play-lower) {
+  width: min(1280px, 100%); margin-left: auto; margin-right: auto;
+}
+
 .play-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .play-title { display: flex; align-items: center; gap: 8px; font-size: 1.02rem; }
 .chip {
@@ -339,6 +372,8 @@ b, strong { font-weight: 700; }
 .finger-text b { color: var(--primary); }
 .finger-shift { font-size: .8rem; background: var(--primary-soft); color: var(--primary); border-radius: 999px; padding: 2px 10px; }
 
+/* 「つぎの 指」と きろくの 数字。ふつうは たてに 2行 です */
+.play-status { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .play-meter { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .meter {
   display: flex; align-items: baseline; gap: 5px;
@@ -412,54 +447,84 @@ b, strong { font-weight: 700; }
 
 /* ---------------------------------------------- 手の イラスト・キャラクター */
 
-/* 手の 絵と キーボードは ひとくみ。せまい 画面では たてに つみ、
-   ひろい 画面では よこに ならべます（見くらべる ものが 遠いと 目が いききします）。
+/* キーボードと 手の 絵は ひとくみ。かならず **上下**に かさねます。
+
+   ■ よこに ならべては いけません
+   まえは ひろい 画面で 手の 絵を キーボードの となりに ならべて
+   いました。すると「つぎの キーは どこ」と「その キーは どの 指」を
+   見くらべる たびに、目が 画面の 左右を いききします。
+   打ちながら 目を 大きく うごかすのは、タイピングの 練習では
+   いちばん さけたい こと です。
+   上下に かさねると、指先が ホームポジションの キーの まっすぐ 下に
+   来るので、目は すこし 下を 見るだけ で すみます。
 
    ■ たてに みじかい 画面が いちばん 大事です
    学校の Chromebook は 1366×768 で、ブラウザの わくを のぞくと
    たては 600px ほど しか ありません。ここが 画面の 外に 出ると、
    **キーボードを 見るために スクロールする** ことに なります。
-   打ちながら スクロールは できないので、それは 使えない という ことです。 */
-.play-lower {
-  display: flex; flex-wrap: wrap; justify-content: center;
-  align-items: flex-start; gap: 14px; min-width: 0;
-}
-.play-visual { display: flex; justify-content: center; flex: 1 1 300px; max-width: 380px; }
-.play-lower .kb-wrap { flex: 1 1 100%; }
+   打ちながら スクロールは できないので、それは 使えない という ことです。
+   そこで 手の 絵は 指先だけを 見せ（下は 画面の 外に 出します）、
+   キーボードの 下の 行に すこし かさねて おきます。 */
+.play-lower { min-width: 0; }
+
+/* せまい 画面では よこに スクロールします。キーボードと 手の 絵を
+   ひとつの わくの 中に 入れて、いっしょに うごかします
+   （べつべつに スクロールすると 指先が キーの 下から ずれます） */
+.kb-scroll { overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; }
+
+/* キーボードと 手の 絵の はば。
+
+   はばを のばすほど キーは よこに ひろがりますが、たかさは
+   画面の たかさで 決まる ので、のばし すぎると キーが 「ひらべったい
+   長方形」に なって 手もとの キーボードと 形が ちがって しまいます。
+   そこで **キー1つが よこ長に なりすぎない はば** で 止めます
+   （キー1つは よこ 5.9em ほど ＝ たかさの 2ばい あたり）。
+   画面が たてに ひろければ その ぶん はばも のびます。 */
+.kb-fit { width: min(100%, calc(88 * var(--kb-em))); min-width: 560px; margin: 0 auto; }
+.kb-fit .kb-wrap { overflow: visible; padding-bottom: 0; }
+.kb-fit .kb { min-width: 0; width: 100%; }
+
+/* 手の 絵。キーボードの 下の 行に すこし かさねて、たての 場所を つめます */
+.play-visual { display: block; margin-top: calc(-1 * var(--kb-em)); }
 .hands { width: 100%; }
 
-/* よこに ひろい 画面では、手の 絵と キーボードを ならべます。
-   キーボードの 最小はば（540px）＋ 手の 絵（300px）が 入る はばから */
-@media (min-width: 1080px) {
-  .play-lower .kb-wrap { flex: 1 1 560px; }
-}
+/* 絵の 下（手のひら）は 切って しまいます。よこの ばしょは 切っても
+   ずれないので、指先は いつも キーの まっすぐ 下に のこります。
+   絵は よこ1000・たて100 の わりあいで 描いて あるので、
+   1000 : 84 に すると 指先と 手のひらの きわ までが 出ます。 */
+.hands-body { overflow: hidden; aspect-ratio: 1000 / 84; }
 .hands-svg { width: 100%; height: auto; display: block; }
+/* ラベルは それぞれの 手の まんなかの 下に おきます（left は hands.js が 出します）*/
 .hands-label {
-  display: flex; justify-content: space-around; margin: 2px 0 0;
-  font-size: .74rem; color: var(--muted);
+  position: relative; height: 1.3em; margin: 0;
+  font-size: .74rem; line-height: 1.3; color: var(--muted);
 }
+.hands-label span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
 
-/* 手のひらと 指は うすい 色で 描き、光る 指だけを はっきり させます */
-.hand-palm { fill: var(--surface-2); stroke: var(--line); stroke-width: 2; }
+/* 手のひらと 指。指は キーボードと 同じ 指の 色で うすく ぬります。
+   キーの 色と 指の 色が 同じ だから、「この 色の キーは この 指」が
+   ことばを 読まなくても つながります */
+.hand-palm { fill: var(--surface-2); stroke: var(--line); stroke-width: 2.5; }
 .hand-finger rect {
-  fill: var(--surface-2); stroke: var(--line); stroke-width: 2;
+  fill: color-mix(in srgb, var(--finger) var(--finger-tint), var(--surface-2));
+  stroke: color-mix(in srgb, var(--finger) 55%, var(--line)); stroke-width: 2.5;
   transition: fill .12s ease, stroke .12s ease, transform .12s ease;
 }
 .hand-finger text {
-  fill: var(--muted); font-size: 13px; font-weight: 700; text-anchor: middle;
+  fill: var(--text); font-size: 24px; font-weight: 700; text-anchor: middle;
   transition: fill .12s ease;
 }
 
 /* つぎに つかう 指。色 だけでは なく **太い わく**でも しめします。
    色の ちがいが 見えにくい 子でも、どれが 光って いるか 形で わかります */
 .hand-finger.is-next rect {
-  fill: color-mix(in srgb, var(--finger) 32%, var(--surface));
-  stroke: var(--finger); stroke-width: 4;
+  fill: color-mix(in srgb, var(--finger) 62%, var(--surface));
+  stroke: var(--finger); stroke-width: 6;
 }
 .hand-finger.is-next text { fill: var(--text); }
 .hand-finger.is-next { animation: finger-wait 1.1s ease-in-out infinite; }
 @keyframes finger-wait {
-  50% { transform: translateY(2px); }
+  50% { transform: translateY(3px); }
 }
 
 /* 打った しゅんかん。正かい／まちがいは 色と 形の 両方で 分けます */
@@ -526,18 +591,27 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
 /* ---------------------------------------------------------------- キーボード */
 
 .kb-wrap { overflow-x: auto; padding-bottom: 4px; }
+/* すきまは grid の gap では なく、キー1つずつの margin で つくります。
+
+   ■ なぜ わざわざ margin なのか
+   手の 絵（hands.js）は「よこ60マスの 何マス目」で 指の ばしょを 決めます。
+   gap を つかうと 60マスの ほかに すきまの ぶんが 入るので、
+   右へ 行くほど キーの まんなかが 少しずつ ずれ、
+   小指の あたりで 10px ほど 指先が キーから はずれます。
+   gap を 0 に すると 60マスは きっちり 60等分 に なり、
+   キーの まんなかと 指先が どの はばでも ぴったり そろいます。 */
 .kb {
   display: grid;
   grid-template-columns: repeat(60, 1fr);
-  gap: 4px;
+  gap: 0;
   min-width: 540px;
-  font-size: clamp(9px, 1.15vw, 15px);
+  font-size: var(--kb-em);
   user-select: none; touch-action: manipulation;
 }
 .kb-key {
   position: relative;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  min-height: 2.6em; padding: 2px;
+  min-height: var(--kb-row, 2.6em); margin: 2px; padding: 2px;
   border: 1.5px solid var(--line); border-bottom-width: 3px;
   border-radius: 7px; background: var(--surface);
   color: var(--text); line-height: 1.2; overflow: hidden;
@@ -547,17 +621,39 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
 .kb-up { position: absolute; top: 2px; left: 4px; font-size: .8em; color: var(--muted); }
 .kb-kana { position: absolute; right: 4px; bottom: 2px; font-size: .8em; color: var(--muted); }
 .kb-name { font-size: .82em; color: var(--muted); text-align: center; padding: 0 2px; }
-.kb-key.is-top { min-height: 1.9em; opacity: .62; background: var(--surface-2); }
+/* いちばん上の 行（ブラウザ操作キー）は 練習に つかわないので すこし ひくく */
+.kb-key.is-top { min-height: calc(var(--kb-row, 2.6em) * .73); opacity: .62; background: var(--surface-2); }
 .kb-key.is-home { background: var(--surface-2); }
 .kb-key.is-bump::after {
   content: ""; position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%);
   width: 26%; height: 3px; border-radius: 2px; background: var(--muted); opacity: .7;
 }
 
-/* 指の 色分け（せっていで 消せます） */
-.kb.show-finger .kb-key { background: color-mix(in srgb, var(--finger, transparent) 14%, var(--surface)); }
-.kb.show-finger .kb-key.is-top { background: var(--surface-2); }
-.kb.show-finger .kb-key.is-home { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--finger, var(--line)) 55%, transparent); }
+/* 指の 色分け（せっていで 消せます）。
+
+   ■ うすい 色を しくだけ では 分かりません
+   まえは 14% の うすい 色を しくだけ でした。あかるい 教室の
+   Chromebook では ほとんど 見えず、キーボードを 見わたした ときに
+   **どこで 指が かわるのか** が 分かりませんでした。
+   そこで 3つ かさねます。
+     1. キーの 色（--finger-tint。くらい 画面では こく します）
+     2. キーの **下の わく**を 指の 色で ふとく 引く
+        → 同じ 指の キーが 同じ 色の 線で つながって 見えます
+     3. ホームポジションの キーだけ 内がわに わくを 足す
+   手の 絵の 指も 同じ 色で ぬって あるので（.hand-finger）、
+   「この 色の キーは この 指」が ことばを 読まなくても つながります。 */
+.kb.show-finger .kb-key {
+  background: color-mix(in srgb, var(--finger, var(--surface)) var(--finger-tint), var(--surface));
+  border-color: color-mix(in srgb, var(--finger, var(--line)) 40%, var(--line));
+  border-bottom-color: var(--finger, var(--line));
+  border-bottom-width: 5px;
+}
+.kb.show-finger .kb-key.is-top {
+  background: var(--surface-2); border-color: var(--line); border-bottom-width: 3px;
+}
+.kb.show-finger .kb-key.is-home {
+  box-shadow: inset 0 0 0 2.5px color-mix(in srgb, var(--finger, var(--line)) 70%, transparent);
+}
 
 /* つぎに 押す キー。色 だけでは なく 太い わくと 三角の しるしで しめします。
    指の 色分けより 強く 出したいので、セレクタを .kb から 書きます */
@@ -570,6 +666,19 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
 .kb .kb-key.is-next .kb-up,
 .kb .kb-key.is-next .kb-kana,
 .kb .kb-key.is-next .kb-name { color: inherit; opacity: .85; }
+
+/* 指の 色分けを 出して いる ときは、つぎに 押す キーも **その 指の 色**で
+   光らせます。手の 絵の 光る 指と 色が そろうので、
+   「この キー ＝ この 指」が 一目で つながります。
+   キーの 文字が 読めなく ならない ように、色は 72% までに して
+   文字は そのまま こい 色（--text）で のこします。 */
+.kb.show-finger .kb-key.is-next {
+  background: color-mix(in srgb, var(--finger, var(--primary)) 72%, var(--surface));
+  color: var(--text);
+  border-color: var(--finger, var(--primary));
+  border-bottom-color: var(--finger, var(--primary));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--finger, var(--primary)) 40%, transparent);
+}
 .kb .kb-key.is-next::before {
   content: ""; position: absolute; top: 2px; right: 3px;
   border-left: 5px solid transparent; border-right: 5px solid transparent;
@@ -1067,8 +1176,8 @@ body.root-bump .view { animation: bump .3s ease; }
   }
 }
 
-/* 大きい 画面では 練習の お題を もっと 大きく */
-@media (min-width: 1000px) and (min-height: 820px) {
+/* たてに ゆとりの ある 画面では 練習の お題を もっと 大きく */
+@media (min-width: 1000px) and (min-height: 1001px) {
   .q-kana { font-size: 3.2rem; }
   .play-stage { padding: 30px 26px; }
 }
@@ -1081,58 +1190,84 @@ body.root-bump .view { animation: bump .3s ease; }
    スクロールしないと キーボードが 見えないのは、打ちながら スクロールが
    できない ぶん「使えない」のと 同じ です。
 
-   そこで たてが みじかい ときだけ、すきまと 絵を つめます。
-   お題の 文字は **いちばん 最後に、いちばん 少しだけ** 小さく します。 */
+   キーボードの 大きさは play.js が 画面を はかって 決めます。だから
+   ここで つめた すきまは、**そのまま キーボードの 大きさに なります**。
+   お題の 文字は いちばん 最後に、いちばん 少しだけ 小さく します。
 
-@media (max-height: 820px) {
-  .view { padding-top: 10px; padding-bottom: 20px; }
+   ■ 1000px を さかい目に して いる わけ
+   ノートPC・Chromebook は ブラウザの わくを のぞくと たてが 600〜950px
+   です。つまり 学校の 端末は ほとんど こちら側 です。
+   ゆったり した ならびに するのは、たてに ほんとうに ゆとりの ある
+   タブレットや 大きな モニターだけ に します。 */
+
+@media (max-height: 1000px) {
+  /* かざりの ブランド行（52px）は、打つ 画面では キーボードに ゆずります。
+     この 1行が そのまま「手の 絵が 画面の 外に 出る」ぶんに なります */
+  body[data-screen="play"] .brand { display: none; }
+  body[data-screen="play"] .view { padding-top: 10px; padding-bottom: 14px; }
   .play { gap: 8px; }
   .play-stage { padding: 12px 16px; }
-  .q-kana { font-size: clamp(1.7rem, 4.6vw, 2.4rem); }
+  .q-label { font-size: 1rem; line-height: 1.5; }
+  .q-kana { font-size: clamp(1.7rem, 4.6vw, 2.3rem); }
+  .q-romaji { font-size: clamp(1rem, 3vw, 1.3rem); margin-top: 6px; }
   .play-meter { gap: 6px; }
-  .meter { padding: 4px 12px; }
-  .play-lower { gap: 10px; }
-  .play-visual { max-width: 320px; }
-  .kb { font-size: clamp(8px, 1vw, 12px); }
-  .kb-key { min-height: 2.4em; }
+  .meter { padding: 2px 12px; line-height: 1.4; }
+  .play-finger { min-height: 38px; padding: 4px 14px; line-height: 1.45; }
   .play-ready { font-size: .82rem; }
+  /* 「やめる」は 1行に して、そえた ことばは しまいます
+     （ボタン じたいは かならず のこします。やめかたが 見えなく
+       なるのが いちばん こまるからです） */
+  .play-foot { min-height: 0; gap: 8px; }
+  .btn-stop { min-height: 40px; padding: 4px 16px; flex-direction: row; gap: 6px; }
+  .btn-stop .btn-note { display: none; }
+  .play-foot .btn-ghost { min-height: 40px; }
+}
+
+/* ちびキャラは よこに いるので、じつは **お題の たかさ**を 決めて
+   いました（絵の ほうが 高い ため）。たてが みじかい ときは
+   すこし 小さく して、その ぶんを キーボードに まわします。
+   よこに ならぶ 画面（820px いじょう）だけの はなし です */
+@media (max-height: 1000px) and (min-width: 820px) {
+  .play-main { grid-template-columns: 1fr minmax(150px, 200px); }
+}
+
+/* よこに ゆとりが ある ときは「つぎの 指」と きろくの 数字を よこ 1行に
+   します（1行ぶん 50px が そのまま キーボードの 大きさに なります）。
+   「つぎの 指」は いちばん だいじな 案内 なので、ひろい ほうを あげます */
+@media (max-height: 1000px) and (min-width: 760px) {
+  .play-status { flex-direction: row; align-items: center; gap: 10px; }
+  .play-status .play-finger { flex: 1 1 auto; min-width: 0; }
+  .play-status .play-meter { flex: 0 1 auto; }
+}
+
+/* たてが みじかく なって きたら、ブランド行は どの 画面でも しまいます */
+@media (max-height: 820px) {
+  .brand { display: none; }
+  .view { padding-top: 10px; padding-bottom: 14px; }
 }
 
 /* たてが みじかい ときは、おしらせの ぶんを キーボードに ゆずります */
 @media (max-height: 760px) {
   .play-ready { display: none; }
-  .kb { font-size: clamp(8px, .85vw, 11px); }
-  .kb-key { min-height: 2.2em; }
+  .hands-label { display: none; }
 }
 
-/* たてが もっと みじかい とき。「やめる」は 1行に して、そえた ことばは
-   しまいます（ボタン じたいは かならず のこします。やめかたが 見えなく
-   なるのが いちばん こまるからです） */
 @media (max-height: 700px) {
   .play { gap: 6px; }
-  .play-foot { min-height: 0; gap: 8px; }
-  .btn-stop { min-height: 40px; padding: 4px 16px; flex-direction: row; gap: 6px; }
-  .btn-stop .btn-note { display: none; }
-  .play-skip-btn, .play-foot .btn-ghost { min-height: 40px; }
+  .play-stage { padding: 10px 14px; }
 }
 
-/* 手の 絵を あきらめる ところ。
- *
- * よこに ひろい 画面（1080px いじょう）では、手の 絵は キーボードの
- * となりに ならぶので たてを 食いません。だから **せまくて みじかい**
- * ときだけ 消します。学校の Chromebook（よこ 1366px）は となりに ならぶ
- * ほうに 入るので、たてが みじかくても 手の 絵は のこります。
- *
- * 消えても キーの ひかりと「みぎの ひとさしゆびで」の ことばは のこるので、
- * 「どの 指か」は それでも つたわります。 */
-@media (max-height: 660px) and (max-width: 1079px) {
-  .play-visual { display: none; }
-  .play-ready { display: none; }
+/* たてが これより みじかい ときは、お題の 字も すこし つめます。
+   キーボードの 大きさは play.js が 画面を はかって きめるので、
+   ここで つめた ぶんは そのまま キーボードの 大きさに なります。 */
+@media (max-height: 620px) {
   .play-stage { padding: 8px 14px; }
+  .q-kana { font-size: clamp(1.6rem, 4.2vw, 2rem); }
+  .q-romaji { margin-top: 4px; }
 }
 
 /* どうしても 入らない とき（字を 大きく して いる・ウィンドウが 小さい） */
-@media (max-height: 560px) {
+@media (max-height: 540px) {
   .play-visual { display: none; }
   .play-ready { display: none; }
   .play-stage { padding: 8px 14px; }
