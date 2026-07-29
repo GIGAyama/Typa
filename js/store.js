@@ -90,6 +90,8 @@
     bigText: false,       // 文字を 大きく
     strict: true,         // まちがえたら 正しい キーを 押すまで すすまない
     retry: true,          // まちがえた お題を さいごに もう1回 出す
+    hands: true,          // 手の イラストを 出す（押す 指が 光ります）
+    buddy: true,          // キャラクターを 出す（打つと うごきます）
     assist: 'custom',     // ヒントの つよさ（0〜3 / 'auto' / 'custom'）
     theme: 'auto'         // auto / light / dark
   };
@@ -212,9 +214,76 @@
   // ------------------------------------------------------------------
   // すすみぐあい（ステージごとの さいこう記録）
   // ------------------------------------------------------------------
+  //
+  // ■ すすみは「さいごまで やった か」では なく「つみあがった か」で 見ます
+  // 前は、ステージを 最後まで やりきった 回だけを クリアと して いました。
+  // けれど それだと **10びょうしか 時間が ない 子は、何も のこせません**。
+  // 「あとで まとまった 時間が できたら やろう」と 思う ことが、
+  // そのまま れんしゅうを しない 理由に なって いました。
+  //
+  // そこで ステージを **ひとまわり（lap）** で 数えます。
+  //   ・打った お題の 数は、やめても そのまま のこります（lapItems）
+  //   ・つぎに ひらいた ときは、その つづきの お題から 出ます
+  //   ・たまった 数が ステージの お題の 数に とどいたら「ひとまわり」。
+  //     そこで ★が つき、ふくしゅうの 日が 決まります
+  //
+  // 3もん だけ 打って やめても、その 3もんは 消えません。
+  // 5回に わけて ひとまわりしても、1回で ひとまわりしても 同じ です。
 
-  /** @returns {Object} { [stageId]: { clears, bestKps, bestAccuracy, stars, lastAt, box, due } } */
+  /**
+   * @returns {Object} {
+   *   [stageId]: {
+   *     clears,        ひとまわり できた 回数
+   *     bestKps, bestAccuracy, stars, lastAt, box, due,
+   *     lapItems,      いまの ひとまわりで すでに 打った お題の 数
+   *     lapCorrect,    いまの ひとまわりで 正しく 打てた 数（★の もと）
+   *     lapTotal       いまの ひとまわりで 打った 合計
+   *   }
+   * }
+   */
   function getProgress() { return read(KEYS.progress, {}); }
+
+  /**
+   * さいこう記録として 数える のに いる 打鍵数。
+   *
+   * 10びょうの れんしゅうでも きろくは のこしますが、**3打だけの 回を
+   * 「正かくさ 100%の さいこう記録」に しては いけません**。
+   * すこし 打てば だれでも 出せて しまい、記録が 記録で なくなります。
+   * ひとまわりの すすみ・けいけんち・にがての 集計には 数える ので、
+   * みじかい れんしゅうが むだに なる ことは ありません。
+   */
+  const MIN_RECORD_KEYS = 20;
+
+  /**
+   * ひとまわりの すすみを 進めます。**localStorage には さわりません**
+   * （node から そのまま 呼べるように するためです。tools/check-progress.js）。
+   *
+   * @param {Object} cur   progress の 1つぶん。中身を 書きかえます
+   * @param {Object} delta { items, correct, total } この 回で 足す ぶん
+   * @param {number} lapNeed ステージの お題の 数（ひとまわりの ながさ）
+   * @returns {number[]} この 回で できあがった ひとまわりの ★（0〜3）の 一覧
+   */
+  function lapAdvance(cur, delta, lapNeed) {
+    const need = Math.max(1, Math.round(lapNeed || 1));
+    const add = (a, b) => Math.max(0, Math.round(a || 0)) + Math.max(0, Math.round(b || 0));
+    cur.lapItems = add(cur.lapItems, delta.items);
+    cur.lapCorrect = add(cur.lapCorrect, delta.correct);
+    cur.lapTotal = add(cur.lapTotal, delta.total);
+
+    // ずっと 打ちつづけると 1回で 何しゅうも まわります。
+    // その ときは **どの しゅうも 同じ 正かくさ** で 見ます。
+    // しゅうごとに 0 に もどすと、2しゅう目が いつも ★0 に なって しまいます。
+    const acc = cur.lapTotal > 0 ? (cur.lapCorrect / cur.lapTotal) * 100 : 0;
+    const laps = [];
+    let guard = 0;
+    while (cur.lapItems >= need && guard++ < 200) {
+      laps.push(starsOf({ accuracy: acc }));
+      cur.lapItems -= need;
+    }
+    // ひとまわり できたら、正かくさは そこから 数えなおします
+    if (laps.length > 0) { cur.lapCorrect = 0; cur.lapTotal = 0; }
+    return laps;
+  }
 
   // ------------------------------------------------------------------
   // ふくしゅう（間を あけて もう1回）
@@ -281,29 +350,68 @@
    * ★は「正かくさ」で 決めます。速さで 決めると、
    * まちがえても はやく 打つほど よい、という まちがった 練習に なるためです。
    *
-   * @returns {{best: Object, newBestKps: boolean, newStars: number}}
+   * **とちゅうで やめた 回も かならず ここを とおります。** 打った ぶんは
+   * ひとまわりの すすみに たまり、つぎの れんしゅうに つながります。
+   *
+   * @param {string} stageId
+   * @param {Object} result { doneItems, lapNeed, correctKeys, totalKeys, kps, accuracy, finishedAt }
+   * @returns {{best, laps, lapItems, lapNeed, firstClear, newBestKps, newStars, prevBestKps}}
+   *   laps は この 回で できあがった ひとまわりの 数（0 の ことも あります）。
    *   さいこう記録を こえたかどうかは、けっか画面の「新記録！」に つかいます。
    */
   function applyResult(stageId, result) {
     const all = getProgress();
-    const cur = all[stageId] || { clears: 0, bestKps: 0, bestAccuracy: 0, stars: 0, lastAt: null };
-    const before = { bestKps: cur.bestKps, stars: cur.stars, clears: cur.clears };
-    const stars = starsOf(result);
-    cur.clears += 1;
-    cur.bestKps = Math.max(cur.bestKps, result.kps || 0);
-    cur.bestAccuracy = Math.max(cur.bestAccuracy, result.accuracy || 0);
-    cur.stars = Math.max(cur.stars, stars);
+    const cur = all[stageId] ||
+      { clears: 0, bestKps: 0, bestAccuracy: 0, stars: 0, lastAt: null, lapItems: 0, lapCorrect: 0, lapTotal: 0 };
+    const before = { bestKps: cur.bestKps || 0, stars: cur.stars || 0, clears: cur.clears || 0 };
+    const lapNeed = Math.max(1, Math.round(result.lapNeed || 1));
+
+    const laps = lapAdvance(cur, {
+      items: result.doneItems, correct: result.correctKeys, total: result.totalKeys
+    }, lapNeed);
+
+    if (laps.length > 0) {
+      const best = laps.reduce((a, b) => Math.max(a, b), 0);
+      cur.clears = before.clears + laps.length;
+      cur.stars = Math.max(before.stars, best);
+      scheduleReview(cur, best);
+    }
+
+    // みじかすぎる 回を さいこう記録に しません（MIN_RECORD_KEYS の 説明を 見てください）。
+    // ショートカットは 打鍵を 数えないので、この 線では はかれません。
+    // そちらは「ひとまわり できたか」で 見ます
+    const enough = (result.totalKeys || 0) > 0
+      ? (result.totalKeys >= MIN_RECORD_KEYS)
+      : laps.length > 0;
+    if (enough) {
+      cur.bestKps = Math.max(before.bestKps, result.kps || 0);
+      cur.bestAccuracy = Math.max(cur.bestAccuracy || 0, result.accuracy || 0);
+    }
     cur.lastAt = result.finishedAt;
-    scheduleReview(cur, stars);
     all[stageId] = cur;
     write(KEYS.progress, all);
     return {
       best: cur,
-      firstClear: before.clears === 0,
-      newBestKps: before.clears > 0 && (result.kps || 0) > before.bestKps + 0.05,
-      newStars: Math.max(0, stars - before.stars),
+      laps: laps.length,
+      lapItems: cur.lapItems,
+      lapNeed,
+      firstClear: before.clears === 0 && laps.length > 0,
+      newBestKps: enough && before.clears > 0 && (result.kps || 0) > before.bestKps + 0.05,
+      newStars: Math.max(0, (cur.stars || 0) - before.stars),
       prevBestKps: before.bestKps
     };
+  }
+
+  /**
+   * ステージの「いま どこまで きたか」。れんしゅう画面と ステージ一覧が つかいます。
+   * @returns {{items: number, need: number, ratio: number}}
+   */
+  function lapState(stageId, lapNeed) {
+    const need = Math.max(1, Math.round(lapNeed || 1));
+    const p = getProgress()[stageId] || {};
+    // ステージの お題を 入れかえた あとでも、はみ出した ままに ならないように します
+    const items = Math.max(0, Math.min(need - 1, Math.round(p.lapItems || 0)));
+    return { items, need, ratio: items / need };
   }
 
   /** ★の 数（0〜3）。まちがいが 少ないほど 高くなります */
@@ -369,12 +477,22 @@
     return { count: list.length, keys, minutes: Math.round(ms / 60000) };
   }
 
-  /** これまでの いちばん よい 記録 */
+  /**
+   * これまでの いちばん よい 記録。
+   *
+   * ■ みじかすぎる 回は 記録に しません
+   * 10びょうの れんしゅうも きろくには のこりますが、**3打だけの 回**を
+   * 「さいこう記録」に すると、そこで まぐれに 出た 数が ずっと 画面に
+   * のこります。はやさの バッジも それで もらえて しまいます。
+   * 「れんしゅうした 回数」は みじかい 回も 数えます。やった ことは
+   * やった ことだからです。
+   */
   function bestOverall() {
     const list = getHistory().filter(h => countsAsTyping(h) && h.correctKeys > 0);
     if (list.length === 0) return null;
-    const kps = list.reduce((best, h) => Math.max(best, h.kps || 0), 0);
-    const acc = list.reduce((best, h) => Math.max(best, h.accuracy || 0), 0);
+    const solid = list.filter(h => (h.totalKeys || 0) >= MIN_RECORD_KEYS);
+    const kps = solid.reduce((best, h) => Math.max(best, h.kps || 0), 0);
+    const acc = solid.reduce((best, h) => Math.max(best, h.accuracy || 0), 0);
     return { kps, accuracy: acc, count: list.length };
   }
 
@@ -504,7 +622,7 @@
   global.Typa.Store = {
     KEYS, HISTORY_MAX, DEFAULT_SETTINGS, getSettings, setSetting,
     ASSIST_LEVELS, ASSIST_LABELS, resolveAssist, setAssist, autoAssist,
-    getProgress, applyResult, starsOf,
+    getProgress, applyResult, starsOf, lapAdvance, lapState, MIN_RECORD_KEYS,
     REVIEW_DAYS, scheduleReview, dueStages,
     HISTORY_DETAIL_MAX: DETAIL_MAX,
     getHistory, addHistory, todaySummary, bestOverall, countsAsTyping,

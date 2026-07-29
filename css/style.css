@@ -297,6 +297,7 @@ b, strong { font-weight: 700; }
 
 /* お題。画面の 中で いちばん 大きく、いちばん はっきり 見せます */
 .play-stage {
+  position: relative;                 /* ひとまわりの おしらせを 上に かさねます */
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
   box-shadow: var(--shadow); padding: 22px 20px; text-align: center;
 }
@@ -362,7 +363,15 @@ b, strong { font-weight: 700; }
 }
 .play-ready .ico { width: 18px; height: 18px; color: var(--primary); }
 
-.play-skip { text-align: center; min-height: 48px; }
+/* 練習画面の 足もと。「やめる」は いつでも 見えて いる ことが 大事です。
+   やめかたが 分からない ことが、そのまま「はじめない」理由に なります */
+.play-foot {
+  display: flex; align-items: center; justify-content: center;
+  gap: 12px; flex-wrap: wrap; min-height: 48px;
+}
+.btn-stop { display: inline-flex; flex-direction: column; align-items: center; gap: 0; line-height: 1.3; }
+.btn-stop .btn-note { font-size: .72rem; font-weight: 400; color: var(--muted); }
+.btn-stop .ico { width: 18px; height: 18px; }
 
 /* れんぞく（コンボ）。10だ ごとに ひとこと ほめます */
 .meter-combo b { color: var(--c-teal); }
@@ -373,6 +382,115 @@ b, strong { font-weight: 700; }
 @keyframes combo-pop {
   30% { transform: scale(1.14); background: color-mix(in srgb, var(--c-teal) 22%, var(--surface)); }
 }
+
+/* ひとまわり できた ときの おしらせ。1.6びょうで 消えます。
+   ここで 画面を きりかえて しまうと、「あと 30びょう だけ」が できません。
+
+   お題は まんなかに 出るので、この しるしは **右上の すみ**に おきます。
+   まんなかに かさねると、いちばん 見せたい お題の 文字を かくして しまいます */
+.lap-flash {
+  position: absolute; top: 8px; right: 10px; z-index: 2;
+  margin: 0; padding: 6px 14px; border-radius: 999px;
+  background: var(--ok); color: #fff; font-weight: 700; font-size: .86rem;
+  white-space: nowrap; pointer-events: none; box-shadow: var(--shadow);
+}
+.lap-flash.is-on { animation: lap-in 1.6s ease both; }
+@keyframes lap-in {
+  0% { opacity: 0; transform: translateY(-8px) scale(.9); }
+  12% { opacity: 1; transform: translateY(0) scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ---------------------------------------------- 手の イラスト・キャラクター */
+
+/* キーボードの 上に、手の 絵と キャラクターを ならべます。
+   せまい 画面では たてに つみます */
+.play-visual {
+  display: flex; align-items: flex-end; justify-content: center;
+  gap: 16px; flex-wrap: wrap;
+}
+.hands { flex: 1 1 240px; max-width: 380px; }
+.hands-svg { width: 100%; height: auto; display: block; }
+.hands-label {
+  display: flex; justify-content: space-around; margin: 2px 0 0;
+  font-size: .74rem; color: var(--muted);
+}
+
+/* 手のひらと 指は うすい 色で 描き、光る 指だけを はっきり させます */
+.hand-palm { fill: var(--surface-2); stroke: var(--line); stroke-width: 2; }
+.hand-finger rect {
+  fill: var(--surface-2); stroke: var(--line); stroke-width: 2;
+  transition: fill .12s ease, stroke .12s ease, transform .12s ease;
+}
+.hand-finger text {
+  fill: var(--muted); font-size: 13px; font-weight: 700; text-anchor: middle;
+  transition: fill .12s ease;
+}
+
+/* つぎに つかう 指。色 だけでは なく **太い わく**でも しめします。
+   色の ちがいが 見えにくい 子でも、どれが 光って いるか 形で わかります */
+.hand-finger.is-next rect {
+  fill: color-mix(in srgb, var(--finger) 32%, var(--surface));
+  stroke: var(--finger); stroke-width: 4;
+}
+.hand-finger.is-next text { fill: var(--text); }
+.hand-finger.is-next { animation: finger-wait 1.1s ease-in-out infinite; }
+@keyframes finger-wait {
+  50% { transform: translateY(2px); }
+}
+
+/* 打った しゅんかん。正かい／まちがいは 色と 形の 両方で 分けます */
+.hand-finger.is-hit rect { fill: var(--ok); stroke: var(--ok); }
+.hand-finger.is-hit text { fill: #fff; }
+.hand-finger.is-miss rect { fill: var(--ng); stroke: var(--ng); }
+.hand-finger.is-miss text { fill: #fff; }
+.hand-finger.is-hit, .hand-finger.is-miss { animation: finger-press .2s ease; }
+@keyframes finger-press {
+  50% { transform: translateY(6px); }
+}
+
+/* いっしょに 打つ キャラクター。ここが 主役に ならないよう 小さく します */
+.buddy { flex: 0 0 auto; width: clamp(76px, 18vw, 108px); }
+.buddy-svg { width: 100%; height: auto; display: block; transform-origin: 60px 100px; }
+.buddy-shadow { fill: var(--line); opacity: .5; }
+.buddy-belly, .buddy-head { fill: var(--c-amber); stroke: none; }
+.buddy-wing { fill: color-mix(in srgb, var(--c-amber) 70%, var(--text)); }
+.buddy-eye { fill: var(--text); }
+.buddy-eye-shut { display: none; fill: none; stroke: var(--text); stroke-width: 2.4; stroke-linecap: round; }
+.buddy-beak { fill: var(--warn); }
+.buddy-tuft, .buddy-foot { fill: none; stroke: var(--warn); stroke-width: 2.6; stroke-linecap: round; }
+
+/* 1打ごとの はね。左右 こうごに かたむけると リズムに 見えます */
+.buddy-svg.hop-a { animation: buddy-hop-a .22s ease; }
+.buddy-svg.hop-b { animation: buddy-hop-b .22s ease; }
+@keyframes buddy-hop-a {
+  50% { transform: translateY(-7px) rotate(-6deg); }
+}
+@keyframes buddy-hop-b {
+  50% { transform: translateY(-7px) rotate(6deg); }
+}
+
+/* まちがえた とき。色 だけでは なく 目の 形も かえます */
+.buddy-svg.is-miss { animation: buddy-shake .36s ease; }
+.buddy-svg.is-miss .buddy-eye { display: none; }
+.buddy-svg.is-miss .buddy-eye-shut { display: block; }
+@keyframes buddy-shake {
+  25% { transform: translateX(-5px); }
+  60% { transform: translateX(5px); }
+}
+
+/* れんぞく・ひとまわり。すこしだけ 大きく はねます */
+.buddy-svg.is-combo { animation: buddy-jump .7s ease; }
+.buddy-svg.is-cheer { animation: buddy-jump .55s ease 2; }
+@keyframes buddy-jump {
+  30% { transform: translateY(-16px) scale(1.06); }
+  55% { transform: translateY(0) scale(.96); }
+  75% { transform: translateY(-6px); }
+}
+
+/* 「動きを へらす」端末では 形と 色だけで つたえます（下の まとめて 止める
+   ところで アニメーションは 切れますが、目の 形は そのまま のこります） */
 
 /* チャレンジの のこり時間。さいごの 10びょうは 色が かわります */
 .play-progress .bar-time span { background: var(--c-teal); transition: width .12s linear; }
@@ -500,6 +618,31 @@ b, strong { font-weight: 700; }
 .sc-field textarea:focus { border-color: var(--primary); outline: none; }
 .sc-note { color: var(--muted); font-size: .86rem; display: flex; align-items: center; gap: 8px; }
 .sc-skip { text-align: center; }
+
+/* ------------------------------------------- ひとまわりの すすみ
+
+   ステージは「さいごまで やった か」では なく「つみあがった か」で 見ます。
+   3もんだけ 打って やめた 子に いちばん 見せたいのは、はやさでも ★でもなく
+   **その 3もんが ちゃんと のこって いる** ことです。 */
+
+.lap-bar {
+  display: block; height: 10px; border-radius: 5px; overflow: hidden;
+  background: var(--surface-2); border: 1px solid var(--line);
+}
+.lap-bar > span {
+  display: block; height: 100%; width: 0;
+  background: var(--c-teal); transition: width .3s ease;
+}
+.lap-note { margin: 6px 0 0; font-size: .86rem; color: var(--muted); }
+.card-lap .lap-bar { margin-top: 4px; }
+
+/* ステージ一覧の 中の すすみ。ならびを くずさない よう ひかえめに します */
+.stage-lap { display: block; margin-top: 6px; }
+.stage-lap .lap-bar { height: 6px; max-width: 220px; }
+.stage-lap-text { display: block; margin-top: 3px; font-size: .76rem; color: var(--muted); }
+
+/* ホームの 大きい ボタンの 下の ひとこと */
+.start-note { margin: 8px 0 0; font-size: .84rem; }
 
 /* ---------------------------------------------------------------- けっか */
 

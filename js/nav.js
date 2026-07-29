@@ -73,7 +73,7 @@
    */
   function go(screen, params) {
     const cur = current();
-    if (cur && !leaveOk(cur)) return false;
+    if (cur && !leaveOk(cur, 'go')) return false;
     state.stack.push({ screen, params: params || {} });
     render();
     return true;
@@ -83,16 +83,26 @@
   function selectTab(tabId) {
     const cur = current();
     if (cur && cur.screen === tabId && state.stack.length === 1) return;
-    if (cur && !leaveOk(cur)) return;
+    if (cur && !leaveOk(cur, 'tab')) return;
     state.tab = tabId;
     state.stack = [{ screen: tabId, params: {} }];
     render();
   }
 
-  /** 画面を はなれてよいか（練習中は「やめますか？」を 出します） */
-  function leaveOk(entry) {
+  /**
+   * 画面を はなれてよいか。
+   *
+   * @param {Object} entry いまの 画面
+   * @param {string} reason 'back'（もどる）/ 'tab'（下の タブ）/ 'go'（先へ すすむ）
+   *   れんしゅう画面は、'back' の ときだけ けっか画面に おきかえます。
+   *   タブを 押した ときにも けっかを 出すと、行きたかった ところへ 行けません。
+   * @returns {boolean} false なら ここに とどまります
+   */
+  function leaveOk(entry, reason) {
     const handler = state.handlers[entry.screen];
-    if (handler && typeof handler.leave === 'function') return handler.leave(entry.params || {}) !== false;
+    if (handler && typeof handler.leave === 'function') {
+      return handler.leave(entry.params || {}, reason || 'back') !== false;
+    }
     return true;
   }
 
@@ -107,7 +117,7 @@
     state.lastBackAt = now;
 
     const cur = current();
-    if (cur && !leaveOk(cur)) return;
+    if (cur && !leaveOk(cur, 'back')) return;
 
     if (state.stack.length > 1) {
       state.stack.pop();

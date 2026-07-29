@@ -4,6 +4,21 @@
  * =====================================================================
  * お題を 1つずつ 出し、1打ごとに 正誤を 判定します。
  *
+ * ■ 「はじまり」も「おわり」も 決めない
+ * ステージは とちゅうで 止まりません。お題を ひとまわり すると、
+ * みじかく ほめて そのまま つぎの しゅうに 入ります。**やめる のは
+ * いつでも、子どもが 決めます**。「さいごまで やらないと 何も のこらない」
+ * という 決まりを なくす ためです。
+ *
+ * 10びょうで やめても、打った ぶんは かならず のこります。
+ *   ・打った お題の 数 → ステージの「ひとまわり」の すすみに たまる
+ *   ・打鍵・ミス・かかった 時間 → きろく と にがての 集計に 入る
+ *   ・けいけんち → その 回の ぶんだけ もらえる
+ * つぎに ひらいた ときは、**とちゅうの お題から** はじまります。
+ *
+ * だから この ファイルには「クリア」という 考えかたが ありません。
+ * finish() は「いま までの ぶんを まとめて 返す」だけ です。
+ *
  * ■ 打ちまちがえても 先へは すすみません
  * まちがえた ままで すすむと、まちがった 指づかいの まま 速くなります。
  * 正しい キーを 押すまで まつ かわりに、「どの指で 押すか」を
@@ -22,9 +37,9 @@
  * ただし **チャレンジ（時間ぎめ）だけは のぞきません**。じっさいの
  * 60びょうで どれだけ 打てたかを、そのまま スコアに するためです。
  *
- * ■ まちがえた お題は さいごに もう1回（おまけの 周）
- * まちがえた 直後に もう一度 打つと よく 身に つきます。そこで 本編が
- * おわったあと、つまずいた お題を さいごに もう1回だけ 出します。
+ * ■ まちがえた お題は ひとまわりの さいごに もう1回（おまけの 周）
+ * まちがえた 直後に もう一度 打つと よく 身に つきます。そこで
+ * ひとまわり する たびに、その しゅうで つまずいた お題を もう1回だけ 出します。
  *
  * この おまけの 周の 打鍵は **はやさ・正かくさ・★・けいけんちには
  * 数えません**。数えて しまうと、2回目に 打ち直した 子ほど 正かくさが
@@ -43,8 +58,11 @@
 
   const state = {
     course: null, stage: null, source: 'course', special: '',
-    pool: [], queue: [], current: null, total: 0, index: 0,
+    pool: [], queue: [], current: null, index: 0,
     endless: false, limitMs: 0,
+    // ひとまわり … lapNeed もん 打つと 1しゅう。lapPos は 前の れんしゅうから
+    // つづいて いる ぶんも 入って います（0 から はじまるとは かぎりません）
+    lapNeed: 1, lapPos: 0, lapStart: 0, doneItems: 0, laps: 0,
     matcher: null,
     startedAt: null, startTime: 0, lastKeyTime: 0, idleMs: 0, pausedAt: 0, pausedMs: 0,
     itemStart: 0, itemMistakes: 0, itemWrong: [], itemFirstTry: true,
@@ -52,11 +70,13 @@
     correctKeys: 0, missKeys: 0, combo: 0, bestCombo: 0,
     missByKey: {}, missByFinger: {},
     phase: 'main', retryPool: [], retryTotal: 0, retryUse: true, retryNotice: false,
-    mainMs: 0, mainIdleMs: 0,
+    // おまけの 周に つかった 時間は はやさの 計算から のぞきます
+    retryMs: 0, retryEnter: 0, retryIdleMs: 0, idleEnter: 0,
     lat: {}, conf: {}, rule: {}, keystrokes: [],
     itemKeyCount: 0, lastOk: true, skipLatency: false,
     running: false, imeWarned: false,
-    settings: null, view: null, showKeyboard: true, timerId: 0, onFinish: null
+    settings: null, view: null, showKeyboard: true, showHands: false, showBuddy: false,
+    timerId: 0, onFinish: null, onStop: null
   };
 
   const $ = id => document.getElementById(id);
@@ -83,7 +103,7 @@
             <div class="bar${limited ? ' bar-time' : ''}"><span id="play-bar"></span></div>
             <span class="num">${limited
               ? `のこり <b id="play-left">${Math.round(stage.limitMs / 1000)}</b> びょう`
-              : '<span id="play-phase" hidden>もういちど </span><b id="play-done">0</b> / <span id="play-total">0</span>'}</span>
+              : '<span id="play-phase" hidden>もういちど </span>ひとまわりまで あと <b id="play-left-items">0</b>'}</span>
           </div>
         </div>
 
@@ -91,6 +111,8 @@
           <p class="q-label" id="q-label"></p>
           <p class="q-kana" id="q-kana"></p>
           <p class="q-romaji" id="q-romaji"></p>
+          <!-- ひとまわり できた ときの おしらせ。打つのは 止めません -->
+          <p class="lap-flash" id="play-lap-flash" hidden aria-hidden="true"></p>
         </div>
 
         <div class="play-finger" id="play-finger" aria-live="polite"></div>
@@ -106,11 +128,21 @@
           ${T.icon('info')} <span>かな入力に なって いるみたい。<b>英数キー</b>（スペースの 左）を おしてから 打ってね。</span>
         </div>
 
-        <p class="play-ready" id="play-ready">${T.icon('play')} さいしょの 1打で スタートします。ゆっくりで だいじょうぶ。</p>
+        <p class="play-ready" id="play-ready">${T.icon('play')} さいしょの 1打で スタートします。10びょうでも きろくは のこります。</p>
+
+        <div class="play-visual">
+          <div id="play-hands"></div>
+          <div id="play-buddy"></div>
+        </div>
 
         <div class="kb-wrap"><div id="play-kb"></div></div>
 
-        <div class="play-skip"><button class="btn btn-ghost" id="play-skip-btn" type="button" hidden>この お題を とばす</button></div>
+        <div class="play-foot">
+          <button class="btn btn-ghost" id="play-skip-btn" type="button" hidden>この お題を とばす</button>
+          <button class="btn btn-outline btn-stop" id="play-stop-btn" type="button">
+            ${T.icon('check')} やめる<span class="btn-note">ここまでの きろくは のこります</span>
+          </button>
+        </div>
       </div>`;
   }
 
@@ -119,7 +151,7 @@
   // ------------------------------------------------------------------
 
   /**
-   * @param {Object} p { course, stage, source, mount, special }
+   * @param {Object} p { course, stage, source, mount, special, onStop }
    *   stage.endless … お題が つきても じゅんばんを かえて つづけます
    *   stage.limitMs … 時間ぎめ（チャレンジ）
    */
@@ -134,9 +166,19 @@
     state.settings = settings;
     state.endless = !!p.stage.endless;
     state.limitMs = p.stage.limitMs || 0;
+    state.onStop = typeof p.onStop === 'function' ? p.onStop : null;
     state.pool = p.stage.items.slice();
-    state.queue = firstQueue(state.pool, state.source, state.endless);
-    state.total = state.endless ? 0 : state.queue.length;
+
+    // ひとまわりの ながさと、前の れんしゅうの つづき。
+    // ★の つかない ステージ（にがて とっくん・チャレンジ）は いつも 0 から です
+    state.lapNeed = Math.max(1, state.pool.length);
+    state.lapStart = (p.stage.noStars || state.limitMs)
+      ? 0
+      : T.Store.lapState(p.stage.id, state.lapNeed).items;
+    state.lapPos = state.lapStart;
+    state.doneItems = 0;
+    state.laps = 0;
+    state.queue = firstQueue(state.pool, state.source, state.endless, state.lapPos);
     state.index = 0;
     state.results = [];
     state.correctKeys = 0;
@@ -155,6 +197,10 @@
     state.phase = 'main';
     state.retryPool = [];
     state.retryTotal = 0;
+    state.retryMs = 0;
+    state.retryEnter = 0;
+    state.retryIdleMs = 0;
+    state.idleEnter = 0;
     // 時間ぎめ（チャレンジ）と おわりの ない れんしゅうでは やりません。
     // 「60びょうで どれだけ 打てたか」に おまけの 周を 足せないためです
     state.retryUse = settings.retry !== false && !state.endless && !state.limitMs;
@@ -175,9 +221,12 @@
       blind: !!p.blind || !!p.stage.blind
     });
     state.showKeyboard = state.view.keyboard;
+    // 手の イラストは 指の 色分けと ひとくみ です。ヒントを「ばしょだけ」まで
+    // 下げたら、手の 絵も いっしょに 消えます（消しかたを ばらばらに しません）
+    state.showHands = settings.hands !== false && state.view.fingerGuide;
+    state.showBuddy = settings.buddy !== false;
 
     p.mount.innerHTML = screenHtml(p.course, p.stage);
-    if (!state.limitMs) $('play-total').textContent = String(state.total);
     if (!state.showKeyboard) $('play-kb').closest('.kb-wrap').hidden = true;
     else {
       T.Keyboard.render($('play-kb'), {
@@ -187,18 +236,33 @@
         onTap: tap => handleChar(tap.char, tap.code, 'tap')
       });
     }
+    if (state.showHands) T.Hands.render($('play-hands'));
+    if (state.showBuddy) T.Buddy.render($('play-buddy'));
+    const visual = document.querySelector('.play-visual');
+    if (visual && !state.showHands && !state.showBuddy) visual.hidden = true;
+
     $('play-skip-btn').addEventListener('click', skipItem);
+    $('play-stop-btn').addEventListener('click', () => { if (state.onStop) state.onStop(); });
     loadItem();
     renderMeters();
     bindKeys();
+    bindLeaveGuard();
     if (state.limitMs) startTimer();
   }
 
-  /** さいしょの お題の ならび（「もう1かい」と チャレンジは じゅんばんを かえます） */
-  function firstQueue(pool, source, endless) {
-    const list = pool.slice();
-    if (endless || source !== 'course') shuffle(list);
-    return list;
+  /**
+   * さいしょの お題の ならび。
+   *
+   * コースの ステージは **前の れんしゅうの つづき** から はじめます。
+   * lapPos もん目まで 打ってあるので、のこりは lapNeed - lapPos もん です。
+   * 「もう1かい」と チャレンジは じゅんばんを かえます。
+   */
+  function firstQueue(pool, source, endless, lapPos) {
+    const need = Math.max(1, pool.length);
+    const left = Math.max(1, need - Math.max(0, lapPos || 0));
+    if (endless) return shuffle(pool.slice());
+    if (source !== 'course') return shuffle(pool.slice()).slice(0, left);
+    return pool.slice(need - left);
   }
 
   function shuffle(list) {
@@ -211,8 +275,8 @@
 
   function loadItem() {
     if (state.queue.length === 0) {
-      if (!state.endless) return;
-      state.queue = shuffle(state.pool.slice());   // チャレンジは くりかえします
+      // お題は かならず つづきます。ここで 止まる ことは ありません
+      state.queue = shuffle(state.pool.slice());
     }
     const item = state.queue.shift();
     state.current = item;
@@ -255,12 +319,22 @@
     const ch = state.matcher.expected();
     const box = $('play-finger');
     if (!box) return;
-    const clear = () => { box.innerHTML = ''; if (state.view.nextGlow) T.Keyboard.highlight([]); };
+    const clear = () => {
+      box.innerHTML = '';
+      if (state.view.nextGlow) T.Keyboard.highlight([]);
+      if (state.showHands) T.Hands.highlight([]);
+    };
     if (!ch) { clear(); return; }
     const found = T.Layout.findKey(state.settings.layout, ch);
     if (!found) { clear(); return; }
     const finger = T.Layout.fingerOf(found.key.code);
     if (state.view.nextGlow) T.Keyboard.highlight([found.key.code], found.shift);
+    if (state.showHands) {
+      const ids = finger ? [finger.id] : [];
+      // シフトは 打つ 手と はんたいの こゆびです。かた手で 押さない ように
+      if (found.shift) ids.push(T.Hands.shiftFingerFor(finger ? finger.id : ''));
+      T.Hands.highlight(ids);
+    }
     // めかくしの ときだけ、ことばの 案内も 出しません。
     // ほかの つよさでは のこします — 絵を 消しても、
     // 「どの指か」は かならず ことばで つたわるように するためです
@@ -287,13 +361,19 @@
       if (box) box.classList.toggle('is-hurry', left <= 10000);
       return;
     }
-    // おまけの 周に 入ったら 数を 数えなおします。本編の 数に 足しつづけると
-    // バーが 100%を こえて しまうためです
-    const total = state.phase === 'retry' ? state.retryTotal : state.total;
-    const totalEl = $('play-total');
-    if (totalEl) totalEl.textContent = String(total);
-    $('play-done').textContent = String(state.index);
-    bar.style.width = `${total ? Math.round(state.index / total * 100) : 0}%`;
+    // おまけの 周は、ひとまわりの すすみとは べつに 数えます。
+    // 本編の 数に 足しつづけると バーが 100%を こえて しまいます
+    if (state.phase === 'retry') {
+      const total = Math.max(1, state.retryTotal);
+      bar.style.width = `${Math.round(Math.min(1, state.index / total) * 100)}%`;
+      const left = $('play-left-items');
+      if (left) left.textContent = String(Math.max(0, total - state.index));
+      return;
+    }
+    const left = Math.max(0, state.lapNeed - state.lapPos);
+    const leftEl = $('play-left-items');
+    if (leftEl) leftEl.textContent = String(left);
+    bar.style.width = `${Math.round(Math.min(1, state.lapPos / state.lapNeed) * 100)}%`;
   }
 
   function renderMeters() {
@@ -311,11 +391,25 @@
     return Math.max(0, now - state.startTime - state.pausedMs);
   }
 
+  /**
+   * おまけの 周に つかった 時間の 合計。
+   *
+   * おまけの 周の 打鍵は 数えないので、時間だけ のびると はやさが
+   * 実際より 低く 出て しまいます。ひとまわり する たびに おまけの 周が
+   * 入るので、「入った ところで 時計を 止める」だけでは 足りません。
+   * **入って いた あいだの 合計**を ためて おいて、あとから ひきます。
+   */
+  function retryElapsed() {
+    return state.retryMs + (state.phase === 'retry' ? Math.max(0, elapsed() - state.retryEnter) : 0);
+  }
+
+  function retryIdle() {
+    return state.retryIdleMs + (state.phase === 'retry' ? Math.max(0, state.idleMs - state.idleEnter) : 0);
+  }
+
   function liveStats() {
-    // おまけの 周に 入ったら 時計も 止めます。おまけの ぶんは 打鍵を 数えないので、
-    // 時間だけ のびると はやさが 実際より 低く 出て しまうためです
-    const ms = state.phase === 'retry' ? state.mainMs : elapsed();
-    const idle = state.phase === 'retry' ? state.mainIdleMs : state.idleMs;
+    const ms = Math.max(0, elapsed() - retryElapsed());
+    const idle = Math.max(0, state.idleMs - retryIdle());
     // 時間ぎめの チャレンジは、手を 止めた ぶんも そのまま スコアに ひびきます
     const active = state.limitMs ? Math.max(1, ms) : Math.max(1, ms - idle);
     const total = state.correctKeys + state.missKeys;
@@ -439,12 +533,19 @@
     // ★が「さいしょに どれだけ 正しく 打てたか」を あらわさなく なります
     const counts = state.phase === 'main';
 
+    // 手の イラストは「打つ はずだった 指」で 光らせます。
+    // 打った キーで 光らせると、まちがえた ときに **まちがった 指** を
+    // ほめる ことに なって しまいます
+    const wantFinger = fingerOfChar(expectedChar);
+
     if (r.ok) {
       if (counts) state.correctKeys++;
       state.combo++;
       if (state.combo > state.bestCombo) state.bestCombo = state.combo;
-      if (state.combo > 0 && state.combo % COMBO_STEP === 0) celebrateCombo();
       if (code && state.showKeyboard) T.Keyboard.flash(code, true);
+      if (state.showHands && wantFinger) T.Hands.press(wantFinger.id, true);
+      if (state.showBuddy) T.Buddy.react('hit');
+      if (state.combo > 0 && state.combo % COMBO_STEP === 0) celebrateCombo();
       beep(true);
     } else {
       if (counts) state.missKeys++;
@@ -453,6 +554,8 @@
       state.combo = 0;
       recordMiss(ch, expectedChar);
       if (code && state.showKeyboard) T.Keyboard.flash(code, false);
+      if (state.showHands && wantFinger) T.Hands.press(wantFinger.id, false);
+      if (state.showBuddy) T.Buddy.react('miss');
       shake();
       beep(false);
       if (state.itemMistakes >= SKIP_AFTER) {
@@ -544,6 +647,13 @@
     if (finger) state.missByFinger[finger.id] = (state.missByFinger[finger.id] || 0) + 1;
   }
 
+  /** その 文字を 打つ ことに なって いる 指（見つからなければ null） */
+  function fingerOfChar(ch) {
+    if (!ch) return null;
+    const found = T.Layout.findKey(state.settings.layout, ch);
+    return found ? T.Layout.fingerOf(found.key.code) : null;
+  }
+
   /** つまずいた ときの にげみち。とばした お題は 正かいには しません */
   function skipItem() {
     if (!state.running) return;
@@ -563,28 +673,33 @@
       wrong: state.itemWrong.slice(),
       retry: state.phase === 'retry'
     });
-    // 本編で つまずいた お題は、さいごに もう1回 出すために とっておきます
+    // 本編で つまずいた お題は、しゅうの さいごに もう1回 出すために とっておきます
     if (state.phase === 'main' && state.retryUse && !state.itemFirstTry &&
         state.retryPool.length < RETRY_MAX) {
       state.retryPool.push(item);
     }
     state.index++;
+    if (state.phase === 'main') {
+      state.doneItems++;
+      state.lapPos++;
+    }
     renderProgress();
 
-    if (!state.endless && state.queue.length === 0 && !startRetry()) {
-      finish('completed');
-      return;
-    }
     const stage = $('play-stage');
     if (stage && ok) {
       stage.classList.add('is-clear');
       setTimeout(() => stage.classList.remove('is-clear'), 260);
     }
+
+    // 時間ぎめ（チャレンジ）と おわりの ない れんしゅうは、ひとまわりを 数えません
+    if (!state.limitMs && !state.endless && state.queue.length === 0) {
+      if (!startRetry()) lapDone();
+    }
     loadItem();
   }
 
   /**
-   * 本編が おわったら、まちがえた お題を さいごに もう1回だけ 出します。
+   * ひとまわり する たびに、その しゅうで まちがえた お題を もう1回だけ 出します。
    * 「まちがえた 直後に もう一度 打つ」のが いちばん 身に つくためです。
    * ここから 先の 打鍵は 記録には のこりますが、はやさ・正かくさ・★には
    * 数えません（handleChar の counts を 見てください）。
@@ -594,9 +709,9 @@
   function startRetry() {
     if (state.phase !== 'main' || !state.retryUse || state.retryPool.length === 0) return false;
     state.phase = 'retry';
-    // 本編ぶんの 時間を ここで 止めて とっておきます
-    state.mainMs = elapsed();
-    state.mainIdleMs = state.idleMs;
+    // ここから おまけの 周。時間を ひくために 入った ところを おぼえて おきます
+    state.retryEnter = elapsed();
+    state.idleEnter = state.idleMs;
     state.queue = state.retryPool.slice();
     state.retryTotal = state.queue.length;
     state.index = 0;
@@ -614,12 +729,70 @@
     return true;
   }
 
-  /** ステージを おえます（とちゅうで やめた ときは status = 'aborted'） */
+  /**
+   * ひとまわり できました。
+   *
+   * **ここで 練習は 止めません。** みじかく ほめて、そのまま つぎの しゅうに
+   * 入ります。「おわり」の 画面を はさむと、そこで やめる 気もちに なって
+   * しまい、「あと 30びょう だけ」が できなく なるためです。
+   * やめる のは いつでも 子どもが 決めます。
+   */
+  function lapDone() {
+    if (state.phase === 'retry') {
+      // おまけの 周に かかった 時間を ここで 合計に 入れます
+      state.retryMs += Math.max(0, elapsed() - state.retryEnter);
+      state.retryIdleMs += Math.max(0, state.idleMs - state.idleEnter);
+      const root = $('play-root');
+      if (root) root.classList.remove('is-retry');
+      const phase = $('play-phase');
+      if (phase) phase.hidden = true;
+      const notice = $('play-ready');
+      if (notice && state.retryNotice) { notice.hidden = true; state.retryNotice = false; }
+    }
+    state.laps++;
+    state.phase = 'main';
+    state.retryPool = [];
+    state.retryTotal = 0;
+    state.index = 0;
+    state.lapPos = 0;
+    state.queue = shuffle(state.pool.slice());   // 2しゅう目からは じゅんばんを かえます
+    renderProgress();
+    celebrateLap();
+  }
+
+  /** ひとまわりの おいわい。1びょうほどで 消え、打つのを じゃましません */
+  function celebrateLap() {
+    const flash = $('play-lap-flash');
+    if (flash) {
+      flash.textContent = `ひとまわり できた！（${state.laps}しゅう目）`;
+      flash.hidden = false;
+      flash.classList.remove('is-on');
+      void flash.getBoundingClientRect();
+      flash.classList.add('is-on');
+      setTimeout(() => { flash.hidden = true; flash.classList.remove('is-on'); }, 1600);
+    }
+    if (state.showBuddy) T.Buddy.react('cheer');
+    chime();
+  }
+
+  /**
+   * いま までの ぶんを まとめて 返します。
+   *
+   * status
+   *   'completed' … 時間ぎめの チャレンジが 時間で おわった
+   *   'stopped'   … 子どもが「やめる」や「もどる」で おえた
+   *   'left'      … 画面を とじた（つづきは のこして おきます）
+   *
+   * **どの status でも 中身は 同じ です。** 「さいごまで やった 回だけ
+   * 数える」という 分けかたを やめた ので、ここで 分ける ものが ありません。
+   */
   function finish(status) {
     if (!state.running) return null;
     state.running = false;
     stopTimer();
     unbindKeys();
+    unbindLeaveGuard();
+    T.Buddy.stop();
 
     const stats = liveStats();
     const total = state.correctKeys + state.missKeys;
@@ -649,12 +822,46 @@
       // 保存は しません（saveResult の 一覧に 入れて いません）
       keystrokes: state.keystrokes,
       layout: state.settings.layout,
-      count: state.endless ? state.index : state.total,
+      // ひとまわりの すすみに たす ぶん。とちゅうで やめても ここは のこります
+      doneItems: state.doneItems,
+      lapNeed: state.lapNeed,
+      lapPos: state.lapPos,
+      laps: state.laps,
+      count: state.doneItems,
       done: state.index,
       retried: state.retryTotal
     };
     if (typeof state.onFinish === 'function') state.onFinish(result);
     return result;
+  }
+
+  // ------------------------------------------------------------------
+  // 画面を とじられた ときに とりこぼさない
+  // ------------------------------------------------------------------
+  //
+  // 「もどる」や「やめる」で おえた ときは その ばで 保存できますが、
+  // タブを とじられた ときは 何も よばれません。10びょうだけ 打って
+  // タブを とじる 子は ふつうに いるので、そこで きろくが 消えると
+  // 「みじかくても のこる」という 約束が やぶれます。
+  //
+  // pagehide は タブを とじる とき・べつの ページに うつる ときに
+  // かならず 1回 きます（beforeunload は スマートフォンで きません）。
+
+  let leaveHandler = null;
+
+  function bindLeaveGuard() {
+    unbindLeaveGuard();
+    leaveHandler = () => {
+      if (!state.running) return;
+      if (state.correctKeys + state.missKeys === 0 && state.doneItems === 0) return;
+      finish('left');
+    };
+    global.addEventListener('pagehide', leaveHandler);
+  }
+
+  function unbindLeaveGuard() {
+    if (leaveHandler) global.removeEventListener('pagehide', leaveHandler);
+    leaveHandler = null;
   }
 
   // ------------------------------------------------------------------
@@ -677,6 +884,7 @@
       void box.offsetWidth;
       box.classList.add('is-up');
     }
+    if (state.showBuddy) T.Buddy.react('combo');
     chime();
   }
 
@@ -712,8 +920,13 @@
 
   function isRunning() { return state.running; }
   function setOnFinish(fn) { state.onFinish = fn; }
-  function abort() { return finish('aborted'); }
+
+  /** 子どもが「やめる」や「もどる」で おえた とき */
+  function stop() { return finish('stopped'); }
+
+  /** この 回で 何か 打ったか（1打も なければ きろくに のこしません） */
+  function hasWork() { return state.correctKeys + state.missKeys > 0 || state.doneItems > 0; }
 
   global.Typa = global.Typa || {};
-  global.Typa.Play = { start, finish, abort, isRunning, setOnFinish, unbindKeys };
+  global.Typa.Play = { start, finish, stop, abort: stop, isRunning, hasWork, setOnFinish, unbindKeys };
 })(window);
