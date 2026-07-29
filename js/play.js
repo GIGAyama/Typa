@@ -21,6 +21,16 @@
  * 計算するので、とちゅうで 先生の 話を 聞いて いた 回でも 記録が 下がりません。
  * ただし **チャレンジ（時間ぎめ）だけは のぞきません**。じっさいの
  * 60びょうで どれだけ 打てたかを、そのまま スコアに するためです。
+ *
+ * ■ まちがえた お題は さいごに もう1回（おまけの 周）
+ * まちがえた 直後に もう一度 打つと よく 身に つきます。そこで 本編が
+ * おわったあと、つまずいた お題を さいごに もう1回だけ 出します。
+ *
+ * この おまけの 周の 打鍵は **はやさ・正かくさ・★・けいけんちには
+ * 数えません**。数えて しまうと、2回目に 打ち直した 子ほど 正かくさが
+ * 上がり、★が「さいしょに どれだけ 正しく 打てたか」を あらわさなく
+ * なるためです。いっぽうで「どの キーで つまずいたか」の きろくには
+ * ちゃんと 数えます。れんしゅうとしては 本物だからです。
  */
 (function (global) {
   'use strict';
@@ -29,6 +39,7 @@
   const IDLE_MS = 5000;        // これ以上 手が 止まったら「学習していない 時間」とみなします
   const SKIP_AFTER = 4;        // 同じ お題で これだけ まちがえたら「とばす」を 出します
   const COMBO_STEP = 10;       // れんぞくが これの ばいすうに なると ほめます
+  const RETRY_MAX = 5;         // さいごに もう1回 出す お題の 数の かぎり
 
   const state = {
     course: null, stage: null, source: 'course', special: '',
@@ -40,6 +51,8 @@
     results: [],
     correctKeys: 0, missKeys: 0, combo: 0, bestCombo: 0,
     missByKey: {}, missByFinger: {},
+    phase: 'main', retryPool: [], retryTotal: 0, retryUse: true, retryNotice: false,
+    mainMs: 0, mainIdleMs: 0,
     running: false, imeWarned: false,
     settings: null, showKeyboard: true, timerId: 0, onFinish: null
   };
@@ -68,7 +81,7 @@
             <div class="bar${limited ? ' bar-time' : ''}"><span id="play-bar"></span></div>
             <span class="num">${limited
               ? `のこり <b id="play-left">${Math.round(stage.limitMs / 1000)}</b> びょう`
-              : '<b id="play-done">0</b> / <span id="play-total">0</span>'}</span>
+              : '<span id="play-phase" hidden>もういちど </span><b id="play-done">0</b> / <span id="play-total">0</span>'}</span>
           </div>
         </div>
 
@@ -130,6 +143,12 @@
     state.bestCombo = 0;
     state.missByKey = {};
     state.missByFinger = {};
+    state.phase = 'main';
+    state.retryPool = [];
+    state.retryTotal = 0;
+    // 時間ぎめ（チャレンジ）と おわりの ない れんしゅうでは やりません。
+    // 「60びょうで どれだけ 打てたか」に おまけの 周を 足せないためです
+    state.retryUse = settings.retry !== false && !state.endless && !state.limitMs;
     state.idleMs = 0;
     state.pausedAt = 0;
     state.pausedMs = 0;
@@ -245,8 +264,13 @@
       if (box) box.classList.toggle('is-hurry', left <= 10000);
       return;
     }
+    // おまけの 周に 入ったら 数を 数えなおします。本編の 数に 足しつづけると
+    // バーが 100%を こえて しまうためです
+    const total = state.phase === 'retry' ? state.retryTotal : state.total;
+    const totalEl = $('play-total');
+    if (totalEl) totalEl.textContent = String(total);
     $('play-done').textContent = String(state.index);
-    bar.style.width = `${state.total ? Math.round(state.index / state.total * 100) : 0}%`;
+    bar.style.width = `${total ? Math.round(state.index / total * 100) : 0}%`;
   }
 
   function renderMeters() {
@@ -265,9 +289,12 @@
   }
 
   function liveStats() {
-    const ms = elapsed();
+    // おまけの 周に 入ったら 時計も 止めます。おまけの ぶんは 打鍵を 数えないので、
+    // 時間だけ のびると はやさが 実際より 低く 出て しまうためです
+    const ms = state.phase === 'retry' ? state.mainMs : elapsed();
+    const idle = state.phase === 'retry' ? state.mainIdleMs : state.idleMs;
     // 時間ぎめの チャレンジは、手を 止めた ぶんも そのまま スコアに ひびきます
-    const active = state.limitMs ? Math.max(1, ms) : Math.max(1, ms - state.idleMs);
+    const active = state.limitMs ? Math.max(1, ms) : Math.max(1, ms - idle);
     const total = state.correctKeys + state.missKeys;
     return {
       elapsedMs: ms,
@@ -350,6 +377,13 @@
     if (!state.running || !state.matcher) return;
     const now = performance.now();
 
+    if (state.retryNotice) {
+      // おまけの 周の あんないは、打ちはじめたら 消します
+      state.retryNotice = false;
+      const notice = $('play-ready');
+      if (notice) notice.hidden = true;
+    }
+
     if (!state.startTime) {
       // さいしょの 1打。ここから 時計が うごきはじめます
       state.startTime = now;
@@ -366,15 +400,20 @@
     const expectedChar = state.matcher.expected();
     const r = state.matcher.input(String(ch).toLowerCase());
 
+    // おまけの 周の 打鍵は、はやさ・正かくさ・★の もとには 数えません。
+    // 数えると「まちがえて 打ち直した 子ほど 正かくさが 上がる」ことに なり、
+    // ★が「さいしょに どれだけ 正しく 打てたか」を あらわさなく なります
+    const counts = state.phase === 'main';
+
     if (r.ok) {
-      state.correctKeys++;
+      if (counts) state.correctKeys++;
       state.combo++;
       if (state.combo > state.bestCombo) state.bestCombo = state.combo;
       if (state.combo > 0 && state.combo % COMBO_STEP === 0) celebrateCombo();
       if (code && state.showKeyboard) T.Keyboard.flash(code, true);
       beep(true);
     } else {
-      state.missKeys++;
+      if (counts) state.missKeys++;
       state.itemMistakes++;
       state.itemFirstTry = false;
       state.combo = 0;
@@ -416,23 +455,65 @@
   }
 
   function finishItem(ok) {
+    const item = state.current;
     state.results.push({
-      q: state.current.k,
+      q: item.k,
       ok: !!ok,
       firstTry: ok && state.itemFirstTry,
       tries: state.itemMistakes + 1,
       ms: state.startTime ? performance.now() - state.itemStart : 0,
-      wrong: state.itemWrong.slice()
+      wrong: state.itemWrong.slice(),
+      retry: state.phase === 'retry'
     });
+    // 本編で つまずいた お題は、さいごに もう1回 出すために とっておきます
+    if (state.phase === 'main' && state.retryUse && !state.itemFirstTry &&
+        state.retryPool.length < RETRY_MAX) {
+      state.retryPool.push(item);
+    }
     state.index++;
     renderProgress();
-    if (!state.endless && state.queue.length === 0) { finish('completed'); return; }
+
+    if (!state.endless && state.queue.length === 0 && !startRetry()) {
+      finish('completed');
+      return;
+    }
     const stage = $('play-stage');
     if (stage && ok) {
       stage.classList.add('is-clear');
       setTimeout(() => stage.classList.remove('is-clear'), 260);
     }
     loadItem();
+  }
+
+  /**
+   * 本編が おわったら、まちがえた お題を さいごに もう1回だけ 出します。
+   * 「まちがえた 直後に もう一度 打つ」のが いちばん 身に つくためです。
+   * ここから 先の 打鍵は 記録には のこりますが、はやさ・正かくさ・★には
+   * 数えません（handleChar の counts を 見てください）。
+   *
+   * @returns {boolean} おまけの 周に 入ったか
+   */
+  function startRetry() {
+    if (state.phase !== 'main' || !state.retryUse || state.retryPool.length === 0) return false;
+    state.phase = 'retry';
+    // 本編ぶんの 時間を ここで 止めて とっておきます
+    state.mainMs = elapsed();
+    state.mainIdleMs = state.idleMs;
+    state.queue = state.retryPool.slice();
+    state.retryTotal = state.queue.length;
+    state.index = 0;
+
+    const root = $('play-root');
+    if (root) root.classList.add('is-retry');
+    const phase = $('play-phase');
+    if (phase) phase.hidden = false;
+    const notice = $('play-ready');
+    if (notice) {
+      notice.innerHTML = `${T.icon('retry')} もう1かいだけ、さっき まちがえた ことばを やってみよう。`;
+      notice.hidden = false;
+      state.retryNotice = true;
+    }
+    return true;
   }
 
   /** ステージを おえます（とちゅうで やめた ときは status = 'aborted'） */
@@ -465,7 +546,8 @@
       missByFinger: state.missByFinger,
       layout: state.settings.layout,
       count: state.endless ? state.index : state.total,
-      done: state.index
+      done: state.index,
+      retried: state.retryTotal
     };
     if (typeof state.onFinish === 'function') state.onFinish(result);
     return result;

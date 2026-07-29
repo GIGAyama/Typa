@@ -73,6 +73,7 @@
     sound: true,          // 打ったときの おと
     bigText: false,       // 文字を 大きく
     strict: true,         // まちがえたら 正しい キーを 押すまで すすまない
+    retry: true,          // まちがえた お題を さいごに もう1回 出す
     theme: 'auto'         // auto / light / dark
   };
 
@@ -286,7 +287,7 @@
 
   global.Typa = global.Typa || {};
   global.Typa.Store = {
-    KEYS, DEFAULT_SETTINGS, getSettings, setSetting,
+    KEYS, HISTORY_MAX, DEFAULT_SETTINGS, getSettings, setSetting,
     getProgress, applyResult, starsOf,
     getHistory, addHistory, todaySummary, bestOverall, countsAsTyping,
     practiceDays, streak, recentDays, missSummary,

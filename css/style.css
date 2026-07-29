@@ -566,6 +566,38 @@ b, strong { font-weight: 700; }
 
 .howto { margin: 10px 0 0; padding-left: 1.2em; color: var(--muted); font-size: .88rem; }
 .howto li { margin-bottom: 4px; }
+
+/* ------------------------------------------- きろくの 書き出し・読みこみ */
+
+/* ファイルの 中身を そのまま 見せる ところ。ダウンロードが 止められて いる
+   端末では ここから コピーします */
+.bk-text {
+  width: 100%; margin: 10px 0; padding: 10px; font-size: .8rem; line-height: 1.5;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  border: 2px solid var(--line); border-radius: 12px;
+  background: var(--surface-2); color: var(--text); resize: vertical;
+}
+.bk-error {
+  margin: 10px 0 0; padding: 10px 12px; border-radius: 12px;
+  background: color-mix(in srgb, var(--ng) 12%, transparent);
+  border: 2px solid var(--ng); color: var(--text); font-size: .92rem;
+}
+.bk-summary { list-style: none; padding: 0; margin: 12px 0; }
+.bk-summary li {
+  display: flex; justify-content: space-between; gap: 10px;
+  padding: 7px 0; border-bottom: 1px solid var(--line); font-size: .92rem;
+}
+.bk-summary li:last-child { border-bottom: 0; }
+.bk-summary span { color: var(--muted); }
+
+/* ------------------------------------------- おまけの 周（もう1かい） */
+
+/* 本編と 見分けが つくように、進みぐあいの バーの 色を かえます。
+   色だけでは 分からないので、数の 前に「もういちど」と ことばでも 出します */
+.play .bar { transition: background-color .2s ease; }
+.play.is-retry .bar > span { background: var(--ok); }
+.play.is-retry .play-progress .num { color: var(--text); }
+#play-phase { font-weight: 700; }
 .version { color: var(--muted); font-size: .78rem; margin: 10px 0 0; }
 
 /* ---------------------------------------------------------------- レベル・つづけた日 */

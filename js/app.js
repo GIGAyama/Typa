@@ -27,7 +27,7 @@
   const esc = s => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-  const APP_VERSION = '2.0.0';
+  const APP_VERSION = '2.1.0';
 
   let view = null;
   let installPrompt = null;
@@ -833,6 +833,7 @@
         ${toggle('romajiHint', 'ローマ字の ヒントを 出す', s.romajiHint)}
         ${toggle('sound', '打ったときの おと', s.sound)}
         ${toggle('bigText', '文字を 大きくする', s.bigText)}
+        ${toggle('retry', 'まちがえた お題を さいごに もう1かい', s.retry)}
         <div class="seg mt" role="radiogroup" aria-label="画面の 色">
           ${[['auto', 'じどう'], ['light', 'あかるい'], ['dark', 'くらい']].map(([v, label]) => `
             <button class="seg-btn${s.theme === v ? ' on' : ''}" role="radio"
@@ -861,13 +862,20 @@
         <p class="muted">Typa は 名前も 出席番号も もちません。インターネットにも つながず、
         れんしゅうの きろくは <b>この 端末の 中だけ</b>に たまります。
         ほかの 人や ほかの サイトに おくられる ことは ありません。</p>
-        <p class="muted">ブラウザの データを けすと、きろくも いっしょに 消えます。</p>
+        <p class="muted">ブラウザの データを けすと、きろくも いっしょに 消えます。
+        べつの 端末に うつす ときは、下の「きろくを もちだす」を つかいます。</p>
         <button class="btn btn-outline btn-danger" id="reset-btn">${icon('trash')} きろくを ぜんぶ けす</button>
         <p class="muted" id="reset-note" hidden>ほんとうに けしますか？ もとには もどせません。</p>
         <div class="reset-confirm" id="reset-confirm" hidden>
           <button class="btn btn-danger-solid" id="reset-yes">けす</button>
           <button class="btn btn-ghost" id="reset-no">やめる</button>
         </div>`)}
+
+      ${card(`
+        <p class="lead">${icon('send')} きろくを もちだす</p>
+        <p class="muted">きろくを ファイルに して、べつの 端末に うつせます。
+        学年が かわって Chromebook が 入れかわる ときに つかいます。</p>
+        <button class="btn btn-outline" data-go-screen="backup">書き出し・読みこみ</button>`)}
 
       ${card(`
         <p class="lead">${icon('info')} アプリとして つかう</p>
@@ -884,6 +892,153 @@
     T.Keyboard.render($('guide-kb'), { layoutId: s.layout, fingerGuide: true, onTap: null });
     bindSettings();
     bindGoButtons();
+  }
+
+  // ------------------------------------------------------------------
+  // きろくの 書き出し・読みこみ
+  // ------------------------------------------------------------------
+
+  /**
+   * ファイルに 書き出して、べつの 端末で 読みこむ ための 画面。
+   *
+   * 読みこみは **置きかえ** だけです。2つの きろくを まぜると
+   * けいけんちが 二重に 数えられたり、どちらが 本当か 分からなく なります。
+   * 子どもに 説明できない ふるまいは 入れません。
+   */
+  function renderBackup() {
+    view.innerHTML = `
+      ${pageTitle('きろくを もちだす', 'ファイルに して、べつの 端末へ')}
+
+      <p class="hint-box">${icon('lock')} できる ファイルは <b>この 端末の 中</b>に できます。
+      インターネットには 出ません。名前や 出席番号は 入って いません。</p>
+
+      ${card(`
+        <p class="lead">${icon('send')} 書き出す</p>
+        <p class="muted">いまの きろくを 1つの ファイルに します。
+        できた ファイルは「ダウンロード」に 入ります。</p>
+        <button class="btn btn-primary" id="bk-save">${icon('send')} ファイルに 書き出す</button>
+        <button class="btn btn-ghost" id="bk-show">がめんに 出す</button>
+        <div id="bk-text-wrap" hidden>
+          <p class="muted">ぜんぶ えらんで コピーし、べつの 端末で はりつけます。</p>
+          <textarea id="bk-text" class="bk-text" readonly rows="6"></textarea>
+          <button class="btn btn-outline" id="bk-copy">${icon('check')} コピーする</button>
+        </div>`)}
+
+      ${card(`
+        <p class="lead">${icon('back')} 読みこむ</p>
+        <p class="muted"><b>いまの きろくは 消えて</b>、ファイルの きろくに なります。
+        もとには もどせません。読みこむ 前に、いまの きろくを 書き出して おくと あんしんです。</p>
+        <label class="btn btn-outline" for="bk-file">${icon('grid')} ファイルを えらぶ</label>
+        <input type="file" id="bk-file" accept="application/json,.json" hidden>
+        <p class="bk-error" id="bk-error" hidden></p>
+        <div id="bk-preview" hidden>
+          <ul class="bk-summary" id="bk-summary"></ul>
+          <p class="muted">この きろくに 入れかえますか？</p>
+          <div class="reset-confirm">
+            <button class="btn btn-danger-solid" id="bk-yes">入れかえる</button>
+            <button class="btn btn-ghost" id="bk-no">やめる</button>
+          </div>
+        </div>`)}
+
+      ${card(`
+        <p class="lead">${icon('info')} せんせいへ</p>
+        <p class="muted">この ファイルには 児童を 特定する 情報は 入って いません
+        （名前・出席番号・端末の ID などは もともと アプリが もって いません）。
+        中身は れんしゅうの 記録・★・けいけんち・せっていだけです。
+        書き出しも 読みこみも 端末の 中だけで 完結し、外部に 送信されません。</p>`)}
+    `;
+    bindBackup();
+  }
+
+  function bindBackup() {
+    let pending = null;   // しらべ おわった、まだ 保存して いない きろく
+
+    const save = $('bk-save');
+    if (save) save.addEventListener('click', () => {
+      const text = T.Backup.toText(T.Backup.buildExport(APP_VERSION));
+      if (T.Backup.download(text, T.Backup.fileName())) {
+        toast('きろくを 書き出しました。「ダウンロード」を 見てね。');
+      } else {
+        // 学校の 端末では ダウンロードが 止められて いる ことが あります
+        showText(text);
+        toast('ファイルに できませんでした。がめんに 出したので コピーしてね。');
+      }
+    });
+
+    const show = $('bk-show');
+    if (show) show.addEventListener('click', () => {
+      showText(T.Backup.toText(T.Backup.buildExport(APP_VERSION)));
+    });
+
+    function showText(text) {
+      $('bk-text').value = text;
+      $('bk-text-wrap').hidden = false;
+    }
+
+    const copy = $('bk-copy');
+    if (copy) copy.addEventListener('click', () => {
+      Promise.resolve(T.Backup.copyText($('bk-text').value)).then(ok => {
+        toast(ok ? 'コピーしました。' : 'コピーできませんでした。手で えらんで コピーしてね。');
+      });
+    });
+
+    const file = $('bk-file');
+    if (file) file.addEventListener('change', () => {
+      const f = file.files && file.files[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const res = T.Backup.parseImport(String(reader.result || ''));
+        if (!res.ok) { fail(res.message); return; }
+        pending = res.clean;
+        $('bk-error').hidden = true;
+        $('bk-summary').innerHTML = summaryHtml(res.summary);
+        $('bk-preview').hidden = false;
+      };
+      reader.onerror = () => fail('ファイルを 読めませんでした。');
+      reader.readAsText(f);
+      file.value = '';       // 同じ ファイルを もう一度 えらべるように します
+    });
+
+    function fail(message) {
+      pending = null;
+      $('bk-preview').hidden = true;
+      const box = $('bk-error');
+      box.textContent = message;
+      box.hidden = false;
+    }
+
+    function summaryHtml(s) {
+      const rows = [
+        ['れんしゅうした 回数', `${s.sessions} かい`],
+        ['★の 数', `${s.stars} こ`],
+        ['けいけんち', `${s.xp}`]
+      ];
+      if (s.lastAt) rows.push(['さいごの れんしゅう', formatDate(s.lastAt)]);
+      if (s.exportedAt) rows.push(['書き出した 日', formatDate(s.exportedAt)]);
+      return rows.map(([k, v]) => `<li><span>${esc(k)}</span><b>${esc(v)}</b></li>`).join('');
+    }
+
+    const no = $('bk-no');
+    if (no) no.addEventListener('click', () => {
+      pending = null;
+      $('bk-preview').hidden = true;
+    });
+
+    const yes = $('bk-yes');
+    if (yes) yes.addEventListener('click', () => {
+      if (!pending) return;
+      const ok = T.Backup.applyImport(pending);
+      pending = null;
+      applySettings();       // いろ・文字の 大きさ・配列が かわって いるかも しれません
+      if (ok) {
+        toast('きろくを 読みこみました。');
+        T.Nav.selectTab('home');
+      } else {
+        toast('ぜんぶは 読みこめませんでした。もう一度 ためしてね。');
+        T.Nav.render();
+      }
+    });
   }
 
   function toggle(name, label, on) {
@@ -1026,6 +1181,7 @@
     T.Nav.register('badges', { render: renderBadges });
     T.Nav.register('settings', { render: renderSettings });
     T.Nav.register('romaji-table', { render: renderRomajiTable });
+    T.Nav.register('backup', { render: renderBackup });
 
     // ホーム画面の ショートカット（manifest の shortcuts）から ひらかれたとき、
     // そのタブ（や 画面）から はじめます。アドレスは すぐ きれいに もどします
