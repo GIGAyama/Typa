@@ -27,7 +27,7 @@
   const esc = s => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-  const APP_VERSION = '2.1.0';
+  const APP_VERSION = '2.2.0';
 
   let view = null;
   let installPrompt = null;
@@ -86,6 +86,7 @@
     const lv = T.Awards.levelOf(T.Store.getAwards().xp);
     const st = T.Store.streak();
     const weakReady = T.Store.missSummary().keys.filter(k => /^[a-z0-9;,./-]$/.test(k)).length >= 2;
+    const due = T.Store.dueStages(2);
 
     view.innerHTML = `
       ${pageTitle('Typa', 'キーボードと なかよく なろう')}
@@ -106,6 +107,8 @@
           <span class="btn-main">${esc(next.stage.title)}</span>
           ${icon('next')}
         </button>`, 'card-next') : ''}
+
+      ${reviewCard(due)}
 
       ${card(`
         <p class="lead">${icon('sparkle')} とくべつ れんしゅう</p>
@@ -148,6 +151,51 @@
         </div>`) : ''}
     `;
     bindGoButtons();
+  }
+
+  /**
+   * きょう ふくしゅうすると よい ステージ。
+   *
+   * 「つづきから」の つぎに おきますが、**わざと ひかえめな 見た目**に します。
+   * 大きな ボタンが 2つ ならぶと、どちらを 押せば いいか まよいます。
+   * 何も ない ときは カードごと 出しません。
+   */
+  function reviewCard(due) {
+    const rows = (due || []).map(d => {
+      const found = T.Lessons.findStageById(d.stageId);
+      return found ? { found, due: d } : null;
+    }).filter(Boolean);
+    if (rows.length === 0) return '';
+
+    return card(`
+      <p class="lead">${icon('clock')} そろそろ ふくしゅう</p>
+      <p class="muted">まえに できた ステージです。わすれる まえに もう1かい やると、
+      ずっと わすれにくく なります。</p>
+      <div class="review-list">
+        ${rows.map(({ found, due: d }) => `
+          <button class="btn btn-outline review-row" data-go-stage="${esc(found.course.id)}:${esc(found.stage.id)}">
+            <span class="review-body">
+              <span class="review-sub">${esc(found.course.short)}</span>
+              <span class="review-title">${esc(found.stage.title)}</span>
+            </span>
+            <span class="review-when">${esc(sinceLabel(d.lastAt))}</span>
+            ${icon('next')}
+          </button>`).join('')}
+      </div>`, 'card-review');
+  }
+
+  /** 「5日 まえ」のような ことば。日づけは 端末の 時計で 数えます */
+  function sinceLabel(lastAt) {
+    const day = T.Store.localDay(lastAt);
+    if (!day) return '';
+    for (let i = 0; i <= 60; i++) {
+      if (T.Store.dayBefore(i) === day) {
+        if (i === 0) return 'きょう';
+        if (i === 1) return 'きのう';
+        return `${i}日 まえ`;
+      }
+    }
+    return 'ずっと まえ';
   }
 
   /** まだ ★3 に なっていない、いちばん さいしょの ステージ */

@@ -61,6 +61,9 @@
     return localDay(d);
   }
 
+  /** きょうから n日 あとの 日づけ（ふくしゅうの 日を 決めるのに つかいます） */
+  function dayAhead(n) { return dayBefore(-n); }
+
   // ------------------------------------------------------------------
   // せってい
   // ------------------------------------------------------------------
@@ -92,8 +95,68 @@
   // すすみぐあい（ステージごとの さいこう記録）
   // ------------------------------------------------------------------
 
-  /** @returns {Object} { [stageId]: { clears, bestKps, bestAccuracy, stars, lastAt } } */
+  /** @returns {Object} { [stageId]: { clears, bestKps, bestAccuracy, stars, lastAt, box, due } } */
   function getProgress() { return read(KEYS.progress, {}); }
+
+  // ------------------------------------------------------------------
+  // ふくしゅう（間を あけて もう1回）
+  // ------------------------------------------------------------------
+  //
+  // ★3に した ステージは、そのままだと 二度と 出て きません。
+  // けれど 打ちかたは 使わないと わすれます。そこで、うまく できた ステージほど
+  // **間を のばしながら** もう一度 よびもどします。
+  //
+  //   1日 → 3日 → 7日 → 14日 → 30日
+  //
+  // うまく できなかった 回は はこを 1に もどして、あすまた 出します。
+  // 日づけは かならず localDay() を とおします（ISO を 切ると 世界標準時に なり、
+  // 日本では あさ9時までが「きのう」に なって しまうためです）。
+
+  const REVIEW_DAYS = [1, 3, 7, 14, 30];
+
+  /** きろくが 古い ステージを ふくしゅうに よぶまでの 日数（前からの ユーザーむけ） */
+  const REVIEW_SEED_DAYS = 7;
+
+  /**
+   * ふくしゅうの 日を 決めます。progress の 中に box と due を 足すだけなので、
+   * 前から つかって いる 人の きろくは そのまま つかえます（どちらも なければ box=0）。
+   */
+  function scheduleReview(cur, stars) {
+    const box = Math.max(0, Math.min(REVIEW_DAYS.length, cur.box || 0));
+    // ★2つ（正かくさ 92%）いじょうで つぎの はこへ。それ未満は 1に もどします
+    const next = stars >= 2 ? Math.min(box + 1, REVIEW_DAYS.length) : 1;
+    cur.box = next;
+    cur.due = dayAhead(REVIEW_DAYS[next - 1]);
+    return cur;
+  }
+
+  /**
+   * きょう ふくしゅうすると よい ステージ。
+   * @param {number} [limit] いくつまで 返すか
+   * @returns {Array<{stageId, due, box, lastAt, overdue}>} 日が すぎて いる ものから
+   */
+  function dueStages(limit) {
+    const all = getProgress();
+    const today = localDay();
+    const seedBefore = dayBefore(REVIEW_SEED_DAYS);
+    const out = [];
+    Object.keys(all).forEach(stageId => {
+      const p = all[stageId];
+      if (!p || !(p.clears > 0)) return;
+      let due = p.due;
+      // 前から つかって いる 人には due が ありません。
+      // しばらく さわって いない ステージを ふくしゅうに よびます
+      if (!due) {
+        const last = localDay(p.lastAt);
+        if (!last || last > seedBefore) return;
+        due = last;
+      }
+      if (due > today) return;
+      out.push({ stageId, due, box: p.box || 0, lastAt: p.lastAt, overdue: due < today });
+    });
+    out.sort((a, b) => (a.due < b.due ? -1 : (a.due > b.due ? 1 : 0)));
+    return limit ? out.slice(0, limit) : out;
+  }
 
   /**
    * ステージの けっかを すすみぐあいに 反映します。
@@ -113,6 +176,7 @@
     cur.bestAccuracy = Math.max(cur.bestAccuracy, result.accuracy || 0);
     cur.stars = Math.max(cur.stars, stars);
     cur.lastAt = result.finishedAt;
+    scheduleReview(cur, stars);
     all[stageId] = cur;
     write(KEYS.progress, all);
     return {
@@ -289,10 +353,11 @@
   global.Typa.Store = {
     KEYS, HISTORY_MAX, DEFAULT_SETTINGS, getSettings, setSetting,
     getProgress, applyResult, starsOf,
+    REVIEW_DAYS, scheduleReview, dueStages,
     getHistory, addHistory, todaySummary, bestOverall, countsAsTyping,
     practiceDays, streak, recentDays, missSummary,
     getAwards, saveAwards,
     getChallenge, applyChallenge,
-    clearRecords, localDay, dayBefore
+    clearRecords, localDay, dayBefore, dayAhead
   };
 })(window);

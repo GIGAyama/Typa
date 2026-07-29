@@ -567,6 +567,20 @@ b, strong { font-weight: 700; }
 .howto { margin: 10px 0 0; padding-left: 1.2em; color: var(--muted); font-size: .88rem; }
 .howto li { margin-bottom: 4px; }
 
+/* ------------------------------------------- ふくしゅう（ホーム） */
+
+/* 「つづきから」と ならぶので、わざと ひかえめに します。
+   大きな ボタンが 2つ あると どちらを 押すか まよいます */
+.review-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.review-row {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  justify-content: flex-start; text-align: left; padding: 10px 14px;
+}
+.review-body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.review-sub { font-size: .74rem; color: var(--muted); font-weight: 700; }
+.review-title { font-size: 1rem; }
+.review-when { font-size: .8rem; color: var(--muted); flex: none; }
+
 /* ------------------------------------------- きろくの 書き出し・読みこみ */
 
 /* ファイルの 中身を そのまま 見せる ところ。ダウンロードが 止められて いる

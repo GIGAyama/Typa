@@ -18,7 +18,7 @@
  * キャッシュとは べつの ものです。バージョンを 上げて 古い キャッシュを
  * 消しても、児童の きろくは 消えません。
  */
-const VERSION = 'typa-v3';
+const VERSION = 'typa-v4';
 const ASSETS = [
   './',
   './index.html',

@@ -355,6 +355,16 @@
   /** コースIDから コースを ひきます */
   function findCourse(id) { return COURSES.filter(c => c.id === id)[0] || null; }
 
+  /** ステージIDだけから ひきます（ふくしゅうは コースを またぐため） */
+  function findStageById(stageId) {
+    for (const course of COURSES) {
+      for (const stage of course.stages) {
+        if (stage.id === stageId) return { course, stage };
+      }
+    }
+    return null;
+  }
+
   /** ステージIDから コースと ステージを ひきます */
   function findStage(courseId, stageId) {
     const course = findCourse(courseId);
@@ -378,6 +388,6 @@
     COURSES, SHORTCUT_TASKS, SHORTCUT_SOURCE,
     CHALLENGE_COURSE, WEAK_COURSE, CHALLENGE_SECONDS, CHALLENGE_POOLS,
     buildChallengeStage, buildWeakStage,
-    findCourse, findStage, stageCount, totalStages
+    findCourse, findStage, findStageById, stageCount, totalStages
   };
 })(window);
