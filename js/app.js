@@ -27,17 +27,22 @@
   const esc = s => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-  const APP_VERSION = '2.4.0';
+  const APP_VERSION = '3.0.0';
 
   let view = null;
   let installPrompt = null;
-  let leaveArmedAt = 0;         // 練習中に「もどる」を 1回 おした 時こく
 
   /** チャレンジ画面で えらんで いる 中身（画面を いききしても のこします） */
   const challengePick = { pool: 'word', seconds: 60 };
 
   /** きろく画面の キーボードの 見かた（miss = まちがえた かず / mastery = おぼえぐあい） */
   let heatMode = 'miss';
+
+  /**
+   * れんしゅうを やめた 理由。'show' なら けっか画面を 出します。
+   * play.js は「やめかた」を 知らないので、ここで あずかります。
+   */
+  let stopReason = null;
 
   // ------------------------------------------------------------------
   // 共通の 部品
@@ -104,12 +109,16 @@
         </div>`, 'card-today')}
 
       ${next ? card(`
-        <p class="lead">${icon('play')} つづきから やってみよう</p>
+        <p class="lead">${icon('play')} ${next.resume ? 'つづきから やってみよう' : 'すぐ はじめよう'}</p>
         <button class="btn btn-primary btn-big" data-go-stage="${esc(next.course.id)}:${esc(next.stage.id)}">
           <span class="btn-sub">${esc(next.course.short)}</span>
           <span class="btn-main">${esc(next.stage.title)}</span>
           ${icon('next')}
-        </button>`, 'card-next') : ''}
+        </button>
+        <p class="muted start-note">${next.resume
+          ? `${next.left}もん 打つと ひとまわりです。`
+          : 'えらばなくても、ここを 押せば すぐ はじまります。'}
+          <b>10びょうで やめても だいじょうぶ。</b>打った ぶんは そのまま のこります。</p>`, 'card-next') : ''}
 
       ${reviewCard(due)}
 
@@ -145,7 +154,7 @@
           }).join('')}
         </div>`)}
 
-      ${best ? card(`
+      ${best && best.kps > 0 ? card(`
         <p class="lead">${icon('trophy')} じぶんの さいこう記録</p>
         <div class="best-row">
           <div><b>${best.kps.toFixed(1)}</b><span>打/びょう</span></div>
@@ -201,16 +210,43 @@
     return 'ずっと まえ';
   }
 
-  /** まだ ★3 に なっていない、いちばん さいしょの ステージ */
+  /**
+   * ホームの 大きい ボタンが 行く さき。
+   *
+   * ■ 「とちゅうの ステージ」を いちばん 先に します
+   * まえに 3もんだけ 打って やめた ステージが あるなら、そこへ もどるのが
+   * いちばん すじが とおって います。ならびの さいしょから やり直させると、
+   * 「とちゅうまで やった」ことが なかった ことに なって しまいます。
+   *
+   * @returns {{course, stage, resume: boolean, left: number}}
+   */
   function findNextStage(progress) {
+    let resume = null;
+    T.Lessons.COURSES.forEach(course => {
+      course.stages.forEach(stage => {
+        const p = progress[stage.id];
+        if (!p || !(p.lapItems > 0)) return;
+        // 同じ ぐらい とちゅうの ものが あれば、さいきん さわった ほうへ
+        if (!resume || String(p.lastAt || '') > String(resume.p.lastAt || '')) {
+          resume = { course, stage, p };
+        }
+      });
+    });
+    if (resume) {
+      const need = Math.max(1, T.Lessons.stageCount(resume.stage));
+      return {
+        course: resume.course, stage: resume.stage, resume: true,
+        left: Math.max(1, need - Math.min(need - 1, resume.p.lapItems))
+      };
+    }
     for (const course of T.Lessons.COURSES) {
       for (const stage of course.stages) {
         const p = progress[stage.id];
-        if (!p || p.stars < 3) return { course, stage };
+        if (!p || p.stars < 3) return { course, stage, resume: false, left: 0 };
       }
     }
     const course = T.Lessons.COURSES[0];
-    return { course, stage: course.stages[0] };
+    return { course, stage: course.stages[0], resume: false, left: 0 };
   }
 
   // ------------------------------------------------------------------
@@ -270,6 +306,8 @@
       <div class="stage-list">
         ${course.stages.map((s, i) => {
           const p = progress[s.id] || { clears: 0, stars: 0, bestKps: 0, bestAccuracy: 0 };
+          const need = Math.max(1, T.Lessons.stageCount(s));
+          const lap = Math.max(0, Math.min(need - 1, p.lapItems || 0));
           return `
           <button class="stage-row" data-go-stage="${esc(course.id)}:${esc(s.id)}">
             <span class="stage-no">${i + 1}</span>
@@ -277,6 +315,9 @@
               <span class="stage-title">${esc(s.title)}${s.grade
                 ? `<span class="grade-chip">めやす ${s.grade}年</span>` : ''}</span>
               <span class="stage-note">${esc(s.note)}</span>
+              ${lap > 0 ? `<span class="stage-lap">
+                <span class="lap-bar"><span style="width:${Math.round(lap / need * 100)}%"></span></span>
+                <span class="stage-lap-text">ひとまわりまで あと ${need - lap}もん</span></span>` : ''}
               ${p.clears > 0 ? `<span class="stage-best">さいこう ${p.bestKps.toFixed(1)} 打/びょう ・ 正かくさ ${Math.round(p.bestAccuracy)}%</span>` : ''}
             </span>
             ${stars(p.stars)}
@@ -352,7 +393,6 @@
   // ------------------------------------------------------------------
 
   function renderPlay(params) {
-    leaveArmedAt = 0;
     let found = null;
     const special = params.special || '';
 
@@ -374,7 +414,9 @@
       course: found.course, stage: found.stage,
       source: params.source || 'course', special, mount: view,
       // その回 だけの おためし。せっていは 書きかえません
-      blind: !!params.blind
+      blind: !!params.blind,
+      // 画面の「やめる」ボタン。「もどる」と まったく 同じ 動きに します
+      onStop: () => T.Nav.back('stop')
     };
     if (found.stage.mode === 'shortcut') {
       T.Shortcut.setOnFinish(onSessionFinish);
@@ -386,33 +428,60 @@
   }
 
   /**
-   * 練習中に「もどる」が おされた ときの 動き。
-   * 1回目は 画面の 下に「もう1かい おすと やめます」と 出して とどまり、
-   * 2回目で ほんとうに やめます。うっかり さわって 消えて しまうのを ふせぎます。
+   * 練習中に「もどる」や「やめる」が おされた ときの 動き。
+   *
+   * 前は「もう1かい おすと やめます」と 2回 きいて いました。それは
+   * **やめると きろくが 消えた から** です。いまは 打った ぶんが かならず
+   * のこるので、きく 必要が ありません。1回で すっと やめられます。
+   * 止めにくい ことが、そのまま「じゃあ 今日は やめておこう」に なります。
+   *
+   * @param {Object} params
+   * @param {string} reason 'back' なら けっか画面を 出します。
+   *   タブを 押した ときは 行きたい ところへ 行かせ、保存だけ します。
    */
-  function leavePlay() {
-    const running = T.Play.isRunning() || T.Shortcut.isRunning();
-    if (!running) return true;
-    const now = Date.now();
-    if (now - leaveArmedAt < 6000) {
-      const result = T.Play.isRunning() ? T.Play.abort() : T.Shortcut.abort();
-      if (result) saveResult(result);
-      return true;
-    }
-    leaveArmedAt = now;
-    toast('もう1かい「もどる」を おすと、れんしゅうを やめます');
-    return false;
-  }
+  function leavePlay(params, reason) {
+    const isPlay = T.Play.isRunning();
+    const isShortcut = T.Shortcut.isRunning();
+    if (!isPlay && !isShortcut) return true;
 
-  function onSessionFinish(result) {
-    const info = saveResult(result);
-    if (result.status === 'completed') T.Nav.replace('result', { result, info });
+    const mod = isPlay ? T.Play : T.Shortcut;
+    const showResult = reason === 'back' && mod.hasWork();
+
+    // 保存は onSessionFinish が 1回だけ します。ここでも 保存すると、
+    // 同じ れんしゅうが 2回 数えられます（きょうの 打鍵数が 2ばいに なります）
+    stopReason = showResult ? 'show' : 'quiet';
+    mod.stop();
+    stopReason = null;
+
+    // けっか画面で れんしゅう画面を おきかえたので、
+    // 「もどる」は 1つ 上の 階層には もどりません
+    return !showResult;
   }
 
   /**
-   * けっかを 端末に のこします。
+   * れんしゅうが おわった ときに 1回だけ よばれます。
+   * とちゅうで やめた 回も、時間ぎめが おわった 回も、ここを とおります。
+   */
+  function onSessionFinish(result) {
+    // 1打も 打って いない 回は のこしません。ひらいて すぐ とじただけで
+    // 「れんしゅう 1回」が ふえると、きょうの 数も れんぞく日数も うそに なります
+    if (!hadWork(result)) return;
+    const info = saveResult(result);
+    // 'left'（タブが とじられた）では 画面を かえても 見えません
+    if (result.status === 'completed' || stopReason === 'show') {
+      T.Nav.replace('result', { result, info });
+    }
+  }
+
+  function hadWork(r) {
+    return (r.totalKeys || 0) > 0 || (r.doneItems || 0) > 0 || (r.done || 0) > 0;
+  }
+
+  /**
+   * けっかを 端末に のこします。**status では ふるいわけません。**
+   * 10びょうで やめた 回も、60びょうの チャレンジも、同じ ように のこします。
    *
-   * ・ステージの ★と さいこう記録（さいごまで やった ときだけ）
+   * ・ステージの ひとまわりの すすみ・★・さいこう記録
    * ・チャレンジの さいこう記録
    * ・れんしゅうの きろく（きろく画面の グラフや ヒートマップの もと）
    * ・けいけんちと バッジ
@@ -425,22 +494,29 @@
     const meta = { special: result.special || '' };
 
     if (stage.mode === 'challenge') {
+      // チャレンジだけは 時間で おわった ときだけ 記録します。
+      // 20びょうで やめた スコアを「60びょうの さいこう記録」には できません
       if (completed) {
         const ch = T.Store.applyChallenge(stage.id, result);
         meta.isBestScore = ch.isBest;
         meta.prevChallenge = ch.prev;
         meta.challengeBest = ch.best;
       }
-    } else if (!stage.noStars && completed) {
-      // とちゅうで やめた 回は「クリア」に しません。
-      // 2つだけ 打って やめても ★が つく、という ことが ないようにします
+    } else if (!stage.noStars) {
       const applied = T.Store.applyResult(stage.id, {
+        doneItems: result.doneItems != null ? result.doneItems : result.done,
+        lapNeed: result.lapNeed || result.count || 1,
+        correctKeys: result.correctKeys,
+        totalKeys: result.totalKeys,
         kps: result.kps, accuracy: result.accuracy, finishedAt: result.finishedAt
       });
       meta.firstClear = applied.firstClear;
       meta.newBestKps = applied.newBestKps;
       meta.newStars = applied.newStars;
       meta.prevBestKps = applied.prevBestKps;
+      meta.laps = applied.laps;
+      meta.lapItems = applied.lapItems;
+      meta.lapNeed = applied.lapNeed;
     }
 
     T.Store.addHistory({
@@ -456,7 +532,9 @@
       totalKeys: result.totalKeys,
       elapsedMs: Math.round(result.elapsedMs),
       combo: result.combo || 0,
-      stars: stage.noStars || !completed ? 0 : T.Store.starsOf(result),
+      // ★は「ひとまわり できた 回」だけに つけます。3もん 打って やめた 回に
+      // ★3が ならぶと、きろくの 一覧が 何も あらわさなく なります
+      stars: stage.noStars || !meta.laps ? 0 : T.Store.starsOf(result),
       missByKey: result.missByKey,
       missByFinger: result.missByFinger,
       // おぼえぐあいの もと。ここに 名前を 書いた ものだけが のこります。
@@ -485,6 +563,7 @@
     const isShortcut = r.stage.mode === 'shortcut';
     const isChallenge = r.stage.mode === 'challenge';
     const noStars = !!r.stage.noStars;
+    const lapped = (meta.laps || 0) > 0;      // この回で ひとまわり できたか
     const n = T.Store.starsOf(r);
     const progress = T.Store.getProgress()[r.stage.id] || {};
     const okCount = r.items.filter(i => i.ok).length;
@@ -492,12 +571,18 @@
     const recStep = recommend(r);
     const recParams = recStep ? recStep.params : null;
 
+    // 見出しで うそを つきません。ひとまわり して いない 回に「できました」と
+    // 出すと、つぎに ひらいた とき「もう おわった はず」と 思って しまいます
+    const title = isChallenge
+      ? (r.status === 'completed' ? 'そこまで！' : 'ここまでの きろく')
+      : (lapped ? 'ひとまわり できました' : 'ここまでの きろく');
+
     view.innerHTML = `
-      ${pageTitle(isChallenge ? 'そこまで！' : 'できました', `${r.course.short}／${r.stage.title}`)}
+      ${pageTitle(title, `${r.course.short}／${r.stage.title}`)}
 
       ${card(`
         ${isBest ? `<p class="result-best">${icon('sparkle')} 新記録！</p>` : ''}
-        ${noStars ? '' : `<div class="result-stars">${stars(n)}</div>`}
+        ${noStars || (!lapped && !isChallenge) ? '' : `<div class="result-stars">${stars(n)}</div>`}
         <p class="result-word">${esc(praise(r, meta, n))}</p>
         <div class="result-grid">
           ${isShortcut ? `
@@ -514,6 +599,8 @@
         </div>
         ${compareLine(r, meta, progress)}
       `, 'card-result')}
+
+      ${lapCard(r, meta)}
 
       ${r.keystrokes && r.keystrokes.length >= 8 ? card(`
         <p class="lead">${icon('chart')} どこで 手が とまったか</p>
@@ -731,15 +818,56 @@
     return { courseId: r.course.id, stageId: r.stage.id, source: 'review' };
   }
 
+  /**
+   * ステージの「ひとまわり」の すすみ。
+   *
+   * とちゅうで やめた 回に いちばん 出したい のは、はやさでも ★でもなく
+   * **「打った ぶんは ちゃんと のこって いる」** ことです。
+   * ここが 空だと、みじかい れんしゅうが むだに 見えて しまいます。
+   */
+  function lapCard(r, meta) {
+    if (r.stage.noStars || r.stage.mode === 'challenge' || !meta.lapNeed) return '';
+    const need = meta.lapNeed;
+    const items = Math.max(0, Math.min(need, meta.lapItems || 0));
+    const laps = meta.laps || 0;
+    const left = Math.max(0, need - items);
+
+    return card(`
+      <p class="lead">${icon('target')} ${esc(r.stage.title)}の すすみ</p>
+      ${laps > 0
+        ? `<p class="muted">この 回で <b>${laps}しゅう</b> できました。${
+            left < need ? `つぎの しゅうは <b>${need - left}もん</b> すすんで います。` : ''}</p>`
+        : `<p class="muted">この 回で <b>${r.doneItems || 0}もん</b> 打ちました。
+           やめても 消えません。つぎは <b>${items + 1}もん目</b>から はじまります。</p>`}
+      <div class="lap-bar" role="img" aria-label="ひとまわりまで あと ${left}もん">
+        <span style="width:${Math.round(items / need * 100)}%"></span>
+      </div>
+      <p class="lap-note">${left === 0
+        ? 'ひとまわり できました。'
+        : `ひとまわりまで あと <b>${left}もん</b>（ぜんぶで ${need}もん）`}</p>`, 'card-lap');
+  }
+
   function praise(r, meta, n) {
     if (r.stage.mode === 'challenge') {
+      // 時間の とちゅうで やめた 回は スコアに しません。「60びょうで
+      // どれだけ 打てたか」に、20びょうの ぶんを ならべられないためです。
+      // だまって 記録しないのでは なく、ここで はっきり つたえます
+      if (r.status !== 'completed') {
+        return `${r.correctKeys}だ 打てました。さいごの 時間まで やると スコアに なります。`;
+      }
       if (meta.isBestScore) return `${r.correctKeys}だ！ これまでで いちばん たくさん 打てました。`;
       return `${r.correctKeys}だ 打てました。正かくさが 上がると スコアも のびます。`;
     }
     if (r.special === 'weak') return 'にがてな キーに むきあえました。くりかえすほど 手が おぼえます。';
+    // ひとまわり して いない 回。ここで「もっと やろう」と せかしません。
+    // みじかくても やった ことが よかった、と そのまま つたえます
+    if (!(meta.laps > 0)) {
+      if ((r.correctKeys || 0) < 10) return 'すこしでも 打てば、その ぶんは のこります。また いつでも どうぞ。';
+      return `${r.correctKeys}だ 打てました。つづきは いつでも ここから はじめられます。`;
+    }
     if (n >= 3) return 'ミスが ほとんど ない、すばらしい 打ちかたです。';
     if (n === 2) return 'いい ちょうし。あと すこしで ★3つ。';
-    if (n === 1) return 'さいごまで やりきりました。正かくさを 上げていこう。';
+    if (n === 1) return 'ひとまわり できました。正かくさを 上げていこう。';
     return 'ゆっくりで いいので、正しい 指で 打ってみよう。';
   }
 
@@ -855,17 +983,20 @@
         ${streakLine(st)}
         ${calendar()}`)}
 
-      ${best ? card(`
+      ${best && best.kps > 0 ? card(`
         <p class="lead">${icon('trophy')} さいこう記録</p>
         <div class="best-row">
           <div><b>${best.kps.toFixed(1)}</b><span>打/びょう</span></div>
           <div><b>${Math.round(best.accuracy)}</b><span>% 正かくさ</span></div>
           <div><b>${best.count}</b><span>かい</span></div>
-        </div>`) : card('<p class="muted">まだ きろくが ありません。「れんしゅう」から はじめよう。</p>')}
+        </div>`) : card(`<p class="muted">${best
+          ? 'さいこう記録は、すこし まとまって 打った 回から つきます。もう ちょっと つづけて みよう。'
+          : 'まだ きろくが ありません。「れんしゅう」から はじめよう。'}</p>`)}
 
       ${history.length ? card(`
         <p class="lead">${icon('chart')} はやさの うつりかわり</p>
-        ${sparkline(history.filter(h => T.Store.countsAsTyping(h) && h.correctKeys > 0).slice(0, 20).reverse())}`) : ''}
+        ${sparkline(history.filter(h => T.Store.countsAsTyping(h) &&
+          (h.totalKeys || 0) >= T.Store.MIN_RECORD_KEYS).slice(0, 20).reverse())}`) : ''}
 
       ${(miss.keys.length || keyStats.slow.length) ? card(`
         <p class="lead">${icon('target')} にがてな キー</p>
@@ -1174,10 +1305,19 @@
         </details>`)}
 
       ${card(`
+        <p class="lead">${icon('hand')} 手の イラストと キャラクター</p>
+        <p class="muted">手の 絵は「どの 指を のばすか」を つたえます。
+        キャラクターは 打つと うごきます。気が 散る ときは 消せます。</p>
+        ${toggle('hands', '手の イラストを 出す', s.hands)}
+        ${toggle('buddy', 'キャラクターを 出す', s.buddy)}
+        <p class="muted">手の 絵は、ヒントの つよさを「ばしょだけ」まで 下げると
+        いっしょに 消えます（指の 色分けと ひとくみ だからです）。</p>`)}
+
+      ${card(`
         <p class="lead">${icon('gear')} 見え方・おと</p>
         ${toggle('sound', '打ったときの おと', s.sound)}
         ${toggle('bigText', '文字を 大きくする', s.bigText)}
-        ${toggle('retry', 'まちがえた お題を さいごに もう1かい', s.retry)}
+        ${toggle('retry', 'まちがえた お題を ひとまわりの さいごに もう1かい', s.retry)}
         <div class="seg mt" role="radiogroup" aria-label="画面の 色">
           ${[['auto', 'じどう'], ['light', 'あかるい'], ['dark', 'くらい']].map(([v, label]) => `
             <button class="seg-btn${s.theme === v ? ' on' : ''}" role="radio"

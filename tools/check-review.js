@@ -100,10 +100,21 @@ eq(cur.box, 1, 'box が なくても 1から はじまる');
 // 3. applyResult に つながって いるか
 // ------------------------------------------------------------------
 
+// ふくしゅうの 日が 決まるのは **ひとまわり できた とき** だけ です。
+// 3もん 打って やめた だけで「1日後に ふくしゅう」と 出て しまうと、
+// まだ 一度も とおして いない ステージが ふくしゅうに ならびます。
 Store.clearRecords();
-Store.applyResult('rm-a', { kps: 2, accuracy: 99, finishedAt: new Date().toISOString() });
+const part = { doneItems: 3, lapNeed: 10, correctKeys: 30, totalKeys: 30, kps: 2, accuracy: 100 };
+Store.applyResult('rm-a', Object.assign({ finishedAt: new Date().toISOString() }, part));
+ok(!Store.getProgress()['rm-a'].due, 'とちゅうで やめた だけでは ふくしゅうに 入らない');
+eq(Store.getProgress()['rm-a'].lapItems, 3, 'それでも 打った 3もんは のこる');
+
+Store.applyResult('rm-a', {
+  doneItems: 7, lapNeed: 10, correctKeys: 70, totalKeys: 70,
+  kps: 2, accuracy: 99, finishedAt: new Date().toISOString()
+});
 const p = Store.getProgress()['rm-a'];
-eq(p.box, 1, 'れんしゅうすると はこが つく');
+eq(p.box, 1, 'ひとまわり すると はこが つく');
 eq(p.due, Store.dayAhead(1), 'つぎの ふくしゅうは あす');
 eq(Store.dueStages().length, 0, 'あすの ぶんは きょう 出ない');
 

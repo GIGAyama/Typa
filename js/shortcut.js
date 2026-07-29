@@ -307,8 +307,13 @@
 
   function isRunning() { return state.running; }
   function setOnFinish(fn) { state.onFinish = fn; }
-  function abort() { return finish('aborted'); }
+
+  /** 子どもが「やめる」や「もどる」で おえた とき。やった ぶんは のこります */
+  function stop() { return finish('stopped'); }
+
+  /** この 回で 何か やったか（1つも やって いなければ きろくに のこしません） */
+  function hasWork() { return state.index > 0 || state.results.length > 0; }
 
   global.Typa = global.Typa || {};
-  global.Typa.Shortcut = { start, finish, abort, isRunning, setOnFinish, unbind };
+  global.Typa.Shortcut = { start, finish, stop, abort: stop, isRunning, hasWork, setOnFinish, unbind };
 })(window);

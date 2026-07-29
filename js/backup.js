@@ -168,7 +168,12 @@
           bestKps: num(p.bestKps),
           bestAccuracy: num(p.bestAccuracy),
           stars: Math.max(0, Math.min(3, num(p.stars))),
-          lastAt: typeof p.lastAt === 'string' ? p.lastAt : null
+          lastAt: typeof p.lastAt === 'string' ? p.lastAt : null,
+          // ひとまわりの とちゅう。ここを 落とすと、うつした とたんに
+          // 「あと 3もんで ひとまわり」が 0 に もどって しまいます
+          lapItems: num(p.lapItems),
+          lapCorrect: num(p.lapCorrect),
+          lapTotal: num(p.lapTotal)
         };
       });
       clean[K.progress] = out;

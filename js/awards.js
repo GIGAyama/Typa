@@ -59,8 +59,16 @@
 
   /**
    * 練習1回ぶんの けいけんち。
+   *
+   * ■ 「さいごまで やった」には あげません
+   * 前は 最後まで やりきった 回に ボーナスを つけて いました。けれど
+   * それは 「時間が ある 子ほど 有利」という ことで、10びょうしか
+   * 時間が ない 子を そのまま おいて いく しくみでした。
+   * いまは **打った ぶん**と **ひとまわり できた こと**に つけます。
+   * 5回に わけて ひとまわりしても、1回で ひとまわりしても 同じ です。
+   *
    * @param {Object} r セッションの けっか
-   * @param {Object} meta { firstClear, newBestKps, newStars, isBestScore }
+   * @param {Object} meta { firstClear, newBestKps, newStars, isBestScore, laps }
    * @returns {{total: number, parts: Array<{label: string, xp: number}>}}
    */
   function xpFor(r, meta) {
@@ -70,10 +78,16 @@
 
     add('打てた 数', r.correctKeys || 0);
 
-    if (r.status === 'completed') add('さいごまで やった', 20);
+    if (m.laps > 0) add('ひとまわり できた', 20 * m.laps);
+    // チャレンジは ひとまわりが ないので、時間まで やりきった ことに つけます
+    else if (r.status === 'completed' && r.stage && r.stage.mode === 'challenge') {
+      add('さいごまで やった', 20);
+    }
 
     const acc = r.accuracy || 0;
-    if (r.totalKeys > 0) {
+    // 正かくさの ボーナスは、ある ていど 打った 回だけ です。
+    // 3打で 100% の 回に 40 を つけると、すぐ やめる ほうが とくに なります
+    if (r.totalKeys >= T.Store.MIN_RECORD_KEYS) {
       if (acc >= 98) add('ほとんど ミスなし', 40);
       else if (acc >= 92) add('正かくに 打てた', 20);
       else if (acc >= 80) add('がんばった', 10);
@@ -219,7 +233,11 @@
     awards.xp += gain.total;
     awards.keys += Math.round(r.correctKeys || 0);
     awards.sessions += 1;
-    if ((r.totalKeys || 0) > 0 && (r.missKeys || 0) === 0 && r.status === 'completed') awards.perfect += 1;
+    // ノーミスは「ひとまわり ミス0」で 数えます。1打だけ 打って やめた 回を
+    // ノーミスに すると、バッジが 何も あらわさなく なります
+    const perfectRun = (r.missKeys || 0) === 0 &&
+      ((meta || {}).laps > 0 || (r.status === 'completed' && (r.totalKeys || 0) >= T.Store.MIN_RECORD_KEYS));
+    if ((r.totalKeys || 0) > 0 && perfectRun) awards.perfect += 1;
     if ((meta || {}).special === 'weak') awards.weak += 1;
     if ((meta || {}).special === 'challenge') awards.challenge += 1;
 
