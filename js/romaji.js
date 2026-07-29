@@ -98,6 +98,60 @@
   /** 「っ」を単独で打つときの候補 */
   const SOKUON = ['xtu', 'ltu', 'xtsu', 'ltsu'];
 
+  // ------------------------------------------------------------------
+  // ローマ字の きまり（どこで つまずいたかを 数えるための ふだ）
+  // ------------------------------------------------------------------
+  //
+  // 「d が にがて」より「ちいさい つ が にがて」の ほうが、つぎに 何を
+  // すれば よいかが はっきり します。ローマ字の つまずきは キーの もんだいでは
+  // なく **きまりの もんだい** だからです。
+  //
+  // ふだは buildChunks() の 中で つけます。ここが「どの きまりか」を
+  // すでに 知って いる **ただ 1つの 場所** だからです。あとから かなを 見て
+  // 引きなおす 作りに すると、いつか かならず 食いちがいます。
+
+  /** ちいさい や ゆ よ（拗音）を 見わける ための 字 */
+  const SMALL_Y = 'ゃゅょ';
+  /** ちいさい あ い う え お（外来音の 見わけに つかいます） */
+  const SMALL_V = 'ぁぃぅぇぉ';
+  /** てんてん・まるの つく かな */
+  const DAKUTEN = 'がぎぐげござじずぜぞだぢづでどばびぶべぼゔぱぴぷぺぽ';
+
+  /** かなの 行（さいしょの 子音から 引きます。ヘボン式でも 同じ 行に なります） */
+  const ROW_OF_HEAD = {
+    a: 'row-a', i: 'row-a', u: 'row-a', e: 'row-a', o: 'row-a',
+    k: 'row-ka', g: 'row-ka', c: 'row-ka', q: 'row-ka',
+    s: 'row-sa', z: 'row-sa', j: 'row-sa',
+    t: 'row-ta', d: 'row-ta',
+    n: 'row-na',
+    h: 'row-ha', b: 'row-ha', p: 'row-ha', f: 'row-ha',
+    m: 'row-ma', y: 'row-ya', r: 'row-ra', w: 'row-wa', v: 'row-wa'
+  };
+
+  /**
+   * かたまり1つに ふだを つけます。
+   * @param {string} kana かたまりの かな（'っこ' 'ん' 'しゅ' など）
+   * @param {string} cand 基本の 打ちかた
+   * @returns {string} きまりの ふだ
+   */
+  function ruleOf(kana, cand) {
+    if (!kana) return 'raw';
+    // っ は つぎの かなと ひとかたまりに なります。
+    // その ばあいは っ の ほうを 見ます（つぎの 行の ふだは 消えます）
+    if (kana.indexOf('っ') >= 0) return 'sokuon';
+    if (kana === 'ん') return 'hatsuon';
+    if (kana.length === 2 && SMALL_Y.indexOf(kana[1]) >= 0) return 'youon';
+    if (kana.length === 2 && SMALL_V.indexOf(kana[1]) >= 0) return 'gaion';
+    if (kana.length === 1 && DAKUTEN.indexOf(kana) >= 0) return 'dakuten';
+    if (kana.length === 1 && KANA[kana]) {
+      // 記号（ー、。・「」スペース）は きまりの べんきょうでは ないので べつに します
+      const row = ROW_OF_HEAD[(cand || '').charAt(0)];
+      return row || 'kigou';
+    }
+    // かな表に ない もの（英数字）は 数えません
+    return 'raw';
+  }
+
   /** カタカナ → ひらがな（お題にカタカナが混ざっても打てるようにします） */
   function toHiragana(text) {
     return String(text).replace(/[ァ-ヶ]/g, ch =>
@@ -157,6 +211,9 @@
 
       chunks.unshift({ kana: cur.kana, cands: cur.cands });
     }
+    // ふだは ぜんぶ 組み上がってから つけます。っ と ん は
+    // うしろの かたまりと まざるので、ここで ないと 正しく つきません
+    chunks.forEach(c => { c.rule = ruleOf(c.kana, c.cands[0]); });
     return chunks;
   }
 
@@ -186,19 +243,31 @@
 
     function finished() { return index >= chunks.length; }
 
-    /** これから打つキー（複数の正解があるときは基本の打ち方を出します） */
-    function expected() {
-      if (finished()) return '';
+    /**
+     * これから打つキーと、それが どの きまりの ものか。
+     *
+     * expected() と べつべつに 引く 作りに すると、下の「次のかたまりに
+     * ずれる」場面で かならず 食いちがいます。ここに 一本化します。
+     *
+     * @returns {{ch: string, rule: string, kana: string}}
+     */
+    function expectedInfo() {
+      if (finished()) return { ch: '', rule: '', kana: '' };
+      const cur = chunks[index];
       const list = alive(buffer);
-      const cand = list[0] || chunks[index].cands[0];
+      const cand = list[0] || cur.cands[0];
       const ch = cand.charAt(buffer.length);
-      if (ch) return ch;
+      if (ch) return { ch, rule: cur.rule, kana: cur.kana };
       // 「かんじ」の n を1回打った状態のように、いまのかたまりはもう打ち終えていて、
       // 次の1打で「ん」か「んな」かが決まる場面。ここで空を返すと画面の案内が
       // 消えてしまうので、次のかたまりの1文字目を出します。
       const next = chunks[index + 1];
-      return next && next.cands[0] ? next.cands[0].charAt(0) : '';
+      if (!next || !next.cands[0]) return { ch: '', rule: '', kana: '' };
+      return { ch: next.cands[0].charAt(0), rule: next.rule, kana: next.kana };
     }
+
+    /** これから打つキー（複数の正解があるときは基本の打ち方を出します） */
+    function expected() { return expectedInfo().ch; }
 
     /**
      * 画面に出すローマ字のヒント。
@@ -267,6 +336,7 @@
       input,
       hint,
       expected,
+      expectedInfo,
       kanaDone,
       isFinished: finished,
       /** 「ん」を n 1回で打ち終えた状態など、区切りとして正解にできるか */
@@ -316,5 +386,5 @@
   }
 
   global.Typa = global.Typa || {};
-  global.Typa.Romaji = { buildChunks, createMatcher, toHiragana, candidatesOf, KANA, KANA2, SOKUON, TABLE };
+  global.Typa.Romaji = { buildChunks, createMatcher, toHiragana, candidatesOf, ruleOf, KANA, KANA2, SOKUON, TABLE };
 })(window);

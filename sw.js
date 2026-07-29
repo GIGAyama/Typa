@@ -18,7 +18,7 @@
  * キャッシュとは べつの ものです。バージョンを 上げて 古い キャッシュを
  * 消しても、児童の きろくは 消えません。
  */
-const VERSION = 'typa-v2';
+const VERSION = 'typa-v6';
 const ASSETS = [
   './',
   './index.html',
@@ -27,7 +27,9 @@ const ASSETS = [
   './js/layout.js',
   './js/romaji.js',
   './js/lessons.js',
+  './js/mastery.js',
   './js/store.js',
+  './js/backup.js',
   './js/awards.js',
   './js/keyboard.js',
   './js/nav.js',

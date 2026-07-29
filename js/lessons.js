@@ -317,43 +317,108 @@
   /** ホームポジションの キー。にがてな キーの あいだに はさんで リズムを 作ります */
   const ANCHORS = ['f', 'j', 'd', 'k', 's', 'l', 'a', ';'];
 
+  /** にがて とっくんで つかえる キー（JIS と US の どちらにも あり、指も 決まって いる） */
+  const SAFE_KEY = /^[a-z0-9;,./-]$/;
+
+  /** 1回の とっくんに 入れる お題の 数の かぎり（90びょうくらいで おわる 長さ） */
+  const WEAK_MAX_ITEMS = 16;
+
   /**
-   * これまでの ミスから、その子だけの お題を つくります。
+   * これまでの きろくから、その子だけの お題を つくります。
    *
-   * @param {string[]} weakKeys ミスの おおい じゅんに ならんだ キー（store.missSummary）
+   * ■ 単キーの くりかえし（ffff）だけでは 弱い
+   * じっさいの つまずきは **キーの つなぎ目** と **にた キーの とりちがえ** で
+   * 起きます。同じ キーを 4回 打つ 練習は、その どちらにも あたりません。
+   * そこで つぎの じゅんに 組み立てます。
+   *
+   *   1. とりちがえた くみあわせ（dfdf fdfd）… いちばん 手がかりが 強い
+   *   2. まちがえる キー（tttt と、ホームポジションに もどる ttaa）
+   *   3. まちがえないが 手が とまる キー … くりかえしでは なく つなぎ目だけ
+   *   4. さいごに ぜんぶ まぜた もの
+   *
+   * @param {string[]|{keys, slow, pairs}} weak にがての ねらい。
+   *   配列を わたすと これまでどおり「まちがえる キー」として あつかいます
    * @returns {{course: Object, stage: Object}|null} データが 足りなければ null
    */
-  function buildWeakStage(weakKeys) {
-    const targets = (weakKeys || []).filter(k => /^[a-z0-9;,./-]$/.test(k)).slice(0, 6);
-    if (targets.length < 2) return null;
+  function buildWeakStage(weak) {
+    const w = Array.isArray(weak) ? { keys: weak } : (weak || {});
+    const keys = (w.keys || []).filter(k => SAFE_KEY.test(k)).slice(0, 4);
+    const slow = (w.slow || []).filter(k => SAFE_KEY.test(k) && keys.indexOf(k) < 0).slice(0, 2);
+    const pairs = (w.pairs || [])
+      .filter(p => p && SAFE_KEY.test(p.from) && SAFE_KEY.test(p.to) && p.from !== p.to)
+      .slice(0, 3);
+
+    if (keys.length + slow.length < 2 && pairs.length === 0) return null;
 
     const items = [];
-    targets.forEach((t, i) => {
-      const anchor = ANCHORS[i % ANCHORS.length];
-      items.push(t + t + t + t);                 // まず その キーだけを くりかえす
-      items.push(t + anchor + t + anchor);       // ホームポジションに もどる れんしゅう
+    const add = t => { if (items.length < WEAK_MAX_ITEMS) items.push(t); };
+
+    // 1. とりちがえ … 交ごに 打つと「区べつ」が つきます
+    pairs.forEach(p => {
+      add(p.from + p.to + p.from + p.to);
+      add(p.to + p.from + p.to + p.from);
     });
-    // さいごに ぜんぶ まぜた お題を 2つ
-    items.push(targets.join(''));
-    items.push(targets.slice().reverse().join('') + targets[0]);
+
+    // 2. まちがえる キー
+    keys.forEach((t, i) => {
+      const anchor = ANCHORS[i % ANCHORS.length];
+      add(t + t + t + t);                        // まず その キーだけを くりかえす
+      add(t + anchor + t + anchor);              // ホームポジションに もどる れんしゅう
+    });
+
+    // 3. まちがえないが おそい キー … くりかえしても 意味が ないので つなぎ目だけ
+    slow.forEach((t, i) => {
+      const anchor = ANCHORS[(keys.length + i) % ANCHORS.length];
+      add(t + anchor + t + anchor);
+    });
+
+    // 4. さいごに ぜんぶ まぜた お題を 2つ
+    const all = keys.concat(slow, pairs.map(p => p.from), pairs.map(p => p.to))
+      .filter((v, i, a) => a.indexOf(v) === i);
+    if (all.length >= 2) {
+      add(all.join(''));
+      add(all.slice().reverse().join('') + all[0]);
+    }
 
     return {
       course: WEAK_COURSE,
       stage: {
         id: 'weak-drill',
         title: 'にがて とっくん',
-        note: `${targets.join(' ')} を あつめました`,
+        note: weakNote(keys, slow, pairs),
         mode: 'key',
         skill: 'weak-drill',
         items: items.map(t => ({ k: t, d: '', raw: true })),
         noStars: true,
-        targets
+        targets: all,
+        pairs
       }
     };
   }
 
+  /** 何を あつめたかを ことばで つたえます（キーの ならびだけでは 分かりません） */
+  function weakNote(keys, slow, pairs) {
+    const parts = [];
+    if (pairs.length) {
+      parts.push(pairs.map(p => `${p.from.toUpperCase()} と ${p.to.toUpperCase()}`).join('、') + ' の とりちがえ');
+    }
+    if (keys.length) parts.push(keys.map(k => k.toUpperCase()).join(' '));
+    if (slow.length) parts.push(slow.map(k => k.toUpperCase()).join(' ') + '（手が とまる キー）');
+    return parts.length ? parts.join('、') + ' を あつめました' : 'にがてな キーを あつめました';
+  }
+
   /** コースIDから コースを ひきます */
   function findCourse(id) { return COURSES.filter(c => c.id === id)[0] || null; }
+
+  /** ステージIDだけから ひきます（ふくしゅうは コースを またぐため） */
+  function findStageById(stageId) {
+    for (const course of COURSES) {
+      for (const stage of course.stages) {
+        if (stage.id === stageId) return { course, stage };
+      }
+    }
+    return null;
+  }
 
   /** ステージIDから コースと ステージを ひきます */
   function findStage(courseId, stageId) {
@@ -378,6 +443,6 @@
     COURSES, SHORTCUT_TASKS, SHORTCUT_SOURCE,
     CHALLENGE_COURSE, WEAK_COURSE, CHALLENGE_SECONDS, CHALLENGE_POOLS,
     buildChallengeStage, buildWeakStage,
-    findCourse, findStage, stageCount, totalStages
+    findCourse, findStage, findStageById, stageCount, totalStages
   };
 })(window);

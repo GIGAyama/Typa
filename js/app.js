@@ -27,7 +27,7 @@
   const esc = s => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-  const APP_VERSION = '2.0.0';
+  const APP_VERSION = '2.4.0';
 
   let view = null;
   let installPrompt = null;
@@ -35,6 +35,9 @@
 
   /** チャレンジ画面で えらんで いる 中身（画面を いききしても のこします） */
   const challengePick = { pool: 'word', seconds: 60 };
+
+  /** きろく画面の キーボードの 見かた（miss = まちがえた かず / mastery = おぼえぐあい） */
+  let heatMode = 'miss';
 
   // ------------------------------------------------------------------
   // 共通の 部品
@@ -85,7 +88,8 @@
     const next = findNextStage(progress);
     const lv = T.Awards.levelOf(T.Store.getAwards().xp);
     const st = T.Store.streak();
-    const weakReady = T.Store.missSummary().keys.filter(k => /^[a-z0-9;,./-]$/.test(k)).length >= 2;
+    const weakReady = T.Store.weakTargets().ready;
+    const due = T.Store.dueStages(2);
 
     view.innerHTML = `
       ${pageTitle('Typa', 'キーボードと なかよく なろう')}
@@ -106,6 +110,8 @@
           <span class="btn-main">${esc(next.stage.title)}</span>
           ${icon('next')}
         </button>`, 'card-next') : ''}
+
+      ${reviewCard(due)}
 
       ${card(`
         <p class="lead">${icon('sparkle')} とくべつ れんしゅう</p>
@@ -148,6 +154,51 @@
         </div>`) : ''}
     `;
     bindGoButtons();
+  }
+
+  /**
+   * きょう ふくしゅうすると よい ステージ。
+   *
+   * 「つづきから」の つぎに おきますが、**わざと ひかえめな 見た目**に します。
+   * 大きな ボタンが 2つ ならぶと、どちらを 押せば いいか まよいます。
+   * 何も ない ときは カードごと 出しません。
+   */
+  function reviewCard(due) {
+    const rows = (due || []).map(d => {
+      const found = T.Lessons.findStageById(d.stageId);
+      return found ? { found, due: d } : null;
+    }).filter(Boolean);
+    if (rows.length === 0) return '';
+
+    return card(`
+      <p class="lead">${icon('clock')} そろそろ ふくしゅう</p>
+      <p class="muted">まえに できた ステージです。わすれる まえに もう1かい やると、
+      ずっと わすれにくく なります。</p>
+      <div class="review-list">
+        ${rows.map(({ found, due: d }) => `
+          <button class="btn btn-outline review-row" data-go-stage="${esc(found.course.id)}:${esc(found.stage.id)}">
+            <span class="review-body">
+              <span class="review-sub">${esc(found.course.short)}</span>
+              <span class="review-title">${esc(found.stage.title)}</span>
+            </span>
+            <span class="review-when">${esc(sinceLabel(d.lastAt))}</span>
+            ${icon('next')}
+          </button>`).join('')}
+      </div>`, 'card-review');
+  }
+
+  /** 「5日 まえ」のような ことば。日づけは 端末の 時計で 数えます */
+  function sinceLabel(lastAt) {
+    const day = T.Store.localDay(lastAt);
+    if (!day) return '';
+    for (let i = 0; i <= 60; i++) {
+      if (T.Store.dayBefore(i) === day) {
+        if (i === 0) return 'きょう';
+        if (i === 1) return 'きのう';
+        return `${i}日 まえ`;
+      }
+    }
+    return 'ずっと まえ';
   }
 
   /** まだ ★3 に なっていない、いちばん さいしょの ステージ */
@@ -308,7 +359,7 @@
     if (special === 'challenge') {
       found = T.Lessons.buildChallengeStage(params.pool, params.seconds);
     } else if (special === 'weak') {
-      found = T.Lessons.buildWeakStage(T.Store.missSummary().keys);
+      found = T.Lessons.buildWeakStage(T.Store.weakTargets());
       if (!found) {
         toast('にがてが まだ わかりません。すこし れんしゅうしてから きてね。');
         T.Nav.selectTab('courses');
@@ -321,7 +372,9 @@
 
     const opt = {
       course: found.course, stage: found.stage,
-      source: params.source || 'course', special, mount: view
+      source: params.source || 'course', special, mount: view,
+      // その回 だけの おためし。せっていは 書きかえません
+      blind: !!params.blind
     };
     if (found.stage.mode === 'shortcut') {
       T.Shortcut.setOnFinish(onSessionFinish);
@@ -405,7 +458,13 @@
       combo: result.combo || 0,
       stars: stage.noStars || !completed ? 0 : T.Store.starsOf(result),
       missByKey: result.missByKey,
-      missByFinger: result.missByFinger
+      missByFinger: result.missByFinger,
+      // おぼえぐあいの もと。ここに 名前を 書いた ものだけが のこります。
+      // 1打ずつの 生の きろく（result.keystrokes）は **わざと 入れて いません**。
+      // けっか画面の グラフに つかうだけで、ためると 保存領域が あふれます
+      lat: result.lat,
+      conf: result.conf,
+      rule: result.rule
     });
 
     const awarded = T.Awards.applyResult(result, meta);
@@ -430,6 +489,8 @@
     const progress = T.Store.getProgress()[r.stage.id] || {};
     const okCount = r.items.filter(i => i.ok).length;
     const isBest = !!(meta.newBestKps || meta.isBestScore);
+    const recStep = recommend(r);
+    const recParams = recStep ? recStep.params : null;
 
     view.innerHTML = `
       ${pageTitle(isChallenge ? 'そこまで！' : 'できました', `${r.course.short}／${r.stage.title}`)}
@@ -454,18 +515,28 @@
         ${compareLine(r, meta, progress)}
       `, 'card-result')}
 
+      ${r.keystrokes && r.keystrokes.length >= 8 ? card(`
+        <p class="lead">${icon('chart')} どこで 手が とまったか</p>
+        ${timeline(r.keystrokes)}`) : ''}
+
       ${xpCard(awarded)}
       ${badgeCard(awarded)}
+      ${nextStepCard(recStep)}
       ${weakList(r)}
 
       <div class="result-actions">
-        <button class="btn btn-primary" data-again>${icon('retry')} もう1かい</button>
+        <button class="btn btn-outline" data-again>${icon('retry')} もう1かい</button>
         ${nextActionButton(r)}
         <button class="btn btn-ghost" data-back-list>${isChallenge ? 'チャレンジを えらぶ' : (noStars ? 'ホームへ' : 'コースに もどる')}</button>
       </div>`;
 
     const again = view.querySelector('[data-again]');
     if (again) again.addEventListener('click', () => T.Nav.replace('play', againParams(r)));
+
+    // 「つぎは これを やろう」。けっか画面は 通りみちなので **おきかえます**。
+    // つみあげると、つぎの ステージで もどった とき 前の けっか画面に 出ます
+    const rec = view.querySelector('[data-rec]');
+    if (rec && recParams) rec.addEventListener('click', () => T.Nav.replace('play', recParams));
 
     // けっか画面は「通りみち」なので、つぎへ すすむ ときも おきかえます。
     // こうすると、つぎの ステージで「もどる」を おした とき、
@@ -487,6 +558,168 @@
       });
     }
     bindGoButtons();
+  }
+
+  /**
+   * 1打ずつの「かかった 時間」の グラフ。
+   *
+   * よこは **時こくでは なく 打った じゅんばん** です。時こくに すると、
+   * 1回の 4びょうの 手止まりで ほかの ぜんぶが つぶれて 見えなく なります。
+   *
+   * ミスは 色だけで なく **形**（下に のびる しるし）でも 分けます。
+   * 色の ちがいが 見えにくい 子でも 分かるように するためです。
+   *
+   * グラフだけでは 2年生には 読めないので、下に かならず ことばの まとめを
+   * つけます（sparkline() と 同じ 作りです）。
+   */
+  function timeline(keystrokes) {
+    const list = (keystrokes || []).filter(k => k.ms > 0);
+    if (list.length < 8) return '';
+
+    const CLIP = 1200;                       // これより 長い ところは 頭を そろえます
+    const w = 300, h = 80, pad = 5;
+    // 多すぎる ときは まとめます。手が 止まった ところを 見たいので
+    // 平らに ならさず **いちばん おそい ところ** を のこします
+    const MAX_BARS = 200;
+    const step = Math.ceil(list.length / MAX_BARS);
+    const bars = [];
+    for (let i = 0; i < list.length; i += step) {
+      const chunk = list.slice(i, i + step);
+      let worst = chunk[0];
+      chunk.forEach(k => { if (k.ms > worst.ms) worst = k; });
+      bars.push({ ms: worst.ms, ok: chunk.every(k => k.ok), ch: worst.ch, retry: worst.retry });
+    }
+
+    const bw = (w - pad * 2) / bars.length;
+    const body = h - pad * 2;
+    const rects = bars.map((b, i) => {
+      const x = pad + bw * i;
+      const bh = Math.max(1.5, body * Math.min(1, b.ms / CLIP));
+      const y = h - pad - bh;
+      const cls = b.ok ? (b.retry ? 'tl-retry' : 'tl-ok') : 'tl-ng';
+      const tick = b.ok ? '' :
+        `<rect class="tl-tick" x="${(x + bw * 0.15).toFixed(1)}" y="${(h - pad).toFixed(1)}"
+           width="${Math.max(1.2, bw * 0.7).toFixed(1)}" height="3"/>`;
+      return `<rect class="${cls}" x="${x.toFixed(1)}" y="${y.toFixed(1)}"
+        width="${Math.max(0.8, bw * 0.8).toFixed(1)}" height="${bh.toFixed(1)}" rx="1"/>${tick}`;
+    }).join('');
+
+    // まん中の 線。ふだんの リズムが ひと目で わかります
+    const sorted = list.map(k => k.ms).sort((a, b) => a - b);
+    const mid = sorted[Math.floor(sorted.length / 2)];
+    const midY = h - pad - body * Math.min(1, mid / CLIP);
+
+    // いちばん 手が 止まった ところ
+    let worst = list[0];
+    list.forEach(k => { if (k.ms > worst.ms) worst = k; });
+    const worstSec = (worst.ms / 1000).toFixed(1);
+    const midSec = (mid / 1000).toFixed(1);
+    const smooth = worst.ms < mid * 3;
+
+    return `
+      <svg class="tl" viewBox="0 0 ${w} ${h}" role="img"
+        aria-label="1打ごとに かかった 時間の グラフ。ふだんは ${midSec}びょう、いちばん 止まったのは ${worstSec}びょうでした。">
+        <line class="tl-mid" x1="${pad}" y1="${midY.toFixed(1)}" x2="${w - pad}" y2="${midY.toFixed(1)}"/>
+        ${rects}
+      </svg>
+      <p class="muted">ふだんは <b>${midSec}びょう</b>に 1打。
+      いちばん 手が 止まったのは <b>${esc(worst.ch === ' ' ? 'スペース' : worst.ch.toUpperCase())}</b> の
+      ところで <b>${worstSec}びょう</b>でした。
+      ${smooth ? 'リズムよく 打てて います。' : 'そこが すらすら 打てると、ぐんと はやく なります。'}</p>`;
+  }
+
+  /**
+   * 「つぎは これを やろう」を **1つだけ** 出します。
+   *
+   * 出口を いくつも ならべると、どれを 押せば いいか まよいます。
+   * いちばん 学びに なる ものを 1つ えらび、なぜ それなのかを 一文 そえます。
+   */
+  function nextStepCard(rec) {
+    if (!rec) return '';
+    return card(`
+      <p class="lead">${icon('target')} つぎは これを やろう</p>
+      <p class="muted">${esc(rec.why)}</p>
+      <button class="btn btn-primary btn-big" data-rec>
+        <span class="btn-sub">${esc(rec.sub)}</span>
+        <span class="btn-main">${esc(rec.title)}</span>
+        ${icon('next')}
+      </button>`, 'card-next');
+  }
+
+  function recommend(r) {
+    // 1. きょうの ふくしゅう … わすれる 前に もどるのが いちばん 効きます
+    const due = T.Store.dueStages(1);
+    if (due.length && due[0].stageId !== r.stage.id) {
+      const f = T.Lessons.findStageById(due[0].stageId);
+      if (f) {
+        return {
+          why: `${sinceLabel(due[0].lastAt)}に できた ステージです。わすれる 前に もう1かい。`,
+          sub: f.course.short, title: f.stage.title,
+          params: { courseId: f.course.id, stageId: f.stage.id, source: 'course' }
+        };
+      }
+    }
+
+    // 2. にがてが はっきり して いて、この回も つまずいた とき
+    const targets = T.Store.weakTargets();
+    if (targets.ready && r.special !== 'weak' && (r.accuracy || 100) < 92) {
+      const pair = targets.pairs[0];
+      return {
+        why: pair
+          ? `${pair.from.toUpperCase()} と ${pair.to.toUpperCase()} を とりちがえて いました。区べつを つけよう。`
+          : `${targets.keys.slice(0, 3).map(k => k.toUpperCase()).join(' ')} で つまずいて いました。`,
+        sub: 'とくべつ れんしゅう', title: 'にがて とっくん',
+        params: { special: 'weak' }
+      };
+    }
+
+    // 3. ローマ字の きまりで はっきり つまずいて いる とき
+    const rules = T.Store.weakRules();
+    if (rules.length) {
+      const stage = stageForRule(rules[0].rule);
+      if (stage && stage.stage.id !== r.stage.id) {
+        return {
+          why: `「${rules[0].label}」で 10かいに ${Math.max(1, Math.round(rules[0].errRate * 10))}かい まちがえて います。`,
+          sub: stage.course.short, title: stage.stage.title,
+          params: { courseId: stage.course.id, stageId: stage.stage.id, source: 'course' }
+        };
+      }
+    }
+
+    // 4. よく できて いて、まだ ヒントが 強い とき … 手もとを 見ない 練習へ
+    const s = T.Store.getSettings();
+    const level = typeof s.assist === 'number' ? s.assist : (s.keyboard === false ? 3 : 0);
+    const stars = (T.Store.getProgress()[r.stage.id] || {}).stars || 0;
+    if (!r.stage.noStars && stars >= 3 && level < 3 && s.assist !== 'auto' &&
+        (r.accuracy || 0) >= 98 && r.stage.mode !== 'shortcut') {
+      return {
+        why: 'ばっちり 打てて います。つぎは ヒントを へらして、手もとを 見ないで やってみよう。',
+        sub: r.course.short, title: 'めかくしで やってみる',
+        params: { courseId: r.course.id, stageId: r.stage.id, source: 'review', blind: true }
+      };
+    }
+
+    // 5. つぎの ステージ
+    const course = T.Lessons.findCourse(r.course.id);
+    if (course && !r.stage.noStars) {
+      const i = course.stages.findIndex(st => st.id === r.stage.id);
+      const next = course.stages[i + 1];
+      if (next && stars >= 2) {
+        return {
+          why: 'この ステージは よく できました。つぎへ すすもう。',
+          sub: course.short, title: next.title,
+          params: { courseId: course.id, stageId: next.id, source: 'course' }
+        };
+      }
+      if (next || i >= 0) {
+        return {
+          why: '★3つを めざして、もう1かい ゆっくり ていねいに。',
+          sub: r.course.short, title: r.stage.title,
+          params: againParams(r)
+        };
+      }
+    }
+    return null;
   }
 
   /** 「もう1かい」で 同じ ことを やりなおす ための パラメータ */
@@ -587,8 +820,9 @@
           return `<li><span class="finger-dot" style="--finger:${f.color}"></span>
             ${esc(f.label)}<span class="weak-count">${r.missByFinger[id]} かい</span></li>`;
         }).join('')}
-      </ul>
-      <button class="btn btn-outline" data-go-weak>${icon('target')} にがて とっくんを する</button>`);
+      </ul>`);
+    // ここには ボタンを おきません。「つぎは これを やろう」が
+    // 出口を 1つに まとめて いるので、2つ ならべると まよいます
   }
 
   // ------------------------------------------------------------------
@@ -602,6 +836,8 @@
     const lv = T.Awards.levelOf(T.Store.getAwards().xp);
     const st = T.Store.streak();
     const miss = T.Store.missSummary();
+    const keyStats = T.Store.keySummary();
+    const weakRules = T.Store.weakRules();
     const badges = T.Awards.badgeList();
     const gotBadges = badges.filter(b => b.got);
     const clearedStages = T.Lessons.COURSES
@@ -631,14 +867,30 @@
         <p class="lead">${icon('chart')} はやさの うつりかわり</p>
         ${sparkline(history.filter(h => T.Store.countsAsTyping(h) && h.correctKeys > 0).slice(0, 20).reverse())}`) : ''}
 
-      ${miss.keys.length ? card(`
+      ${(miss.keys.length || keyStats.slow.length) ? card(`
         <p class="lead">${icon('target')} にがてな キー</p>
-        <p class="muted">色が こい キーほど まちがえて います。手もとの キーボードと 見くらべてみよう。</p>
+        <div class="seg" role="radiogroup" aria-label="キーボードの 見かた">
+          <button class="seg-btn${heatMode === 'miss' ? ' on' : ''}" role="radio"
+            aria-checked="${heatMode === 'miss'}" data-heat-mode="miss">まちがえた かず</button>
+          <button class="seg-btn${heatMode === 'mastery' ? ' on' : ''}" role="radio"
+            aria-checked="${heatMode === 'mastery'}" data-heat-mode="mastery">おぼえぐあい</button>
+        </div>
+        <p class="muted mt">${heatMode === 'miss'
+          ? '色が こい キーほど まちがえて います。手もとの キーボードと 見くらべてみよう。'
+          : '色が こい キーほど、まだ 手が おぼえて いません。まちがえなくても、さがして いれば こく なります。'}</p>
         <div class="kb-guide" id="heat-kb"></div>
-        <p class="heat-legend"><span class="heat-sample lv1"></span>すこし
-          <span class="heat-sample lv2"></span>ふつう
-          <span class="heat-sample lv3"></span>おおい</p>
+        ${heatMode === 'miss'
+          ? `<p class="heat-legend"><span class="heat-sample lv1"></span>すこし
+             <span class="heat-sample lv2"></span>ふつう
+             <span class="heat-sample lv3"></span>おおい</p>`
+          : `<p class="heat-legend"><span class="mastery-sample m-good"></span>だいじょうぶ
+             <span class="mastery-sample m-soso"></span>もうすこし
+             <span class="mastery-sample m-weak"></span>まだまだ
+             <span class="mastery-sample m-unknown"></span>まだ わからない</p>`}
         <button class="btn btn-outline" data-go-weak>${icon('finger')} にがて とっくんを する</button>`) : ''}
+
+      ${slowKeyCard(keyStats)}
+      ${ruleCard(weakRules)}
 
       ${miss.fingers.length ? card(`
         <p class="lead">${icon('finger')} にがてな 指</p>
@@ -691,9 +943,79 @@
     const heat = $('heat-kb');
     if (heat) {
       T.Keyboard.render(heat, { layoutId: T.Store.getSettings().layout, fingerGuide: false, onTap: null });
-      T.Keyboard.heat(miss.byKey);
+      if (heatMode === 'mastery') T.Keyboard.mastery(keyStats.byKey);
+      else T.Keyboard.heat(miss.byKey);
     }
+    view.querySelectorAll('[data-heat-mode]').forEach(el => {
+      el.addEventListener('click', () => { heatMode = el.dataset.heatMode; T.Nav.render(); });
+    });
     bindGoButtons();
+  }
+
+  /**
+   * 「まちがえないけれど 手が とまる キー」。
+   *
+   * これまでの にがて集計は ミスの 数だけを 見て いたので、この キーたちは
+   * ずっと 0 のまま、どこにも 出て きませんでした。けれど この 子は
+   * まだ 画面を 見て さがして います。**タイピングで いちばん 直したい ところ**です。
+   */
+  function slowKeyCard(keyStats) {
+    const list = keyStats.slow.slice(0, 5);
+    if (list.length === 0) return '';
+    return card(`
+      <p class="lead">${icon('clock')} まだ 手が とまる キー</p>
+      <p class="muted">まちがえては いないけれど、すこし さがして いる キーです。
+      ここが はやく なると、ぐんと らくに なります。</p>
+      <ul class="weak-list">
+        ${list.map(ch => {
+          const s = keyStats.byKey[ch];
+          const found = T.Layout.findKey(T.Store.getSettings().layout, ch === 'space' ? ' ' : ch);
+          const finger = found ? T.Layout.fingerOf(found.key.code) : null;
+          return `<li>
+            ${finger ? `<span class="finger-dot" style="--finger:${finger.color}"></span>` : ''}
+            <b class="weak-key">${esc(ch === 'space' ? 'スペース' : ch.toUpperCase())}</b>
+            ${finger ? `<span class="weak-finger">${esc(finger.label)}</span>` : ''}
+            <span class="weak-count">${(s.medianMs / 1000).toFixed(1)} びょう</span>
+          </li>`;
+        }).join('')}
+      </ul>
+      <button class="btn btn-outline" data-go-weak>${icon('finger')} にがて とっくんを する</button>`);
+  }
+
+  /**
+   * ローマ字の どの きまりで つまずいて いるか。
+   * 「d が にがて」より「ちいさい つ が にがて」の ほうが、
+   * つぎに 何を すれば よいかが はっきり します。
+   */
+  function ruleCard(rules) {
+    const list = (rules || []).slice(0, 3);
+    if (list.length === 0) return '';
+    return card(`
+      <p class="lead">${icon('letter')} ローマ字で つまずく ところ</p>
+      <ul class="weak-list">
+        ${list.map(r => {
+          const stage = stageForRule(r.rule);
+          const per = Math.max(1, Math.round(r.errRate * 10));
+          return `<li class="rule-row">
+            <span class="rule-name">${esc(r.label)}</span>
+            <span class="weak-count">10かいに ${per}かい</span>
+            ${stage ? `<button class="btn btn-outline btn-small"
+              data-go-stage="${esc(stage.course.id)}:${esc(stage.stage.id)}">ここだけ れんしゅう</button>` : ''}
+          </li>`;
+        }).join('')}
+      </ul>`);
+  }
+
+  /** きまり → ふくしゅうする ステージ。stage.skill で 引くので ID を 直接 書きません */
+  function stageForRule(rule) {
+    const skill = T.Mastery.RULE_TO_SKILL[rule];
+    if (!skill) return null;
+    for (const course of T.Lessons.COURSES) {
+      for (const stage of course.stages) {
+        if (stage.skill === skill) return { course, stage };
+      }
+    }
+    return null;
   }
 
   /** チャレンジの さいこう記録（やったことが あるときだけ 出します） */
@@ -827,12 +1149,35 @@
         <p class="muted">キーボードの 右上に「¥」や「かな」が あれば 日本語配列（JIS）です。</p>`)}
 
       ${card(`
+        <p class="lead">${icon('hand')} ヒントの つよさ</p>
+        <p class="muted">なれてきたら すこしずつ へらすと、手もとを 見ないで
+        打てるように なります。どの つよさでも「つぎは D を みぎの ひとさしゆびで」の
+        ことばは 消えません。</p>
+        <div class="seg" role="radiogroup" aria-label="ヒントの つよさ">
+          ${T.Store.ASSIST_LABELS.map((label, i) => `
+            <button class="seg-btn${s.assist === i ? ' on' : ''}" role="radio"
+              aria-checked="${s.assist === i}" data-assist="${i}">${esc(label)}</button>`).join('')}
+          <button class="seg-btn${s.assist === 'auto' ? ' on' : ''}" role="radio"
+            aria-checked="${s.assist === 'auto'}" data-assist="auto">じどう</button>
+        </div>
+        <p class="muted mt">${s.assist === 'auto'
+          ? 'おぼえぐあいに あわせて、れんしゅうを はじめる ときに 決めます。1回の とちゅうでは かわりません。'
+          : (s.assist === 'custom'
+            ? 'いまは じぶんで えらんだ 見え方に なって います（下の スイッチ）。'
+            : '')}</p>
+        <details class="more">
+          <summary>こまかく きめる</summary>
+          ${toggle('keyboard', '画面に キーボードを 出す', s.keyboard)}
+          ${toggle('keyLabels', 'キーに 文字を 書く', s.keyLabels)}
+          ${toggle('fingerGuide', '指を 色で 分ける', s.fingerGuide)}
+          ${toggle('romajiHint', 'ローマ字の ヒントを 出す', s.romajiHint)}
+        </details>`)}
+
+      ${card(`
         <p class="lead">${icon('gear')} 見え方・おと</p>
-        ${toggle('keyboard', '画面に キーボードを 出す', s.keyboard)}
-        ${toggle('fingerGuide', '指を 色で 分ける', s.fingerGuide)}
-        ${toggle('romajiHint', 'ローマ字の ヒントを 出す', s.romajiHint)}
         ${toggle('sound', '打ったときの おと', s.sound)}
         ${toggle('bigText', '文字を 大きくする', s.bigText)}
+        ${toggle('retry', 'まちがえた お題を さいごに もう1かい', s.retry)}
         <div class="seg mt" role="radiogroup" aria-label="画面の 色">
           ${[['auto', 'じどう'], ['light', 'あかるい'], ['dark', 'くらい']].map(([v, label]) => `
             <button class="seg-btn${s.theme === v ? ' on' : ''}" role="radio"
@@ -861,13 +1206,20 @@
         <p class="muted">Typa は 名前も 出席番号も もちません。インターネットにも つながず、
         れんしゅうの きろくは <b>この 端末の 中だけ</b>に たまります。
         ほかの 人や ほかの サイトに おくられる ことは ありません。</p>
-        <p class="muted">ブラウザの データを けすと、きろくも いっしょに 消えます。</p>
+        <p class="muted">ブラウザの データを けすと、きろくも いっしょに 消えます。
+        べつの 端末に うつす ときは、下の「きろくを もちだす」を つかいます。</p>
         <button class="btn btn-outline btn-danger" id="reset-btn">${icon('trash')} きろくを ぜんぶ けす</button>
         <p class="muted" id="reset-note" hidden>ほんとうに けしますか？ もとには もどせません。</p>
         <div class="reset-confirm" id="reset-confirm" hidden>
           <button class="btn btn-danger-solid" id="reset-yes">けす</button>
           <button class="btn btn-ghost" id="reset-no">やめる</button>
         </div>`)}
+
+      ${card(`
+        <p class="lead">${icon('send')} きろくを もちだす</p>
+        <p class="muted">きろくを ファイルに して、べつの 端末に うつせます。
+        学年が かわって Chromebook が 入れかわる ときに つかいます。</p>
+        <button class="btn btn-outline" data-go-screen="backup">書き出し・読みこみ</button>`)}
 
       ${card(`
         <p class="lead">${icon('info')} アプリとして つかう</p>
@@ -884,6 +1236,153 @@
     T.Keyboard.render($('guide-kb'), { layoutId: s.layout, fingerGuide: true, onTap: null });
     bindSettings();
     bindGoButtons();
+  }
+
+  // ------------------------------------------------------------------
+  // きろくの 書き出し・読みこみ
+  // ------------------------------------------------------------------
+
+  /**
+   * ファイルに 書き出して、べつの 端末で 読みこむ ための 画面。
+   *
+   * 読みこみは **置きかえ** だけです。2つの きろくを まぜると
+   * けいけんちが 二重に 数えられたり、どちらが 本当か 分からなく なります。
+   * 子どもに 説明できない ふるまいは 入れません。
+   */
+  function renderBackup() {
+    view.innerHTML = `
+      ${pageTitle('きろくを もちだす', 'ファイルに して、べつの 端末へ')}
+
+      <p class="hint-box">${icon('lock')} できる ファイルは <b>この 端末の 中</b>に できます。
+      インターネットには 出ません。名前や 出席番号は 入って いません。</p>
+
+      ${card(`
+        <p class="lead">${icon('send')} 書き出す</p>
+        <p class="muted">いまの きろくを 1つの ファイルに します。
+        できた ファイルは「ダウンロード」に 入ります。</p>
+        <button class="btn btn-primary" id="bk-save">${icon('send')} ファイルに 書き出す</button>
+        <button class="btn btn-ghost" id="bk-show">がめんに 出す</button>
+        <div id="bk-text-wrap" hidden>
+          <p class="muted">ぜんぶ えらんで コピーし、べつの 端末で はりつけます。</p>
+          <textarea id="bk-text" class="bk-text" readonly rows="6"></textarea>
+          <button class="btn btn-outline" id="bk-copy">${icon('check')} コピーする</button>
+        </div>`)}
+
+      ${card(`
+        <p class="lead">${icon('back')} 読みこむ</p>
+        <p class="muted"><b>いまの きろくは 消えて</b>、ファイルの きろくに なります。
+        もとには もどせません。読みこむ 前に、いまの きろくを 書き出して おくと あんしんです。</p>
+        <label class="btn btn-outline" for="bk-file">${icon('grid')} ファイルを えらぶ</label>
+        <input type="file" id="bk-file" accept="application/json,.json" hidden>
+        <p class="bk-error" id="bk-error" hidden></p>
+        <div id="bk-preview" hidden>
+          <ul class="bk-summary" id="bk-summary"></ul>
+          <p class="muted">この きろくに 入れかえますか？</p>
+          <div class="reset-confirm">
+            <button class="btn btn-danger-solid" id="bk-yes">入れかえる</button>
+            <button class="btn btn-ghost" id="bk-no">やめる</button>
+          </div>
+        </div>`)}
+
+      ${card(`
+        <p class="lead">${icon('info')} せんせいへ</p>
+        <p class="muted">この ファイルには 児童を 特定する 情報は 入って いません
+        （名前・出席番号・端末の ID などは もともと アプリが もって いません）。
+        中身は れんしゅうの 記録・★・けいけんち・せっていだけです。
+        書き出しも 読みこみも 端末の 中だけで 完結し、外部に 送信されません。</p>`)}
+    `;
+    bindBackup();
+  }
+
+  function bindBackup() {
+    let pending = null;   // しらべ おわった、まだ 保存して いない きろく
+
+    const save = $('bk-save');
+    if (save) save.addEventListener('click', () => {
+      const text = T.Backup.toText(T.Backup.buildExport(APP_VERSION));
+      if (T.Backup.download(text, T.Backup.fileName())) {
+        toast('きろくを 書き出しました。「ダウンロード」を 見てね。');
+      } else {
+        // 学校の 端末では ダウンロードが 止められて いる ことが あります
+        showText(text);
+        toast('ファイルに できませんでした。がめんに 出したので コピーしてね。');
+      }
+    });
+
+    const show = $('bk-show');
+    if (show) show.addEventListener('click', () => {
+      showText(T.Backup.toText(T.Backup.buildExport(APP_VERSION)));
+    });
+
+    function showText(text) {
+      $('bk-text').value = text;
+      $('bk-text-wrap').hidden = false;
+    }
+
+    const copy = $('bk-copy');
+    if (copy) copy.addEventListener('click', () => {
+      Promise.resolve(T.Backup.copyText($('bk-text').value)).then(ok => {
+        toast(ok ? 'コピーしました。' : 'コピーできませんでした。手で えらんで コピーしてね。');
+      });
+    });
+
+    const file = $('bk-file');
+    if (file) file.addEventListener('change', () => {
+      const f = file.files && file.files[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const res = T.Backup.parseImport(String(reader.result || ''));
+        if (!res.ok) { fail(res.message); return; }
+        pending = res.clean;
+        $('bk-error').hidden = true;
+        $('bk-summary').innerHTML = summaryHtml(res.summary);
+        $('bk-preview').hidden = false;
+      };
+      reader.onerror = () => fail('ファイルを 読めませんでした。');
+      reader.readAsText(f);
+      file.value = '';       // 同じ ファイルを もう一度 えらべるように します
+    });
+
+    function fail(message) {
+      pending = null;
+      $('bk-preview').hidden = true;
+      const box = $('bk-error');
+      box.textContent = message;
+      box.hidden = false;
+    }
+
+    function summaryHtml(s) {
+      const rows = [
+        ['れんしゅうした 回数', `${s.sessions} かい`],
+        ['★の 数', `${s.stars} こ`],
+        ['けいけんち', `${s.xp}`]
+      ];
+      if (s.lastAt) rows.push(['さいごの れんしゅう', formatDate(s.lastAt)]);
+      if (s.exportedAt) rows.push(['書き出した 日', formatDate(s.exportedAt)]);
+      return rows.map(([k, v]) => `<li><span>${esc(k)}</span><b>${esc(v)}</b></li>`).join('');
+    }
+
+    const no = $('bk-no');
+    if (no) no.addEventListener('click', () => {
+      pending = null;
+      $('bk-preview').hidden = true;
+    });
+
+    const yes = $('bk-yes');
+    if (yes) yes.addEventListener('click', () => {
+      if (!pending) return;
+      const ok = T.Backup.applyImport(pending);
+      pending = null;
+      applySettings();       // いろ・文字の 大きさ・配列が かわって いるかも しれません
+      if (ok) {
+        toast('きろくを 読みこみました。');
+        T.Nav.selectTab('home');
+      } else {
+        toast('ぜんぶは 読みこめませんでした。もう一度 ためしてね。');
+        T.Nav.render();
+      }
+    });
   }
 
   function toggle(name, label, on) {
@@ -905,6 +1404,14 @@
       el.addEventListener('click', () => {
         T.Store.setSetting(el.dataset.set, el.dataset.value);
         applySettings();
+        T.Nav.render();
+      });
+    });
+    // ヒントの つよさ。えらぶと 下の スイッチも いっしょに 書きかわります
+    view.querySelectorAll('[data-assist]').forEach(el => {
+      el.addEventListener('click', () => {
+        const v = el.dataset.assist;
+        T.Store.setAssist(v === 'auto' ? 'auto' : Number(v));
         T.Nav.render();
       });
     });
@@ -1026,6 +1533,7 @@
     T.Nav.register('badges', { render: renderBadges });
     T.Nav.register('settings', { render: renderSettings });
     T.Nav.register('romaji-table', { render: renderRomajiTable });
+    T.Nav.register('backup', { render: renderBackup });
 
     // ホーム画面の ショートカット（manifest の shortcuts）から ひらかれたとき、
     // そのタブ（や 画面）から はじめます。アドレスは すぐ きれいに もどします
