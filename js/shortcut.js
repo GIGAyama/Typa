@@ -291,9 +291,9 @@
       elapsedMs: elapsed,
       activeMs: elapsed,
       items: state.results,
-      // ショートカットは 打鍵数を 数えません。まなびクエストの
-      // 「タイピング記録」には 転記されず、学習ログにだけ のこります
-      correctKeys: 0, totalKeys: 0, missKeys: 0, kps: 0,
+      // ショートカットは 打鍵数を 数えません。「はやさ」の きろくには 入れず、
+      // できた 課題の 数だけを のこします
+      correctKeys: 0, totalKeys: 0, missKeys: 0, kps: 0, combo: 0, special: '',
       accuracy: state.results.length
         ? (state.results.filter(r => r.ok).length / state.results.length) * 100 : 0,
       missByKey: {}, missByFinger: {},

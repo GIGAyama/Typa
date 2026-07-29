@@ -1,7 +1,7 @@
 {
   "name": "Typa（タイパ） タイピングれんしゅう",
   "short_name": "Typa",
-  "description": "小学生の Chromebook のための タイピング学習アプリ。どの指で どのキーを 押すかを 見ながら、ローマ字入力と ショートカットキーを 練習できます。",
+  "description": "小学生の Chromebook のための タイピング学習アプリ。どの指で どのキーを 押すかを 見ながら、ローマ字入力と ショートカットキーを 練習できます。時間ぎめの チャレンジ、にがてな キーだけを あつめた とっくん、レベルと バッジも あります。通信は しません。",
   "lang": "ja",
   "dir": "ltr",
   "categories": ["education"],
@@ -22,6 +22,8 @@
   ],
   "shortcuts": [
     { "name": "れんしゅうを はじめる", "short_name": "れんしゅう", "url": "./?tab=courses",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "チャレンジを する", "short_name": "チャレンジ", "url": "./?screen=challenge",
       "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "きろくを 見る", "short_name": "きろく", "url": "./?tab=records",
       "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }

@@ -120,6 +120,12 @@ html.big-text body { font-size: 18.5px; }
 
 b, strong { font-weight: 700; }
 
+/* みじかい 説明の 行おくりを、ことばの きれめで します（Chrome 119〜）。
+   「クリ／アした」のような、読みにくい おれかたを へらします。
+   つかえない ブラウザでは この 1行が ただ 無視されるだけです */
+.badge-title, .badge-note, .tile-note, .tile-title,
+.stage-note, .row-note, .page-note { word-break: auto-phrase; }
+
 /* ---------------------------------------------------------------- 上のバー */
 
 .brand {
@@ -244,8 +250,14 @@ b, strong { font-weight: 700; }
 .course-row:hover, .stage-row:hover { transform: translateX(2px); box-shadow: var(--shadow); }
 .row-icon { color: var(--tile, var(--primary)); flex: none; }
 .row-icon .ico { width: 30px; height: 30px; }
-.row-body { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.row-body, .stage-body { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .row-title, .stage-title { font-weight: 700; }
+/* 想定学年。じゃまに ならないよう、小さく うすく そえます */
+.grade-chip {
+  font-size: .68rem; font-weight: 600; color: var(--muted);
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 999px; padding: 1px 8px; margin-left: 8px; white-space: nowrap;
+}
 .row-note, .stage-note, .stage-best, .row-count { font-size: .82rem; color: var(--muted); }
 .row-bar { display: block; height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; margin: 4px 0 2px; }
 .row-bar span { display: block; height: 100%; background: var(--tile, var(--primary)); border-radius: 3px; }
@@ -341,6 +353,30 @@ b, strong { font-weight: 700; }
 }
 .ime-warn .ico { flex: none; }
 
+/* ストップウォッチが うごきだす まえの おしらせ。1打目で 消えます */
+.play-ready {
+  display: flex; align-items: center; gap: 8px; justify-content: center;
+  margin: 0; color: var(--muted); font-size: .88rem;
+}
+.play-ready .ico { width: 18px; height: 18px; color: var(--primary); }
+
+.play-skip { text-align: center; min-height: 48px; }
+
+/* れんぞく（コンボ）。10だ ごとに ひとこと ほめます */
+.meter-combo b { color: var(--c-teal); }
+.meter-combo.is-up {
+  animation: combo-pop .5s ease;
+  border-color: var(--c-teal);
+}
+@keyframes combo-pop {
+  30% { transform: scale(1.14); background: color-mix(in srgb, var(--c-teal) 22%, var(--surface)); }
+}
+
+/* チャレンジの のこり時間。さいごの 10びょうは 色が かわります */
+.play-progress .bar-time span { background: var(--c-teal); transition: width .12s linear; }
+#play-root.is-hurry .bar-time span { background: var(--ng); }
+#play-root.is-hurry .play-progress .num { color: var(--ng); font-weight: 700; }
+
 /* ---------------------------------------------------------------- キーボード */
 
 .kb-wrap { overflow-x: auto; padding-bottom: 4px; }
@@ -398,6 +434,26 @@ b, strong { font-weight: 700; }
 .kb .kb-key.hit-ok { background: var(--ok); border-color: var(--ok); color: #fff; }
 .kb .kb-key.hit-miss { background: var(--ng); border-color: var(--ng); color: #fff; }
 .kb.shift-on .kb-key[data-code^="Shift"] { background: var(--primary); color: var(--primary-ink); }
+
+/* にがてな キーの ヒートマップ（きろく画面）。
+   色の こさ だけでは わからない 子の ために、キーを 指で さわると 数も 出ます（title） */
+.kb .kb-key.is-heat {
+  /* いちばん こい ところでも 60% までに して、キーの 文字が 読めるように します */
+  background: color-mix(in srgb, var(--ng) calc(var(--heat, 0) * 60%), var(--surface));
+  border-color: color-mix(in srgb, var(--ng) calc(var(--heat, 0) * 85%), var(--line));
+}
+
+.heat-legend {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  margin: 8px 0 12px; color: var(--muted); font-size: .82rem;
+}
+.heat-sample {
+  width: 18px; height: 18px; border-radius: 4px; display: inline-block;
+  border: 1px solid var(--line); margin-left: 8px;
+}
+.heat-sample.lv1 { background: color-mix(in srgb, var(--ng) 24%, var(--surface)); }
+.heat-sample.lv2 { background: color-mix(in srgb, var(--ng) 50%, var(--surface)); }
+.heat-sample.lv3 { background: color-mix(in srgb, var(--ng) 80%, var(--surface)); }
 
 .kb-guide { margin: 10px 0; }
 .kb-guide .kb { min-width: 480px; }
@@ -468,6 +524,8 @@ b, strong { font-weight: 700; }
 /* ---------------------------------------------------------------- きろく */
 
 .spark { width: 100%; height: auto; color: var(--primary); }
+.spark-area { fill: color-mix(in srgb, var(--primary) 16%, transparent); }
+.spark-dot { fill: var(--primary); }
 .hist-list { list-style: none; padding: 0; margin: 0; }
 .hist-list li { display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: .9rem; flex-wrap: wrap; }
 .hist-list li:last-child { border-bottom: 0; }
@@ -501,9 +559,125 @@ b, strong { font-weight: 700; }
 .switch input:focus-visible + .switch-box { outline: 3px solid var(--primary); outline-offset: 2px; }
 .switch-label { font-size: .98rem; }
 
+/* きろくを けす ボタン。まちがえて 押しても すぐには 消えません（2だんかい） */
+.btn-danger { border-color: var(--ng); color: var(--ng); background: transparent; }
+.btn-danger-solid { background: var(--ng); color: #fff; }
+.reset-confirm { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+
 .howto { margin: 10px 0 0; padding-left: 1.2em; color: var(--muted); font-size: .88rem; }
 .howto li { margin-bottom: 4px; }
 .version { color: var(--muted); font-size: .78rem; margin: 10px 0 0; }
+
+/* ---------------------------------------------------------------- レベル・つづけた日 */
+
+/* レベルの おび。数字より「どこまで きたか」が ひとめで わかる ことを 大事にします */
+.level-box { margin-bottom: 10px; }
+.level-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.level-badge {
+  font-weight: 800; font-size: 1.15rem; color: var(--primary-ink);
+  background: var(--primary); border-radius: 999px; padding: 2px 14px;
+}
+.level-rank { font-weight: 700; }
+.level-xp { margin-left: auto; color: var(--muted); font-size: .82rem; }
+.level-bar {
+  height: 12px; border-radius: 6px; background: var(--surface-2);
+  border: 1px solid var(--line); overflow: hidden;
+}
+.level-bar span {
+  display: block; height: 100%; border-radius: 6px;
+  background: linear-gradient(90deg, var(--primary), var(--c-teal));
+  transition: width .4s ease;
+}
+
+/* 文の とちゅうで 行が おれないよう、アイコンも 文字の ながれの 中に おきます */
+.streak { margin: 10px 0; }
+.streak .ico { width: 22px; height: 22px; vertical-align: -.35em; margin-right: 6px; }
+.streak-on { color: #e2600a; }
+.streak-off { color: var(--muted); }
+
+/* れんしゅうした 日の カレンダー（4週間ぶん） */
+.cal { display: grid; grid-template-columns: repeat(14, 1fr); gap: 5px; margin: 10px 0; max-width: 420px; }
+.cal-cell { display: block; aspect-ratio: 1; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--line); }
+.cal-cell.lv1 { background: color-mix(in srgb, var(--primary) 28%, var(--surface)); }
+.cal-cell.lv2 { background: color-mix(in srgb, var(--primary) 58%, var(--surface)); }
+.cal-cell.lv3 { background: var(--primary); border-color: var(--primary); }
+.cal-axis {
+  display: flex; justify-content: space-between; max-width: 420px;
+  margin: 0; color: var(--muted); font-size: .74rem;
+}
+
+/* ---------------------------------------------------------------- とくべつ れんしゅう */
+
+.special-grid, .pool-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px;
+}
+.special-tile, .pool-tile {
+  display: flex; flex-direction: column; gap: 3px; align-items: flex-start;
+  padding: 14px 16px; border-radius: var(--radius); cursor: pointer;
+  border: 2px solid var(--line); background: var(--surface-2); color: var(--text);
+  font: inherit; text-align: left; min-height: 108px;
+  border-left-width: 8px; border-left-color: var(--tile, var(--primary));
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.special-tile:hover:not(:disabled), .pool-tile:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+.special-tile:disabled { cursor: default; opacity: .55; }
+.pool-tile { border-left-width: 2px; }
+.pool-tile.on { border-color: var(--primary); background: var(--primary-soft); }
+.pool-tile.on .tile-icon { color: var(--primary); }
+
+.course-extra { margin: 0 0 14px; }
+.mt { margin-top: 12px; }
+
+/* ---------------------------------------------------------------- バッジ */
+
+.badge-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 10px; }
+.badge-grid-all { margin-bottom: 24px; }
+.badge-tile {
+  display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px;
+  padding: 12px 8px; border-radius: var(--radius-s);
+  background: var(--surface-2); border: 1px solid var(--line);
+}
+.badge-tile.got { background: var(--primary-soft); border-color: color-mix(in srgb, var(--primary) 40%, transparent); }
+.badge-icon { color: var(--muted); }
+.badge-icon .ico { width: 30px; height: 30px; }
+.badge-tile.got .badge-icon { color: var(--primary); }
+.badge-title { font-weight: 700; font-size: .92rem; }
+.badge-note { font-size: .76rem; color: var(--muted); line-height: 1.5; }
+.card-badge-new { border-color: color-mix(in srgb, var(--primary) 45%, transparent); }
+
+/* ---------------------------------------------------------------- けっかの ごほうび */
+
+.result-best {
+  display: inline-flex; align-items: center; gap: 6px; margin: 0 0 8px;
+  font-weight: 800; color: var(--primary-ink); background: var(--primary);
+  border-radius: 999px; padding: 4px 16px;
+}
+.level-up {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin: 0 0 10px; font-weight: 700; color: var(--ok);
+  background: var(--ok-soft); border-radius: var(--radius-s); padding: 10px 14px;
+}
+.xp-total { margin: 0; font-size: 1.9rem; font-weight: 800; color: var(--primary); }
+.xp-total span { font-size: .82rem; color: var(--muted); font-weight: 600; margin-left: 4px; }
+.xp-list { list-style: none; padding: 0; margin: 6px 0 12px; }
+.xp-list li { display: flex; justify-content: space-between; gap: 10px; font-size: .88rem; padding: 3px 0; color: var(--muted); }
+.xp-list li span { font-weight: 700; color: var(--text); }
+
+/* ---------------------------------------------------------------- ローマ字ひょう */
+
+.rt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.rt-section {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 12px 14px;
+}
+.rt-title { margin: 0 0 6px; font-size: .95rem; color: var(--primary); }
+.rt-list { list-style: none; padding: 0; margin: 0; }
+.rt-list li { display: flex; align-items: baseline; gap: 10px; padding: 3px 0; border-bottom: 1px solid var(--line); }
+.rt-list li:last-child { border-bottom: 0; }
+.rt-kana { font-size: 1.15rem; font-weight: 700; min-width: 2.4em; }
+.rt-romaji { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; letter-spacing: .06em; }
+.rt-alt { color: var(--muted); font-size: .85em; }
+.rt-note { margin: 8px 0 0; font-size: .8rem; color: var(--muted); }
 
 /* ---------------------------------------------------------------- 下部バー */
 

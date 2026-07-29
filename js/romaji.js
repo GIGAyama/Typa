@@ -191,7 +191,13 @@
       if (finished()) return '';
       const list = alive(buffer);
       const cand = list[0] || chunks[index].cands[0];
-      return cand.charAt(buffer.length) || '';
+      const ch = cand.charAt(buffer.length);
+      if (ch) return ch;
+      // 「かんじ」の n を1回打った状態のように、いまのかたまりはもう打ち終えていて、
+      // 次の1打で「ん」か「んな」かが決まる場面。ここで空を返すと画面の案内が
+      // 消えてしまうので、次のかたまりの1文字目を出します。
+      const next = chunks[index + 1];
+      return next && next.cands[0] ? next.cands[0].charAt(0) : '';
     }
 
     /**
@@ -270,6 +276,45 @@
     };
   }
 
+  /**
+   * 「ローマ字ひょう」の画面に出す並び。
+   * ひょうの中身はこのファイルの KANA / KANA2 から引くので、
+   * 打てるものとひょうに出るものが食いちがうことはありません。
+   */
+  const TABLE = [
+    { title: 'あ行', kana: ['あ', 'い', 'う', 'え', 'お'] },
+    { title: 'か行', kana: ['か', 'き', 'く', 'け', 'こ'] },
+    { title: 'さ行', kana: ['さ', 'し', 'す', 'せ', 'そ'] },
+    { title: 'た行', kana: ['た', 'ち', 'つ', 'て', 'と'] },
+    { title: 'な行', kana: ['な', 'に', 'ぬ', 'ね', 'の'] },
+    { title: 'は行', kana: ['は', 'ひ', 'ふ', 'へ', 'ほ'] },
+    { title: 'ま行', kana: ['ま', 'み', 'む', 'め', 'も'] },
+    { title: 'や行', kana: ['や', 'ゆ', 'よ'] },
+    { title: 'ら行', kana: ['ら', 'り', 'る', 'れ', 'ろ'] },
+    { title: 'わ行・ん', kana: ['わ', 'を', 'ん'],
+      note: '「ん」は n を 2かい 打つと かならず 出ます。' },
+    { title: 'が行', kana: ['が', 'ぎ', 'ぐ', 'げ', 'ご'] },
+    { title: 'ざ行', kana: ['ざ', 'じ', 'ず', 'ぜ', 'ぞ'] },
+    { title: 'だ行', kana: ['だ', 'ぢ', 'づ', 'で', 'ど'] },
+    { title: 'ば行', kana: ['ば', 'び', 'ぶ', 'べ', 'ぼ'] },
+    { title: 'ぱ行', kana: ['ぱ', 'ぴ', 'ぷ', 'ぺ', 'ぽ'] },
+    { title: 'きゃ・ぎゃ', kana: ['きゃ', 'きゅ', 'きょ', 'ぎゃ', 'ぎゅ', 'ぎょ'] },
+    { title: 'しゃ・じゃ', kana: ['しゃ', 'しゅ', 'しょ', 'じゃ', 'じゅ', 'じょ'] },
+    { title: 'ちゃ・にゃ', kana: ['ちゃ', 'ちゅ', 'ちょ', 'にゃ', 'にゅ', 'にょ'] },
+    { title: 'ひゃ・びゃ・ぴゃ', kana: ['ひゃ', 'ひゅ', 'ひょ', 'びゃ', 'びゅ', 'びょ', 'ぴゃ', 'ぴゅ', 'ぴょ'] },
+    { title: 'みゃ・りゃ', kana: ['みゃ', 'みゅ', 'みょ', 'りゃ', 'りゅ', 'りょ'] },
+    { title: 'ちいさい 字', kana: ['ぁ', 'ぃ', 'ぅ', 'ぇ', 'ぉ', 'ゃ', 'ゅ', 'ょ', 'っ'],
+      note: '「っ」は、つぎの 字の さいしょを 2かい 打つのが かんたんです（きって → kitte）。' },
+    { title: 'きごう', kana: ['ー', '、', '。', '・'] }
+  ];
+
+  /** ひょうに出す打ちかた。「ん」「っ」はチャンクの作りかたで決まるのでここで足します */
+  function candidatesOf(kana) {
+    if (kana === 'ん') return ['nn', "n'"];
+    if (kana === 'っ') return SOKUON.slice(0, 2);
+    return (KANA2[kana] || KANA[kana] || []).slice();
+  }
+
   global.Typa = global.Typa || {};
-  global.Typa.Romaji = { buildChunks, createMatcher, toHiragana, KANA, KANA2 };
+  global.Typa.Romaji = { buildChunks, createMatcher, toHiragana, candidatesOf, KANA, KANA2, SOKUON, TABLE };
 })(window);

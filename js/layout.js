@@ -43,10 +43,12 @@
   assign('r-index',  ['Digit6', 'Digit7', 'KeyY', 'KeyU', 'KeyH', 'KeyJ', 'KeyN', 'KeyM']);
   assign('r-middle', ['Digit8', 'KeyI', 'KeyK', 'Comma']);
   assign('r-ring',   ['Digit9', 'KeyO', 'KeyL', 'Period']);
-  assign('r-pinky',  ['Digit0', 'Minus', 'Equal', 'IntlYen', 'BracketLeft', 'BracketRight', 'Backslash',
+  assign('r-pinky',  ['Digit0', 'KeyP', 'Minus', 'Equal', 'IntlYen', 'BracketLeft', 'BracketRight', 'Backslash',
                       'Semicolon', 'Quote', 'Slash', 'IntlRo', 'Backspace', 'Enter', 'ShiftRight',
                       'ControlRight', 'AltRight']);
   assign('thumb',    ['Space', 'NonConvert', 'Convert', 'AltLeft', 'Lang2', 'Lang1']);
+  // やじるしキーは ホームポジションから 手を うごかして 押すので、
+  // 「この指」とは 決めません。ショートカットの 練習でだけ つかいます
 
   /** ホームポジション（人差し指のでっぱりがあるキー） */
   const HOME_KEYS = ['KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyJ', 'KeyK', 'KeyL', 'Semicolon'];

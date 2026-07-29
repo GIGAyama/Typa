@@ -8,38 +8,55 @@
  * まちがえた ままで すすむと、まちがった 指づかいの まま 速くなります。
  * 正しい キーを 押すまで まつ かわりに、「どの指で 押すか」を
  * 画面と ことばの 両方で しめして、すぐに やりなおせるように しています。
+ * それでも つまずいた ときのために、同じ お題で 4回 まちがえると
+ * 「とばす」ボタンが 出ます。1つの キーで 手が 止まりつづけない ためです。
  *
- * ■ 時間の 数えかた（仕様 §2.8）
+ * ■ 時計は「さいしょの 1打」から うごきます
+ * 画面が 出た しゅんかんから 数えると、まだ 手を おいて いない 時間まで
+ * 記録に 入って しまいます。ストップウォッチは 最初の 1打で スタートします。
+ *
+ * ■ 時間の 数えかた
  * elapsedMs は はじめから おわりまで。activeMs は「手が 止まっていた
  * 5秒より 長い あいだ」を のぞいた 時間です。速さ（打/秒）は activeMs で
  * 計算するので、とちゅうで 先生の 話を 聞いて いた 回でも 記録が 下がりません。
+ * ただし **チャレンジ（時間ぎめ）だけは のぞきません**。じっさいの
+ * 60びょうで どれだけ 打てたかを、そのまま スコアに するためです。
  */
 (function (global) {
   'use strict';
 
   const T = global.Typa;
-  const IDLE_MS = 5000;    // これ以上 手が 止まったら「学習していない 時間」とみなします
+  const IDLE_MS = 5000;        // これ以上 手が 止まったら「学習していない 時間」とみなします
+  const SKIP_AFTER = 4;        // 同じ お題で これだけ まちがえたら「とばす」を 出します
+  const COMBO_STEP = 10;       // れんぞくが これの ばいすうに なると ほめます
 
   const state = {
-    course: null, stage: null, source: 'course',
-    items: [], index: 0,
+    course: null, stage: null, source: 'course', special: '',
+    pool: [], queue: [], current: null, total: 0, index: 0,
+    endless: false, limitMs: 0,
     matcher: null,
-    startedAt: null, startTime: 0, lastKeyTime: 0, idleMs: 0,
+    startedAt: null, startTime: 0, lastKeyTime: 0, idleMs: 0, pausedAt: 0, pausedMs: 0,
     itemStart: 0, itemMistakes: 0, itemWrong: [], itemFirstTry: true,
     results: [],
-    correctKeys: 0, missKeys: 0,
+    correctKeys: 0, missKeys: 0, combo: 0, bestCombo: 0,
     missByKey: {}, missByFinger: {},
-    running: false,
-    imeWarned: false
+    running: false, imeWarned: false,
+    settings: null, showKeyboard: true, timerId: 0, onFinish: null
   };
 
   const $ = id => document.getElementById(id);
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
 
   // ------------------------------------------------------------------
   // 画面
   // ------------------------------------------------------------------
 
   function screenHtml(course, stage) {
+    const limited = !!stage.limitMs;
     return `
       <div class="play" id="play-root">
         <div class="play-head">
@@ -48,8 +65,10 @@
             <b>${esc(stage.title)}</b>
           </div>
           <div class="play-progress" role="group" aria-label="すすみぐあい">
-            <div class="bar"><span id="play-bar"></span></div>
-            <span class="num"><b id="play-done">0</b> / <span id="play-total">0</span></span>
+            <div class="bar${limited ? ' bar-time' : ''}"><span id="play-bar"></span></div>
+            <span class="num">${limited
+              ? `のこり <b id="play-left">${Math.round(stage.limitMs / 1000)}</b> びょう`
+              : '<b id="play-done">0</b> / <span id="play-total">0</span>'}</span>
           </div>
         </div>
 
@@ -65,19 +84,19 @@
           <div class="meter"><span class="meter-label">はやさ</span><b id="m-kps">0.0</b><span class="meter-unit">打/びょう</span></div>
           <div class="meter"><span class="meter-label">正かくさ</span><b id="m-acc">100</b><span class="meter-unit">%</span></div>
           <div class="meter"><span class="meter-label">ミス</span><b id="m-miss">0</b><span class="meter-unit">かい</span></div>
+          <div class="meter meter-combo" id="m-combo-box"><span class="meter-label">れんぞく</span><b id="m-combo">0</b><span class="meter-unit">だ</span></div>
         </div>
 
         <div class="ime-warn" id="ime-warn" hidden>
           ${T.icon('info')} <span>かな入力に なって いるみたい。<b>英数キー</b>（スペースの 左）を おしてから 打ってね。</span>
         </div>
 
-        <div class="kb-wrap"><div id="play-kb"></div></div>
-      </div>`;
-  }
+        <p class="play-ready" id="play-ready">${T.icon('play')} さいしょの 1打で スタートします。ゆっくりで だいじょうぶ。</p>
 
-  function esc(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        <div class="kb-wrap"><div id="play-kb"></div></div>
+
+        <div class="play-skip"><button class="btn btn-ghost" id="play-skip-btn" type="button" hidden>この お題を とばす</button></div>
+      </div>`;
   }
 
   // ------------------------------------------------------------------
@@ -85,30 +104,45 @@
   // ------------------------------------------------------------------
 
   /**
-   * @param {Object} p { course, stage, source, mount }
+   * @param {Object} p { course, stage, source, mount, special }
+   *   stage.endless … お題が つきても じゅんばんを かえて つづけます
+   *   stage.limitMs … 時間ぎめ（チャレンジ）
    */
   function start(p) {
     const settings = T.Store.getSettings();
+    stopTimer();
+
     state.course = p.course;
     state.stage = p.stage;
     state.source = p.source || 'course';
-    state.items = pickItems(p.stage, state.source);
+    state.special = p.special || '';
+    state.settings = settings;
+    state.endless = !!p.stage.endless;
+    state.limitMs = p.stage.limitMs || 0;
+    state.pool = p.stage.items.slice();
+    state.queue = firstQueue(state.pool, state.source, state.endless);
+    state.total = state.endless ? 0 : state.queue.length;
     state.index = 0;
     state.results = [];
     state.correctKeys = 0;
     state.missKeys = 0;
+    state.combo = 0;
+    state.bestCombo = 0;
     state.missByKey = {};
     state.missByFinger = {};
     state.idleMs = 0;
+    state.pausedAt = 0;
+    state.pausedMs = 0;
     state.imeWarned = false;
     state.startedAt = new Date();
-    state.startTime = performance.now();
-    state.lastKeyTime = state.startTime;
+    state.startTime = 0;                    // 0 = まだ 1打も 打って いない
+    state.lastKeyTime = 0;
     state.running = true;
+    state.showKeyboard = settings.keyboard !== false;
 
     p.mount.innerHTML = screenHtml(p.course, p.stage);
-    $('play-total').textContent = String(state.items.length);
-    if (!settings.keyboard) $('play-kb').closest('.kb-wrap').hidden = true;
+    if (!state.limitMs) $('play-total').textContent = String(state.total);
+    if (!state.showKeyboard) $('play-kb').closest('.kb-wrap').hidden = true;
     else {
       T.Keyboard.render($('play-kb'), {
         layoutId: settings.layout,
@@ -116,15 +150,18 @@
         onTap: tap => handleChar(tap.char, tap.code)
       });
     }
+    $('play-skip-btn').addEventListener('click', skipItem);
     loadItem();
+    renderMeters();
     bindKeys();
+    if (state.limitMs) startTimer();
   }
 
-  /** ステージの お題を ならべます（「もう1かい」は じゅんばんを かえます） */
-  function pickItems(stage, source) {
-    const items = stage.items.slice();
-    if (source !== 'course') shuffle(items);
-    return items;
+  /** さいしょの お題の ならび（「もう1かい」と チャレンジは じゅんばんを かえます） */
+  function firstQueue(pool, source, endless) {
+    const list = pool.slice();
+    if (endless || source !== 'course') shuffle(list);
+    return list;
   }
 
   function shuffle(list) {
@@ -136,7 +173,12 @@
   }
 
   function loadItem() {
-    const item = state.items[state.index];
+    if (state.queue.length === 0) {
+      if (!state.endless) return;
+      state.queue = shuffle(state.pool.slice());   // チャレンジは くりかえします
+    }
+    const item = state.queue.shift();
+    state.current = item;
     state.matcher = T.Romaji.createMatcher(item.k);
     state.itemStart = performance.now();
     state.itemMistakes = 0;
@@ -144,13 +186,14 @@
     state.itemFirstTry = true;
     $('q-label').textContent = item.d || '';
     $('q-label').hidden = !item.d;
+    $('play-skip-btn').hidden = true;
     renderQuestion();
     renderProgress();
   }
 
   /** お題の 表示を 描きなおします（打ち終えた ところは 色が かわります） */
   function renderQuestion() {
-    const item = state.items[state.index];
+    const item = state.current;
     const done = state.matcher.kanaDone();
     const text = item.k;
     $('q-kana').innerHTML =
@@ -158,9 +201,8 @@
       `<span class="now">${esc(text.slice(done, done + 1))}</span>` +
       `<span class="rest">${esc(text.slice(done + 1))}</span>`;
 
-    const settings = T.Store.getSettings();
     const romaji = $('q-romaji');
-    if (item.raw || !settings.romajiHint) {
+    if (item.raw || !state.settings.romajiHint) {
       romaji.hidden = true;
     } else {
       const h = state.matcher.hint();
@@ -172,27 +214,39 @@
 
   /** つぎに 押す キーと、その 指を しめします */
   function renderNextKey() {
-    const settings = T.Store.getSettings();
     const ch = state.matcher.expected();
     const box = $('play-finger');
-    if (!ch) { box.innerHTML = ''; T.Keyboard.highlight([]); return; }
-    const found = T.Layout.findKey(settings.layout, ch);
-    if (!found) { box.innerHTML = ''; T.Keyboard.highlight([]); return; }
+    if (!box) return;
+    const clear = () => { box.innerHTML = ''; if (state.showKeyboard) T.Keyboard.highlight([]); };
+    if (!ch) { clear(); return; }
+    const found = T.Layout.findKey(state.settings.layout, ch);
+    if (!found) { clear(); return; }
     const finger = T.Layout.fingerOf(found.key.code);
-    T.Keyboard.highlight([found.key.code], found.shift);
-    box.innerHTML = finger
-      ? `<span class="finger-dot" style="--finger:${finger.color}"></span>
-         <span class="finger-text">つぎは <b>${esc(ch === ' ' ? 'スペース' : ch.toUpperCase())}</b>
-         を <b>${esc(finger.label)}</b>で</span>
-         ${found.shift ? '<span class="finger-shift">シフトも いっしょに</span>' : ''}`
-      : '';
+    if (state.showKeyboard) T.Keyboard.highlight([found.key.code], found.shift);
+    // 指が 決まっていない キー（やじるしなど）でも、
+    // 「つぎに 何を 押すか」だけは かならず 出します
+    const label = esc(ch === ' ' ? 'スペース' : ch.toUpperCase());
+    box.innerHTML =
+      (finger ? `<span class="finger-dot" style="--finger:${finger.color}"></span>` : '') +
+      `<span class="finger-text">つぎは <b>${label}</b>` +
+      (finger ? ` を <b>${esc(finger.label)}</b>で` : '') + '</span>' +
+      (found.shift ? '<span class="finger-shift">シフトも いっしょに</span>' : '');
   }
 
   function renderProgress() {
-    const total = state.items.length;
+    const bar = $('play-bar');
+    if (!bar) return;
+    if (state.limitMs) {
+      const left = Math.max(0, state.limitMs - elapsed());
+      bar.style.width = `${Math.round(left / state.limitMs * 100)}%`;
+      const num = $('play-left');
+      if (num) num.textContent = String(Math.ceil(left / 1000));
+      const box = $('play-root');
+      if (box) box.classList.toggle('is-hurry', left <= 10000);
+      return;
+    }
     $('play-done').textContent = String(state.index);
-    const pct = total ? Math.round(state.index / total * 100) : 0;
-    $('play-bar').style.width = `${pct}%`;
+    bar.style.width = `${state.total ? Math.round(state.index / state.total * 100) : 0}%`;
   }
 
   function renderMeters() {
@@ -200,18 +254,58 @@
     $('m-kps').textContent = stats.kps.toFixed(1);
     $('m-acc').textContent = String(Math.round(stats.accuracy));
     $('m-miss').textContent = String(state.missKeys);
+    $('m-combo').textContent = String(state.combo);
+  }
+
+  /** はじめの 1打からの 時間。まだ 打って いなければ 0 */
+  function elapsed() {
+    if (!state.startTime) return 0;
+    const now = state.pausedAt || performance.now();
+    return Math.max(0, now - state.startTime - state.pausedMs);
   }
 
   function liveStats() {
-    const elapsed = performance.now() - state.startTime;
-    const active = Math.max(1, elapsed - state.idleMs);
+    const ms = elapsed();
+    // 時間ぎめの チャレンジは、手を 止めた ぶんも そのまま スコアに ひびきます
+    const active = state.limitMs ? Math.max(1, ms) : Math.max(1, ms - state.idleMs);
     const total = state.correctKeys + state.missKeys;
     return {
-      elapsedMs: elapsed,
+      elapsedMs: ms,
       activeMs: active,
-      kps: state.correctKeys / (active / 1000),
+      kps: ms > 0 ? state.correctKeys / (active / 1000) : 0,
       accuracy: total > 0 ? (state.correctKeys / total) * 100 : 100
     };
+  }
+
+  // ------------------------------------------------------------------
+  // 時間ぎめ（チャレンジ）
+  // ------------------------------------------------------------------
+
+  function startTimer() {
+    stopTimer();
+    state.timerId = setInterval(() => {
+      if (!state.running) return;
+      renderProgress();
+      if (state.startTime && elapsed() >= state.limitMs) finish('completed');
+    }, 100);
+    document.addEventListener('visibilitychange', onVisibility);
+  }
+
+  function stopTimer() {
+    if (state.timerId) clearInterval(state.timerId);
+    state.timerId = 0;
+    document.removeEventListener('visibilitychange', onVisibility);
+  }
+
+  /** ほかの 画面に うつって いる あいだは 時計を 止めます（ずるにも ならず、そんにも なりません） */
+  function onVisibility() {
+    if (!state.running || !state.startTime) return;
+    if (document.hidden) { state.pausedAt = performance.now(); return; }
+    if (state.pausedAt) {
+      state.pausedMs += performance.now() - state.pausedAt;
+      state.pausedAt = 0;
+      state.lastKeyTime = performance.now();
+    }
   }
 
   // ------------------------------------------------------------------
@@ -255,35 +349,52 @@
   function handleChar(ch, code) {
     if (!state.running || !state.matcher) return;
     const now = performance.now();
-    // 5秒より 長い 手止まりは 学習時間から のぞきます（§2.8）
-    const gap = now - state.lastKeyTime;
-    if (gap > IDLE_MS) state.idleMs += gap - IDLE_MS;
-    state.lastKeyTime = now;
+
+    if (!state.startTime) {
+      // さいしょの 1打。ここから 時計が うごきはじめます
+      state.startTime = now;
+      state.lastKeyTime = now;
+      const ready = $('play-ready');
+      if (ready) ready.hidden = true;
+    } else {
+      // 5秒より 長い 手止まりは 学習時間から のぞきます（チャレンジは のぞきません）
+      const gap = now - state.lastKeyTime;
+      if (gap > IDLE_MS) state.idleMs += gap - IDLE_MS;
+      state.lastKeyTime = now;
+    }
 
     const expectedChar = state.matcher.expected();
     const r = state.matcher.input(String(ch).toLowerCase());
 
     if (r.ok) {
       state.correctKeys++;
-      if (code) T.Keyboard.flash(code, true);
+      state.combo++;
+      if (state.combo > state.bestCombo) state.bestCombo = state.combo;
+      if (state.combo > 0 && state.combo % COMBO_STEP === 0) celebrateCombo();
+      if (code && state.showKeyboard) T.Keyboard.flash(code, true);
       beep(true);
     } else {
       state.missKeys++;
       state.itemMistakes++;
       state.itemFirstTry = false;
+      state.combo = 0;
       recordMiss(ch, expectedChar);
-      if (code) T.Keyboard.flash(code, false);
+      if (code && state.showKeyboard) T.Keyboard.flash(code, false);
       shake();
       beep(false);
+      if (state.itemMistakes >= SKIP_AFTER) {
+        const btn = $('play-skip-btn');
+        if (btn) btn.hidden = false;
+      }
     }
 
     renderQuestion();
     renderMeters();
 
-    if (state.matcher.isFinished()) finishItem();
+    if (state.matcher.isFinished()) finishItem(true);
   }
 
-  /** どの キー・どの指で つまずいたかを 数えます（先生の 画面で つかいます） */
+  /** どの キー・どの指で つまずいたかを 数えます（にがて とっくんの もとに なります） */
   function recordMiss(pressed, expectedChar) {
     if (state.itemWrong.length < 8 && pressed && !/[<>{}\\]/.test(pressed)) {
       state.itemWrong.push(pressed);
@@ -291,26 +402,33 @@
     if (!expectedChar) return;
     const key = expectedChar === ' ' ? 'space' : expectedChar;
     state.missByKey[key] = (state.missByKey[key] || 0) + 1;
-    const found = T.Layout.findKey(T.Store.getSettings().layout, expectedChar);
+    const found = T.Layout.findKey(state.settings.layout, expectedChar);
     const finger = found ? T.Layout.fingerOf(found.key.code) : null;
     if (finger) state.missByFinger[finger.id] = (state.missByFinger[finger.id] || 0) + 1;
   }
 
-  function finishItem() {
-    const item = state.items[state.index];
+  /** つまずいた ときの にげみち。とばした お題は 正かいには しません */
+  function skipItem() {
+    if (!state.running) return;
+    state.combo = 0;
+    renderMeters();
+    finishItem(false);
+  }
+
+  function finishItem(ok) {
     state.results.push({
-      q: item.k,
-      ok: true,
-      firstTry: state.itemFirstTry,
+      q: state.current.k,
+      ok: !!ok,
+      firstTry: ok && state.itemFirstTry,
       tries: state.itemMistakes + 1,
-      ms: performance.now() - state.itemStart,
+      ms: state.startTime ? performance.now() - state.itemStart : 0,
       wrong: state.itemWrong.slice()
     });
     state.index++;
     renderProgress();
-    if (state.index >= state.items.length) { finish('completed'); return; }
+    if (!state.endless && state.queue.length === 0) { finish('completed'); return; }
     const stage = $('play-stage');
-    if (stage) {
+    if (stage && ok) {
       stage.classList.add('is-clear');
       setTimeout(() => stage.classList.remove('is-clear'), 260);
     }
@@ -321,6 +439,7 @@
   function finish(status) {
     if (!state.running) return null;
     state.running = false;
+    stopTimer();
     unbindKeys();
 
     const stats = liveStats();
@@ -329,6 +448,7 @@
       course: state.course,
       stage: state.stage,
       source: state.source,
+      special: state.special,
       status,
       startedAt: state.startedAt,
       finishedAt: new Date().toISOString(),
@@ -338,17 +458,22 @@
       correctKeys: state.correctKeys,
       totalKeys: total,
       missKeys: state.missKeys,
-      kps: state.correctKeys / (stats.activeMs / 1000),
+      kps: stats.kps,
       accuracy: total > 0 ? (state.correctKeys / total) * 100 : 0,
+      combo: state.bestCombo,
       missByKey: state.missByKey,
       missByFinger: state.missByFinger,
-      layout: T.Store.getSettings().layout,
-      count: state.items.length,
+      layout: state.settings.layout,
+      count: state.endless ? state.index : state.total,
       done: state.index
     };
     if (typeof state.onFinish === 'function') state.onFinish(result);
     return result;
   }
+
+  // ------------------------------------------------------------------
+  // 手ごたえ（見た目と おと）
+  // ------------------------------------------------------------------
 
   function shake() {
     const el = $('play-stage');
@@ -358,24 +483,45 @@
     el.classList.add('is-miss');
   }
 
+  /** れんぞくが 10・20・30…に なった ときだけ、みじかく ほめます */
+  function celebrateCombo() {
+    const box = $('m-combo-box');
+    if (box) {
+      box.classList.remove('is-up');
+      void box.offsetWidth;
+      box.classList.add('is-up');
+    }
+    chime();
+  }
+
   /** 打ったときの みじかい おと（せっていで 消せます） */
   let audioCtx = null;
-  function beep(ok) {
-    if (!T.Store.getSettings().sound) return;
+
+  function tone(freq, ms, volume) {
+    if (!state.settings || !state.settings.sound) return;
     try {
       audioCtx = audioCtx || new (global.AudioContext || global.webkitAudioContext)();
       if (audioCtx.state === 'suspended') audioCtx.resume();
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.type = 'sine';
-      osc.frequency.value = ok ? 880 : 220;
-      gain.gain.value = 0.05;
+      osc.frequency.value = freq;
+      gain.gain.value = volume;
       osc.connect(gain).connect(audioCtx.destination);
       const t = audioCtx.currentTime;
       osc.start(t);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + (ok ? 0.06 : 0.14));
-      osc.stop(t + (ok ? 0.07 : 0.15));
+      gain.gain.exponentialRampToValueAtTime(0.001, t + ms / 1000);
+      osc.stop(t + ms / 1000 + 0.01);
     } catch (e) { /* おとが 出せなくても 練習は つづけられます */ }
+  }
+
+  function beep(ok) { tone(ok ? 880 : 220, ok ? 60 : 140, 0.05); }
+
+  /** れんぞくの おいわい。3つの 音を かさねて 明るく します */
+  function chime() {
+    [0, 90, 180].forEach((delay, i) => {
+      setTimeout(() => tone([784, 988, 1319][i], 180, 0.045), delay);
+    });
   }
 
   function isRunning() { return state.running; }
