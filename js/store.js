@@ -31,6 +31,18 @@
 
   const HISTORY_MAX = 300;   // 古いものから すてます（端末の 保存領域を あふれさせない）
 
+  /**
+   * こまかい きろく（打つまでの 時間・とりちがえ・ローマ字の きまり）を
+   * のこす 回数。
+   *
+   * この 3つは 1回ぶんで きろく全体の 3ばいくらいの 大きさに なります。
+   * ぜんぶの 回に つけると 300回で 600KB を こえ、いつか 保存できなく なります。
+   * にがての 集計は もともと 直近 40回 しか 見ないので、
+   * それより 少し 多い ぶんだけ のこせば じゅうぶんです。
+   */
+  const DETAIL_MAX = 60;
+  const DETAIL_FIELDS = ['lat', 'conf', 'rule'];
+
   function read(key, fallback) {
     try {
       const raw = localStorage.getItem(key);
@@ -202,11 +214,44 @@
 
   function getHistory() { return read(KEYS.history, []); }
 
-  function addHistory(entry) {
-    const list = getHistory();
-    list.push(entry);
-    write(KEYS.history, list.slice(-HISTORY_MAX));
+  /** 古い 回から こまかい きろくを おとします（新しい DETAIL_MAX 回だけ のこす） */
+  function trimDetail(list) {
+    const keepFrom = list.length - DETAIL_MAX;
+    for (let i = 0; i < keepFrom; i++) {
+      const h = list[i];
+      if (!h) continue;
+      DETAIL_FIELDS.forEach(f => { if (h[f] !== undefined) delete h[f]; });
+    }
     return list;
+  }
+
+  /**
+   * れんしゅう1回ぶんを のこします。
+   *
+   * ■ 入りきらなかった ときに だまって 消さない
+   * localStorage が いっぱいだと setItem は 失敗します。前は その 戻り値を
+   * 見て いなかったので、**きろくが 静かに 消えて いました**。気づくのは
+   * つぎの 授業です。入らなかったら 中身を へらして やり直します。
+   *
+   * @returns {{ok: boolean, trimmed: boolean}} trimmed は 古い ぶんを けずったか
+   */
+  function addHistory(entry) {
+    const list = trimDetail(getHistory().concat([entry])).slice(-HISTORY_MAX);
+    if (write(KEYS.history, list)) return { ok: true, trimmed: false };
+
+    // 1回目の やり直し … こまかい きろくを ぜんぶ すてる
+    const lean = list.map(h => {
+      const copy = Object.assign({}, h);
+      DETAIL_FIELDS.forEach(f => delete copy[f]);
+      return copy;
+    });
+    if (write(KEYS.history, lean)) return { ok: true, trimmed: true };
+
+    // 2回目の やり直し … 数を 半分に する
+    if (write(KEYS.history, lean.slice(-Math.floor(HISTORY_MAX / 2)))) {
+      return { ok: true, trimmed: true };
+    }
+    return { ok: false, trimmed: true };
   }
 
   /** きょうの ぶんだけを 集めます（ホームの「きょうの ようす」に つかいます） */
@@ -354,7 +399,12 @@
     KEYS, HISTORY_MAX, DEFAULT_SETTINGS, getSettings, setSetting,
     getProgress, applyResult, starsOf,
     REVIEW_DAYS, scheduleReview, dueStages,
+    HISTORY_DETAIL_MAX: DETAIL_MAX,
     getHistory, addHistory, todaySummary, bestOverall, countsAsTyping,
+    keySummary: span => global.Typa.Mastery.keySummary(getHistory(), span),
+    ruleSummary: span => global.Typa.Mastery.ruleSummary(getHistory(), span),
+    weakRules: span => global.Typa.Mastery.weakRules(getHistory(), span),
+    weakTargets: span => global.Typa.Mastery.weakTargets(getHistory(), span),
     practiceDays, streak, recentDays, missSummary,
     getAwards, saveAwards,
     getChallenge, applyChallenge,

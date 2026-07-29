@@ -34,6 +34,7 @@
   --ok-soft: #dff5ec;
   --ng: #c0392b;
   --ng-soft: #fdeceb;
+  --warn: #b06a12;
   --shadow: 0 1px 2px rgba(16, 30, 54, .08), 0 8px 24px rgba(16, 30, 54, .06);
 
   --c-blue: #2563eb;
@@ -66,6 +67,7 @@ html[data-theme="dark"] {
   --primary-soft: #1b2b4d;
   --primary-ink: #08111f;
   --ok: #4ad3a5;
+  --warn: #e0a458;
   --ok-soft: #12312a;
   --ng: #ff8f83;
   --ng-soft: #3a1c1c;
@@ -78,7 +80,7 @@ html[data-theme="dark"] {
     --bg: #0b1220; --bg-2: #101a2b; --surface: #141f33; --surface-2: #1a2740;
     --text: #e9eff8; --muted: #a4b5cb; --line: #27354d;
     --primary: #6f9bff; --primary-soft: #1b2b4d; --primary-ink: #08111f;
-    --ok: #4ad3a5; --ok-soft: #12312a; --ng: #ff8f83; --ng-soft: #3a1c1c;
+    --ok: #4ad3a5; --ok-soft: #12312a; --ng: #ff8f83; --ng-soft: #3a1c1c; --warn: #e0a458;
     --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 28px rgba(0, 0, 0, .35);
     --c-blue: #7aa2ff; --c-teal: #4ec9b8; --c-green: #a3d160; --c-violet: #b294ff; --c-amber: #f0b45e;
   }
@@ -566,6 +568,45 @@ b, strong { font-weight: 700; }
 
 .howto { margin: 10px 0 0; padding-left: 1.2em; color: var(--muted); font-size: .88rem; }
 .howto li { margin-bottom: 4px; }
+
+/* ------------------------------------------- おぼえぐあい（きろく） */
+
+/* ミスの 数の ヒートマップとは べつの 見かた。
+   「まちがえないけれど 手が とまる キー」が ここで はじめて 見えます。
+   色だけでは 見分けにくい 子が いるので、キーごとに title と aria-label で
+   「だいじょうぶ／もうすこし／まだまだ」と ことばも つけて います */
+.kb-key.is-mastery::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  opacity: var(--mastery, 0);
+}
+.kb-key.is-mastery.m-good::after { background: var(--ok); }
+.kb-key.is-mastery.m-soso::after { background: var(--warn); }
+.kb-key.is-mastery.m-weak::after { background: var(--ng); }
+/* 数が 足りない キーは「にがて」とは べつの 見た目に します。
+   2回 打っただけの キーを にがてと 言い切るのは まちがいです */
+.kb-key.is-mastery.m-unknown::after {
+  background: transparent; opacity: 1;
+  border: 2px dashed var(--line);
+}
+
+.mastery-sample {
+  display: inline-block; width: 18px; height: 18px; border-radius: 5px;
+  vertical-align: -4px; margin: 0 4px 0 10px; border: 1px solid var(--line);
+}
+.mastery-sample.m-good { background: var(--ok); }
+.mastery-sample.m-soso { background: var(--warn); }
+.mastery-sample.m-weak { background: var(--ng); }
+.mastery-sample.m-unknown { background: transparent; border-style: dashed; border-width: 2px; }
+
+.weak-key {
+  display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 6px;
+  border-radius: 8px; border: 2px solid var(--line); background: var(--surface-2);
+  font-size: .92rem;
+}
+.weak-finger { color: var(--muted); font-size: .88rem; }
+.rule-row { flex-wrap: wrap; }
+.rule-name { font-weight: 700; }
+.btn-small { min-height: 40px; padding: 6px 12px; font-size: .85rem; margin-left: auto; }
 
 /* ------------------------------------------- ふくしゅう（ホーム） */
 

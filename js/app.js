@@ -27,7 +27,7 @@
   const esc = s => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-  const APP_VERSION = '2.2.0';
+  const APP_VERSION = '2.3.0';
 
   let view = null;
   let installPrompt = null;
@@ -35,6 +35,9 @@
 
   /** チャレンジ画面で えらんで いる 中身（画面を いききしても のこします） */
   const challengePick = { pool: 'word', seconds: 60 };
+
+  /** きろく画面の キーボードの 見かた（miss = まちがえた かず / mastery = おぼえぐあい） */
+  let heatMode = 'miss';
 
   // ------------------------------------------------------------------
   // 共通の 部品
@@ -85,7 +88,7 @@
     const next = findNextStage(progress);
     const lv = T.Awards.levelOf(T.Store.getAwards().xp);
     const st = T.Store.streak();
-    const weakReady = T.Store.missSummary().keys.filter(k => /^[a-z0-9;,./-]$/.test(k)).length >= 2;
+    const weakReady = T.Store.weakTargets().ready;
     const due = T.Store.dueStages(2);
 
     view.innerHTML = `
@@ -356,7 +359,7 @@
     if (special === 'challenge') {
       found = T.Lessons.buildChallengeStage(params.pool, params.seconds);
     } else if (special === 'weak') {
-      found = T.Lessons.buildWeakStage(T.Store.missSummary().keys);
+      found = T.Lessons.buildWeakStage(T.Store.weakTargets());
       if (!found) {
         toast('にがてが まだ わかりません。すこし れんしゅうしてから きてね。');
         T.Nav.selectTab('courses');
@@ -453,7 +456,13 @@
       combo: result.combo || 0,
       stars: stage.noStars || !completed ? 0 : T.Store.starsOf(result),
       missByKey: result.missByKey,
-      missByFinger: result.missByFinger
+      missByFinger: result.missByFinger,
+      // おぼえぐあいの もと。ここに 名前を 書いた ものだけが のこります。
+      // 1打ずつの 生の きろく（result.keystrokes）は **わざと 入れて いません**。
+      // けっか画面の グラフに つかうだけで、ためると 保存領域が あふれます
+      lat: result.lat,
+      conf: result.conf,
+      rule: result.rule
     });
 
     const awarded = T.Awards.applyResult(result, meta);
@@ -650,6 +659,8 @@
     const lv = T.Awards.levelOf(T.Store.getAwards().xp);
     const st = T.Store.streak();
     const miss = T.Store.missSummary();
+    const keyStats = T.Store.keySummary();
+    const weakRules = T.Store.weakRules();
     const badges = T.Awards.badgeList();
     const gotBadges = badges.filter(b => b.got);
     const clearedStages = T.Lessons.COURSES
@@ -679,14 +690,30 @@
         <p class="lead">${icon('chart')} はやさの うつりかわり</p>
         ${sparkline(history.filter(h => T.Store.countsAsTyping(h) && h.correctKeys > 0).slice(0, 20).reverse())}`) : ''}
 
-      ${miss.keys.length ? card(`
+      ${(miss.keys.length || keyStats.slow.length) ? card(`
         <p class="lead">${icon('target')} にがてな キー</p>
-        <p class="muted">色が こい キーほど まちがえて います。手もとの キーボードと 見くらべてみよう。</p>
+        <div class="seg" role="radiogroup" aria-label="キーボードの 見かた">
+          <button class="seg-btn${heatMode === 'miss' ? ' on' : ''}" role="radio"
+            aria-checked="${heatMode === 'miss'}" data-heat-mode="miss">まちがえた かず</button>
+          <button class="seg-btn${heatMode === 'mastery' ? ' on' : ''}" role="radio"
+            aria-checked="${heatMode === 'mastery'}" data-heat-mode="mastery">おぼえぐあい</button>
+        </div>
+        <p class="muted mt">${heatMode === 'miss'
+          ? '色が こい キーほど まちがえて います。手もとの キーボードと 見くらべてみよう。'
+          : '色が こい キーほど、まだ 手が おぼえて いません。まちがえなくても、さがして いれば こく なります。'}</p>
         <div class="kb-guide" id="heat-kb"></div>
-        <p class="heat-legend"><span class="heat-sample lv1"></span>すこし
-          <span class="heat-sample lv2"></span>ふつう
-          <span class="heat-sample lv3"></span>おおい</p>
+        ${heatMode === 'miss'
+          ? `<p class="heat-legend"><span class="heat-sample lv1"></span>すこし
+             <span class="heat-sample lv2"></span>ふつう
+             <span class="heat-sample lv3"></span>おおい</p>`
+          : `<p class="heat-legend"><span class="mastery-sample m-good"></span>だいじょうぶ
+             <span class="mastery-sample m-soso"></span>もうすこし
+             <span class="mastery-sample m-weak"></span>まだまだ
+             <span class="mastery-sample m-unknown"></span>まだ わからない</p>`}
         <button class="btn btn-outline" data-go-weak>${icon('finger')} にがて とっくんを する</button>`) : ''}
+
+      ${slowKeyCard(keyStats)}
+      ${ruleCard(weakRules)}
 
       ${miss.fingers.length ? card(`
         <p class="lead">${icon('finger')} にがてな 指</p>
@@ -739,9 +766,79 @@
     const heat = $('heat-kb');
     if (heat) {
       T.Keyboard.render(heat, { layoutId: T.Store.getSettings().layout, fingerGuide: false, onTap: null });
-      T.Keyboard.heat(miss.byKey);
+      if (heatMode === 'mastery') T.Keyboard.mastery(keyStats.byKey);
+      else T.Keyboard.heat(miss.byKey);
     }
+    view.querySelectorAll('[data-heat-mode]').forEach(el => {
+      el.addEventListener('click', () => { heatMode = el.dataset.heatMode; T.Nav.render(); });
+    });
     bindGoButtons();
+  }
+
+  /**
+   * 「まちがえないけれど 手が とまる キー」。
+   *
+   * これまでの にがて集計は ミスの 数だけを 見て いたので、この キーたちは
+   * ずっと 0 のまま、どこにも 出て きませんでした。けれど この 子は
+   * まだ 画面を 見て さがして います。**タイピングで いちばん 直したい ところ**です。
+   */
+  function slowKeyCard(keyStats) {
+    const list = keyStats.slow.slice(0, 5);
+    if (list.length === 0) return '';
+    return card(`
+      <p class="lead">${icon('clock')} まだ 手が とまる キー</p>
+      <p class="muted">まちがえては いないけれど、すこし さがして いる キーです。
+      ここが はやく なると、ぐんと らくに なります。</p>
+      <ul class="weak-list">
+        ${list.map(ch => {
+          const s = keyStats.byKey[ch];
+          const found = T.Layout.findKey(T.Store.getSettings().layout, ch === 'space' ? ' ' : ch);
+          const finger = found ? T.Layout.fingerOf(found.key.code) : null;
+          return `<li>
+            ${finger ? `<span class="finger-dot" style="--finger:${finger.color}"></span>` : ''}
+            <b class="weak-key">${esc(ch === 'space' ? 'スペース' : ch.toUpperCase())}</b>
+            ${finger ? `<span class="weak-finger">${esc(finger.label)}</span>` : ''}
+            <span class="weak-count">${(s.medianMs / 1000).toFixed(1)} びょう</span>
+          </li>`;
+        }).join('')}
+      </ul>
+      <button class="btn btn-outline" data-go-weak>${icon('finger')} にがて とっくんを する</button>`);
+  }
+
+  /**
+   * ローマ字の どの きまりで つまずいて いるか。
+   * 「d が にがて」より「ちいさい つ が にがて」の ほうが、
+   * つぎに 何を すれば よいかが はっきり します。
+   */
+  function ruleCard(rules) {
+    const list = (rules || []).slice(0, 3);
+    if (list.length === 0) return '';
+    return card(`
+      <p class="lead">${icon('letter')} ローマ字で つまずく ところ</p>
+      <ul class="weak-list">
+        ${list.map(r => {
+          const stage = stageForRule(r.rule);
+          const per = Math.max(1, Math.round(r.errRate * 10));
+          return `<li class="rule-row">
+            <span class="rule-name">${esc(r.label)}</span>
+            <span class="weak-count">10かいに ${per}かい</span>
+            ${stage ? `<button class="btn btn-outline btn-small"
+              data-go-stage="${esc(stage.course.id)}:${esc(stage.stage.id)}">ここだけ れんしゅう</button>` : ''}
+          </li>`;
+        }).join('')}
+      </ul>`);
+  }
+
+  /** きまり → ふくしゅうする ステージ。stage.skill で 引くので ID を 直接 書きません */
+  function stageForRule(rule) {
+    const skill = T.Mastery.RULE_TO_SKILL[rule];
+    if (!skill) return null;
+    for (const course of T.Lessons.COURSES) {
+      for (const stage of course.stages) {
+        if (stage.skill === skill) return { course, stage };
+      }
+    }
+    return null;
   }
 
   /** チャレンジの さいこう記録（やったことが あるときだけ 出します） */

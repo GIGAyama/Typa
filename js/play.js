@@ -53,6 +53,8 @@
     missByKey: {}, missByFinger: {},
     phase: 'main', retryPool: [], retryTotal: 0, retryUse: true, retryNotice: false,
     mainMs: 0, mainIdleMs: 0,
+    lat: {}, conf: {}, rule: {}, keystrokes: [],
+    itemKeyCount: 0, lastOk: true, skipLatency: false,
     running: false, imeWarned: false,
     settings: null, showKeyboard: true, timerId: 0, onFinish: null
   };
@@ -143,6 +145,13 @@
     state.bestCombo = 0;
     state.missByKey = {};
     state.missByFinger = {};
+    state.lat = {};
+    state.conf = {};
+    state.rule = {};
+    state.keystrokes = [];
+    state.itemKeyCount = 0;
+    state.lastOk = true;
+    state.skipLatency = false;
     state.phase = 'main';
     state.retryPool = [];
     state.retryTotal = 0;
@@ -166,7 +175,7 @@
       T.Keyboard.render($('play-kb'), {
         layoutId: settings.layout,
         fingerGuide: settings.fingerGuide,
-        onTap: tap => handleChar(tap.char, tap.code)
+        onTap: tap => handleChar(tap.char, tap.code, 'tap')
       });
     }
     $('play-skip-btn').addEventListener('click', skipItem);
@@ -200,6 +209,7 @@
     state.current = item;
     state.matcher = T.Romaji.createMatcher(item.k);
     state.itemStart = performance.now();
+    state.itemKeyCount = 0;
     state.itemMistakes = 0;
     state.itemWrong = [];
     state.itemFirstTry = true;
@@ -332,6 +342,9 @@
       state.pausedMs += performance.now() - state.pausedAt;
       state.pausedAt = 0;
       state.lastKeyTime = performance.now();
+      // 時計を つけ直したので、つぎの 1打の「かかった 時間」は にせものです。
+      // これを 数えると、ありもしない「速い キー」が できて しまいます
+      state.skipLatency = true;
     }
   }
 
@@ -372,10 +385,14 @@
 
   /**
    * 1打を うけとります（キーボードからも、画面の タップからも ここに 来ます）。
+   * @param {string} ch 打たれた 文字
+   * @param {string} [code] キーの 位置
+   * @param {string} [src] 'tap' なら 画面を さわって 打った ぶん
    */
-  function handleChar(ch, code) {
+  function handleChar(ch, code, src) {
     if (!state.running || !state.matcher) return;
     const now = performance.now();
+    const gapBefore = state.startTime ? now - state.lastKeyTime : 0;
 
     if (state.retryNotice) {
       // おまけの 周の あんないは、打ちはじめたら 消します
@@ -397,8 +414,12 @@
       state.lastKeyTime = now;
     }
 
-    const expectedChar = state.matcher.expected();
+    const info = state.matcher.expectedInfo();
+    const expectedChar = info.ch;
     const r = state.matcher.input(String(ch).toLowerCase());
+
+    recordTiming(ch, r.ok, gapBefore, src);
+    recordRule(info.rule, r.ok);
 
     // おまけの 周の 打鍵は、はやさ・正かくさ・★の もとには 数えません。
     // 数えると「まちがえて 打ち直した 子ほど 正かくさが 上がる」ことに なり、
@@ -427,10 +448,65 @@
       }
     }
 
+    state.itemKeyCount++;
     renderQuestion();
     renderMeters();
 
     if (state.matcher.isFinished()) finishItem(true);
+  }
+
+  /**
+   * 打つまでに かかった 時間を 数えます。
+   *
+   * ■ 数えて よい 1打か
+   * 「押すのに かかった 時間」に なって いない ものを まぜると、
+   * にがての 一覧が でたらめに なります。つぎの ときは 数えません。
+   *
+   *   1. お題の 1文字目 … 前の 時間は お題を 読んで いた 時間です
+   *   2. まちがえた すぐ あと … 打ち直しは「さがす 時間」では ありません
+   *   3. 画面を さわって 打った ぶん … 指を はこぶ 時間で、タイピングでは ありません
+   *   4. ほかの 画面から もどった すぐ あと … onVisibility が 時計を つけ直すので
+   *      にせの みじかい 時間に なります
+   *   5. 3びょうより 長い とき … キーボードから 手を はなして いました
+   *
+   * ■ 実際に 押した キーで 数えます
+   * 「し」は si でも shi でも 正かいなので、出す はずだった キーでは なく
+   * **手が 見つけた キー** で 数えないと 意味が ありません。
+   */
+  function recordTiming(pressed, ok, gap, src) {
+    const M = T.Mastery;
+    const key = String(pressed).toLowerCase();
+    // 生の 1打は けっか画面の グラフに つかうだけで、保存は しません
+    if (state.keystrokes.length < 2000) {
+      state.keystrokes.push({ ms: Math.round(gap), ok: !!ok, ch: key, retry: state.phase === 'retry' });
+    }
+
+    const skip = state.skipLatency;
+    state.skipLatency = false;
+    const wasOk = state.lastOk;
+    state.lastOk = !!ok;
+
+    if (!ok) return;                                  // ミスは はやさに 数えません
+    if (src === 'tap') return;                        // 3
+    if (skip) return;                                 // 4
+    if (state.itemKeyCount === 0) return;             // 1
+    if (!wasOk) return;                               // 2
+    if (gap <= 0 || gap > M.MAX_SAMPLE) return;       // 5
+
+    if (!state.lat[key]) state.lat[key] = new Array(M.BUCKETS).fill(0);
+    state.lat[key][M.bucketOf(gap)]++;
+  }
+
+  /**
+   * ローマ字の どの きまりで つまずいたかを 数えます。
+   * **正しく 打てた ぶんも 数えます**。回数では なく わりあいで 見ないと、
+   * よく 出て くる きまりほど にがてに 見えて しまうためです。
+   */
+  function recordRule(rule, ok) {
+    if (!rule || rule === 'raw' || rule === 'kigou') return;
+    if (!state.rule[rule]) state.rule[rule] = [0, 0];
+    state.rule[rule][0]++;
+    if (!ok) state.rule[rule][1]++;
   }
 
   /** どの キー・どの指で つまずいたかを 数えます（にがて とっくんの もとに なります） */
@@ -439,6 +515,15 @@
       state.itemWrong.push(pressed);
     }
     if (!expectedChar) return;
+    // 「何と 何を とりちがえたか」。
+    // 「d が にがて」より「d と f の 区べつが ついて いない」の ほうが、
+    // つぎに 何を すれば よいかが はっきり します
+    const want = String(expectedChar).toLowerCase();
+    const got = String(pressed).toLowerCase();
+    if (want !== got && T.Mastery.SAFE_KEY.test(want) && T.Mastery.SAFE_KEY.test(got)) {
+      const pair = `${want}>${got}`;
+      state.conf[pair] = (state.conf[pair] || 0) + 1;
+    }
     const key = expectedChar === ' ' ? 'space' : expectedChar;
     state.missByKey[key] = (state.missByKey[key] || 0) + 1;
     const found = T.Layout.findKey(state.settings.layout, expectedChar);
@@ -544,6 +629,12 @@
       combo: state.bestCombo,
       missByKey: state.missByKey,
       missByFinger: state.missByFinger,
+      lat: state.lat,
+      conf: state.conf,
+      rule: state.rule,
+      // 1打ずつの 生の きろく。けっか画面の グラフに つかうだけで、
+      // 保存は しません（saveResult の 一覧に 入れて いません）
+      keystrokes: state.keystrokes,
       layout: state.settings.layout,
       count: state.endless ? state.index : state.total,
       done: state.index,

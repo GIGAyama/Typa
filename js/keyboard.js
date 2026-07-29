@@ -191,12 +191,7 @@
     let max = 0;
     Object.keys(byChar || {}).forEach(k => { max = Math.max(max, byChar[k]); });
 
-    Object.keys(state.keyEls).forEach(code => {
-      const el = state.keyEls[code];
-      el.classList.remove('is-heat');
-      el.style.removeProperty('--heat');
-      el.removeAttribute('title');
-    });
+    clearPaint();
     if (max <= 0) return 0;
 
     const byCode = {};
@@ -215,6 +210,54 @@
     return max;
   }
 
+  /** ヒートマップの 色を いったん ぜんぶ 消します */
+  function clearPaint() {
+    Object.keys(state.keyEls).forEach(code => {
+      const el = state.keyEls[code];
+      el.classList.remove('is-heat', 'is-mastery', 'm-good', 'm-soso', 'm-weak', 'm-unknown');
+      el.style.removeProperty('--heat');
+      el.style.removeProperty('--mastery');
+      el.removeAttribute('title');
+      el.removeAttribute('aria-label');
+    });
+  }
+
+  /**
+   * キーごとの「おぼえぐあい」を 色の こさで しめします。
+   *
+   * ミスの 数（heat）との いちばんの ちがいは、**まちがえないけれど
+   * 手が とまる キー** が 見えることです。ミスの 数では ずっと 0 のままで、
+   * どこにも 出て きませんでした。
+   *
+   * 色だけでは 見分けにくい 子も いるので、キーごとに ことばの ラベルを
+   * つけます（読み上げにも つかわれます）。
+   *
+   * @param {Object} byKey Mastery.keySummary().byKey
+   * @returns {number} 色を つけた キーの 数
+   */
+  function mastery(byKey) {
+    clearPaint();
+    const M = global.Typa.Mastery;
+    let painted = 0;
+    Object.keys(byKey || {}).forEach(ch => {
+      const stat = byKey[ch];
+      const found = Layout.findKey(state.layoutId, ch === 'space' ? ' ' : ch);
+      if (!found) return;
+      const el = state.keyEls[found.key.code];
+      if (!el) return;
+      const id = M.idOf(stat.mastery);
+      const label = M.labelOf(stat.mastery);
+      el.classList.add('is-mastery', `m-${id}`);
+      // 1 に ちかいほど こく 出します（まだまだ ほど 目立つ）
+      el.style.setProperty('--mastery', (stat.mastery === null ? 0 : 1 - stat.mastery).toFixed(2));
+      const ms = stat.medianMs ? `、${(stat.medianMs / 1000).toFixed(1)}びょう` : '';
+      el.setAttribute('title', `${ch.toUpperCase()} ${label}${ms}`);
+      el.setAttribute('aria-label', `${ch.toUpperCase()} ${label}`);
+      painted++;
+    });
+    return painted;
+  }
+
   global.Typa = global.Typa || {};
-  global.Typa.Keyboard = { render, highlight, flash, heat, setFingerGuide, get layoutId() { return state.layoutId; } };
+  global.Typa.Keyboard = { render, highlight, flash, heat, mastery, setFingerGuide, get layoutId() { return state.layoutId; } };
 })(window);
