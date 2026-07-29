@@ -338,6 +338,86 @@ ok(!!mixed.byKey.d, 'こまかい きろくが ない 回が まざっても 数
 ok(Mastery.weakTargets(stored).ready !== undefined, 'にがての ねらいが 出せる');
 
 // ------------------------------------------------------------------
+// 9. ヒントの つよさ
+// ------------------------------------------------------------------
+//
+// ここが くいちがうと、「キーボードを 出さない」のに「つぎの キーを 光らせる」
+// といった ありえない くみあわせに なります。ぜんぶ ためします。
+
+const BASE = Store.DEFAULT_SETTINGS;
+
+// 前から つかって いる 人（assist が ない）は、スイッチの ままに なるか
+const oldUser = Object.assign({}, BASE, { keyboard: false, romajiHint: false });
+delete oldUser.assist;
+const oldView = Store.resolveAssist(oldUser, {});
+eq(oldView.keyboard, false, '前からの 人の「キーボードを 出さない」が のこる');
+eq(oldView.romajiHint, false, '前からの 人の「ヒントを 出さない」が のこる');
+eq(oldView.fingerWords, true, '前からの 人でも ことばの 案内は 出る');
+
+// はじめての 人は「ぜんぶ 見える」と 同じに なるか
+const fresh = Store.resolveAssist(Object.assign({}, BASE), {});
+eq(fresh.keyboard, true, 'はじめての 人は キーボードが 出る');
+eq(fresh.romajiHint, true, 'はじめての 人は ローマ字の ヒントが 出る');
+eq(fresh.keyLabels, true, 'はじめての 人は キーに 文字が ある');
+
+// 4つの つよさ
+[0, 1, 2, 3].forEach(level => {
+  const v = Store.resolveAssist(Object.assign({}, BASE, { assist: level }), {});
+  eq(v.fingerWords, true, `つよさ ${level} … ことばの 案内は かならず のこる`);
+  ok(!(v.nextGlow && !v.keyboard), `つよさ ${level} … キーボードが ないのに 光らせない`);
+  ok(!(v.keyLabels && !v.keyboard), `つよさ ${level} … キーボードが ないのに 文字を 書かない`);
+  ok(!(v.fingerGuide && !v.keyboard), `つよさ ${level} … キーボードが ないのに 色を つけない`);
+});
+eq(Store.resolveAssist(Object.assign({}, BASE, { assist: 1 }), {}).romajiHint, false,
+   'つよさ 1 で ローマ字の ヒントが 消える');
+eq(Store.resolveAssist(Object.assign({}, BASE, { assist: 2 }), {}).keyLabels, false,
+   'つよさ 2 で キーの 文字が 消える');
+eq(Store.resolveAssist(Object.assign({}, BASE, { assist: 2 }), {}).keyboard, true,
+   'つよさ 2 でも キーボードの ばしょは 出す');
+eq(Store.resolveAssist(Object.assign({}, BASE, { assist: 3 }), {}).keyboard, false,
+   'つよさ 3 で キーボードが 消える');
+
+// めかくし … ここだけ ことばの 案内も 消します
+const blind = Store.resolveAssist(Object.assign({}, BASE), { blind: true });
+eq(blind.fingerWords, false, 'めかくしでは ことばの 案内も 出さない');
+eq(blind.keyboard, false, 'めかくしでは キーボードも 出さない');
+eq(blind.level, 'blind', 'めかくしだと わかる');
+
+// じどう … ★3つを とって いない ステージでは 2いじょうに しない
+eq(Store.autoAssist({ stageMastery: null }), 0, 'まだ わからなければ ぜんぶ 見せる');
+eq(Store.autoAssist({ stageMastery: 0.2, everThreeStars: true }), 0, 'おぼえて いなければ 0');
+eq(Store.autoAssist({ stageMastery: 0.5, everThreeStars: true }), 1, 'すこし おぼえたら 1');
+eq(Store.autoAssist({ stageMastery: 0.7, everThreeStars: true }), 2, 'よく おぼえたら 2');
+eq(Store.autoAssist({ stageMastery: 0.95, everThreeStars: true }), 3, 'ばっちりなら 3');
+eq(Store.autoAssist({ stageMastery: 0.95, everThreeStars: false }), 1,
+   '★3つを とって いなければ 2いじょうに しない');
+[0, 0.2, 0.4, 0.6, 0.8, 1].forEach(m => {
+  const lv = Store.autoAssist({ stageMastery: m, everThreeStars: false });
+  ok(lv <= 1, `★3つ 未満なら つよさは 1まで (mastery=${m} → ${lv})`);
+});
+
+// スイッチを 手で さわったら「じぶんで」に もどるか
+Store.clearRecords();
+localStorage.removeItem(Store.KEYS.settings);
+Store.setAssist(2);
+eq(Store.getSettings().assist, 2, 'つよさを えらべる');
+eq(Store.getSettings().keyLabels, false, 'えらぶと スイッチも 書きかわる');
+Store.setSetting('keyLabels', true);
+eq(Store.getSettings().assist, 'custom', 'スイッチを さわると じぶんでに もどる');
+Store.setSetting('sound', false);
+eq(Store.getSettings().assist, 'custom', 'かんけいない スイッチでは かわらない');
+
+// ステージの おぼえぐあいが 出せるか
+const stage = Lessons.findStage('romaji', 'rm-a').stage;
+const stageKeys = Mastery.keysOfStage(stage);
+ok(stageKeys.length >= 5, `あ行の ステージで つかう キーが とれる (${stageKeys.join('')})`);
+ok(stageKeys.every(k => Mastery.SAFE_KEY.test(k)), 'とれた キーは ぜんぶ つかえる もの');
+eq(Mastery.stageMastery({}, stage), null, 'きろくが なければ 決めない');
+const fullMap = {};
+stageKeys.forEach(k => { fullMap[k] = { mastery: 0.9 }; });
+near(Mastery.stageMastery(fullMap, stage), 0.9, 0.001, 'ぜんぶ おぼえて いれば 高い');
+
+// ------------------------------------------------------------------
 
 console.log(`しらべた こと: ${checked}`);
 if (problems.length === 0) {

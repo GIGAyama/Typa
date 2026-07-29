@@ -27,7 +27,7 @@
   const esc = s => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-  const APP_VERSION = '2.3.0';
+  const APP_VERSION = '2.4.0';
 
   let view = null;
   let installPrompt = null;
@@ -372,7 +372,9 @@
 
     const opt = {
       course: found.course, stage: found.stage,
-      source: params.source || 'course', special, mount: view
+      source: params.source || 'course', special, mount: view,
+      // その回 だけの おためし。せっていは 書きかえません
+      blind: !!params.blind
     };
     if (found.stage.mode === 'shortcut') {
       T.Shortcut.setOnFinish(onSessionFinish);
@@ -487,6 +489,8 @@
     const progress = T.Store.getProgress()[r.stage.id] || {};
     const okCount = r.items.filter(i => i.ok).length;
     const isBest = !!(meta.newBestKps || meta.isBestScore);
+    const recStep = recommend(r);
+    const recParams = recStep ? recStep.params : null;
 
     view.innerHTML = `
       ${pageTitle(isChallenge ? 'そこまで！' : 'できました', `${r.course.short}／${r.stage.title}`)}
@@ -511,18 +515,28 @@
         ${compareLine(r, meta, progress)}
       `, 'card-result')}
 
+      ${r.keystrokes && r.keystrokes.length >= 8 ? card(`
+        <p class="lead">${icon('chart')} どこで 手が とまったか</p>
+        ${timeline(r.keystrokes)}`) : ''}
+
       ${xpCard(awarded)}
       ${badgeCard(awarded)}
+      ${nextStepCard(recStep)}
       ${weakList(r)}
 
       <div class="result-actions">
-        <button class="btn btn-primary" data-again>${icon('retry')} もう1かい</button>
+        <button class="btn btn-outline" data-again>${icon('retry')} もう1かい</button>
         ${nextActionButton(r)}
         <button class="btn btn-ghost" data-back-list>${isChallenge ? 'チャレンジを えらぶ' : (noStars ? 'ホームへ' : 'コースに もどる')}</button>
       </div>`;
 
     const again = view.querySelector('[data-again]');
     if (again) again.addEventListener('click', () => T.Nav.replace('play', againParams(r)));
+
+    // 「つぎは これを やろう」。けっか画面は 通りみちなので **おきかえます**。
+    // つみあげると、つぎの ステージで もどった とき 前の けっか画面に 出ます
+    const rec = view.querySelector('[data-rec]');
+    if (rec && recParams) rec.addEventListener('click', () => T.Nav.replace('play', recParams));
 
     // けっか画面は「通りみち」なので、つぎへ すすむ ときも おきかえます。
     // こうすると、つぎの ステージで「もどる」を おした とき、
@@ -544,6 +558,168 @@
       });
     }
     bindGoButtons();
+  }
+
+  /**
+   * 1打ずつの「かかった 時間」の グラフ。
+   *
+   * よこは **時こくでは なく 打った じゅんばん** です。時こくに すると、
+   * 1回の 4びょうの 手止まりで ほかの ぜんぶが つぶれて 見えなく なります。
+   *
+   * ミスは 色だけで なく **形**（下に のびる しるし）でも 分けます。
+   * 色の ちがいが 見えにくい 子でも 分かるように するためです。
+   *
+   * グラフだけでは 2年生には 読めないので、下に かならず ことばの まとめを
+   * つけます（sparkline() と 同じ 作りです）。
+   */
+  function timeline(keystrokes) {
+    const list = (keystrokes || []).filter(k => k.ms > 0);
+    if (list.length < 8) return '';
+
+    const CLIP = 1200;                       // これより 長い ところは 頭を そろえます
+    const w = 300, h = 80, pad = 5;
+    // 多すぎる ときは まとめます。手が 止まった ところを 見たいので
+    // 平らに ならさず **いちばん おそい ところ** を のこします
+    const MAX_BARS = 200;
+    const step = Math.ceil(list.length / MAX_BARS);
+    const bars = [];
+    for (let i = 0; i < list.length; i += step) {
+      const chunk = list.slice(i, i + step);
+      let worst = chunk[0];
+      chunk.forEach(k => { if (k.ms > worst.ms) worst = k; });
+      bars.push({ ms: worst.ms, ok: chunk.every(k => k.ok), ch: worst.ch, retry: worst.retry });
+    }
+
+    const bw = (w - pad * 2) / bars.length;
+    const body = h - pad * 2;
+    const rects = bars.map((b, i) => {
+      const x = pad + bw * i;
+      const bh = Math.max(1.5, body * Math.min(1, b.ms / CLIP));
+      const y = h - pad - bh;
+      const cls = b.ok ? (b.retry ? 'tl-retry' : 'tl-ok') : 'tl-ng';
+      const tick = b.ok ? '' :
+        `<rect class="tl-tick" x="${(x + bw * 0.15).toFixed(1)}" y="${(h - pad).toFixed(1)}"
+           width="${Math.max(1.2, bw * 0.7).toFixed(1)}" height="3"/>`;
+      return `<rect class="${cls}" x="${x.toFixed(1)}" y="${y.toFixed(1)}"
+        width="${Math.max(0.8, bw * 0.8).toFixed(1)}" height="${bh.toFixed(1)}" rx="1"/>${tick}`;
+    }).join('');
+
+    // まん中の 線。ふだんの リズムが ひと目で わかります
+    const sorted = list.map(k => k.ms).sort((a, b) => a - b);
+    const mid = sorted[Math.floor(sorted.length / 2)];
+    const midY = h - pad - body * Math.min(1, mid / CLIP);
+
+    // いちばん 手が 止まった ところ
+    let worst = list[0];
+    list.forEach(k => { if (k.ms > worst.ms) worst = k; });
+    const worstSec = (worst.ms / 1000).toFixed(1);
+    const midSec = (mid / 1000).toFixed(1);
+    const smooth = worst.ms < mid * 3;
+
+    return `
+      <svg class="tl" viewBox="0 0 ${w} ${h}" role="img"
+        aria-label="1打ごとに かかった 時間の グラフ。ふだんは ${midSec}びょう、いちばん 止まったのは ${worstSec}びょうでした。">
+        <line class="tl-mid" x1="${pad}" y1="${midY.toFixed(1)}" x2="${w - pad}" y2="${midY.toFixed(1)}"/>
+        ${rects}
+      </svg>
+      <p class="muted">ふだんは <b>${midSec}びょう</b>に 1打。
+      いちばん 手が 止まったのは <b>${esc(worst.ch === ' ' ? 'スペース' : worst.ch.toUpperCase())}</b> の
+      ところで <b>${worstSec}びょう</b>でした。
+      ${smooth ? 'リズムよく 打てて います。' : 'そこが すらすら 打てると、ぐんと はやく なります。'}</p>`;
+  }
+
+  /**
+   * 「つぎは これを やろう」を **1つだけ** 出します。
+   *
+   * 出口を いくつも ならべると、どれを 押せば いいか まよいます。
+   * いちばん 学びに なる ものを 1つ えらび、なぜ それなのかを 一文 そえます。
+   */
+  function nextStepCard(rec) {
+    if (!rec) return '';
+    return card(`
+      <p class="lead">${icon('target')} つぎは これを やろう</p>
+      <p class="muted">${esc(rec.why)}</p>
+      <button class="btn btn-primary btn-big" data-rec>
+        <span class="btn-sub">${esc(rec.sub)}</span>
+        <span class="btn-main">${esc(rec.title)}</span>
+        ${icon('next')}
+      </button>`, 'card-next');
+  }
+
+  function recommend(r) {
+    // 1. きょうの ふくしゅう … わすれる 前に もどるのが いちばん 効きます
+    const due = T.Store.dueStages(1);
+    if (due.length && due[0].stageId !== r.stage.id) {
+      const f = T.Lessons.findStageById(due[0].stageId);
+      if (f) {
+        return {
+          why: `${sinceLabel(due[0].lastAt)}に できた ステージです。わすれる 前に もう1かい。`,
+          sub: f.course.short, title: f.stage.title,
+          params: { courseId: f.course.id, stageId: f.stage.id, source: 'course' }
+        };
+      }
+    }
+
+    // 2. にがてが はっきり して いて、この回も つまずいた とき
+    const targets = T.Store.weakTargets();
+    if (targets.ready && r.special !== 'weak' && (r.accuracy || 100) < 92) {
+      const pair = targets.pairs[0];
+      return {
+        why: pair
+          ? `${pair.from.toUpperCase()} と ${pair.to.toUpperCase()} を とりちがえて いました。区べつを つけよう。`
+          : `${targets.keys.slice(0, 3).map(k => k.toUpperCase()).join(' ')} で つまずいて いました。`,
+        sub: 'とくべつ れんしゅう', title: 'にがて とっくん',
+        params: { special: 'weak' }
+      };
+    }
+
+    // 3. ローマ字の きまりで はっきり つまずいて いる とき
+    const rules = T.Store.weakRules();
+    if (rules.length) {
+      const stage = stageForRule(rules[0].rule);
+      if (stage && stage.stage.id !== r.stage.id) {
+        return {
+          why: `「${rules[0].label}」で 10かいに ${Math.max(1, Math.round(rules[0].errRate * 10))}かい まちがえて います。`,
+          sub: stage.course.short, title: stage.stage.title,
+          params: { courseId: stage.course.id, stageId: stage.stage.id, source: 'course' }
+        };
+      }
+    }
+
+    // 4. よく できて いて、まだ ヒントが 強い とき … 手もとを 見ない 練習へ
+    const s = T.Store.getSettings();
+    const level = typeof s.assist === 'number' ? s.assist : (s.keyboard === false ? 3 : 0);
+    const stars = (T.Store.getProgress()[r.stage.id] || {}).stars || 0;
+    if (!r.stage.noStars && stars >= 3 && level < 3 && s.assist !== 'auto' &&
+        (r.accuracy || 0) >= 98 && r.stage.mode !== 'shortcut') {
+      return {
+        why: 'ばっちり 打てて います。つぎは ヒントを へらして、手もとを 見ないで やってみよう。',
+        sub: r.course.short, title: 'めかくしで やってみる',
+        params: { courseId: r.course.id, stageId: r.stage.id, source: 'review', blind: true }
+      };
+    }
+
+    // 5. つぎの ステージ
+    const course = T.Lessons.findCourse(r.course.id);
+    if (course && !r.stage.noStars) {
+      const i = course.stages.findIndex(st => st.id === r.stage.id);
+      const next = course.stages[i + 1];
+      if (next && stars >= 2) {
+        return {
+          why: 'この ステージは よく できました。つぎへ すすもう。',
+          sub: course.short, title: next.title,
+          params: { courseId: course.id, stageId: next.id, source: 'course' }
+        };
+      }
+      if (next || i >= 0) {
+        return {
+          why: '★3つを めざして、もう1かい ゆっくり ていねいに。',
+          sub: r.course.short, title: r.stage.title,
+          params: againParams(r)
+        };
+      }
+    }
+    return null;
   }
 
   /** 「もう1かい」で 同じ ことを やりなおす ための パラメータ */
@@ -644,8 +820,9 @@
           return `<li><span class="finger-dot" style="--finger:${f.color}"></span>
             ${esc(f.label)}<span class="weak-count">${r.missByFinger[id]} かい</span></li>`;
         }).join('')}
-      </ul>
-      <button class="btn btn-outline" data-go-weak>${icon('target')} にがて とっくんを する</button>`);
+      </ul>`);
+    // ここには ボタンを おきません。「つぎは これを やろう」が
+    // 出口を 1つに まとめて いるので、2つ ならべると まよいます
   }
 
   // ------------------------------------------------------------------
@@ -972,10 +1149,32 @@
         <p class="muted">キーボードの 右上に「¥」や「かな」が あれば 日本語配列（JIS）です。</p>`)}
 
       ${card(`
+        <p class="lead">${icon('hand')} ヒントの つよさ</p>
+        <p class="muted">なれてきたら すこしずつ へらすと、手もとを 見ないで
+        打てるように なります。どの つよさでも「つぎは D を みぎの ひとさしゆびで」の
+        ことばは 消えません。</p>
+        <div class="seg" role="radiogroup" aria-label="ヒントの つよさ">
+          ${T.Store.ASSIST_LABELS.map((label, i) => `
+            <button class="seg-btn${s.assist === i ? ' on' : ''}" role="radio"
+              aria-checked="${s.assist === i}" data-assist="${i}">${esc(label)}</button>`).join('')}
+          <button class="seg-btn${s.assist === 'auto' ? ' on' : ''}" role="radio"
+            aria-checked="${s.assist === 'auto'}" data-assist="auto">じどう</button>
+        </div>
+        <p class="muted mt">${s.assist === 'auto'
+          ? 'おぼえぐあいに あわせて、れんしゅうを はじめる ときに 決めます。1回の とちゅうでは かわりません。'
+          : (s.assist === 'custom'
+            ? 'いまは じぶんで えらんだ 見え方に なって います（下の スイッチ）。'
+            : '')}</p>
+        <details class="more">
+          <summary>こまかく きめる</summary>
+          ${toggle('keyboard', '画面に キーボードを 出す', s.keyboard)}
+          ${toggle('keyLabels', 'キーに 文字を 書く', s.keyLabels)}
+          ${toggle('fingerGuide', '指を 色で 分ける', s.fingerGuide)}
+          ${toggle('romajiHint', 'ローマ字の ヒントを 出す', s.romajiHint)}
+        </details>`)}
+
+      ${card(`
         <p class="lead">${icon('gear')} 見え方・おと</p>
-        ${toggle('keyboard', '画面に キーボードを 出す', s.keyboard)}
-        ${toggle('fingerGuide', '指を 色で 分ける', s.fingerGuide)}
-        ${toggle('romajiHint', 'ローマ字の ヒントを 出す', s.romajiHint)}
         ${toggle('sound', '打ったときの おと', s.sound)}
         ${toggle('bigText', '文字を 大きくする', s.bigText)}
         ${toggle('retry', 'まちがえた お題を さいごに もう1かい', s.retry)}
@@ -1205,6 +1404,14 @@
       el.addEventListener('click', () => {
         T.Store.setSetting(el.dataset.set, el.dataset.value);
         applySettings();
+        T.Nav.render();
+      });
+    });
+    // ヒントの つよさ。えらぶと 下の スイッチも いっしょに 書きかわります
+    view.querySelectorAll('[data-assist]').forEach(el => {
+      el.addEventListener('click', () => {
+        const v = el.dataset.assist;
+        T.Store.setAssist(v === 'auto' ? 'auto' : Number(v));
         T.Nav.render();
       });
     });

@@ -31,6 +31,7 @@
     keyEls: {},       // code → 要素
     onTap: null,
     fingerGuide: true,
+    labels: true,
     shiftSticky: false
   };
 
@@ -69,18 +70,23 @@
   /**
    * キーボードを 描きます。
    * @param {HTMLElement} container
-   * @param {Object} opt { layoutId, fingerGuide, onTap }
+   * @param {Object} opt { layoutId, fingerGuide, labels, onTap }
+   *   labels … false に すると キーの 文字を 消します。
+   *     ホームポジションの 色と F・J の でっぱりは のこすので、
+   *     「ばしょ」は わかったまま「どの 字か」だけが 見えなく なります。
+   *     手もとを 見ない 練習の ための だんかいです。
    */
   function render(container, opt) {
     opt = opt || {};
     state.container = container;
     state.layoutId = opt.layoutId || state.layoutId;
     state.fingerGuide = opt.fingerGuide !== false;
+    state.labels = opt.labels !== false;
     state.onTap = opt.onTap !== undefined ? opt.onTap : state.onTap;
     state.keyEls = {};
 
     const rows = (Layout.LAYOUTS[state.layoutId] || Layout.LAYOUTS.jis).rows;
-    container.className = `kb${state.fingerGuide ? ' show-finger' : ''}`;
+    container.className = `kb${state.fingerGuide ? ' show-finger' : ''}${state.labels ? '' : ' is-blank'}`;
     container.innerHTML = '';
 
     rows.forEach((row, rowIndex) => {

@@ -84,21 +84,127 @@
     layout: 'jis',        // キーボードの配列（日本語配列を きほんに します）
     keyboard: true,       // 画面に キーボードを 出す
     fingerGuide: true,    // 指の 色分けを 出す
+    keyLabels: true,      // 画面の キーに 文字を 書く
     romajiHint: true,     // ローマ字の ヒントを 出す
     sound: true,          // 打ったときの おと
     bigText: false,       // 文字を 大きく
     strict: true,         // まちがえたら 正しい キーを 押すまで すすまない
     retry: true,          // まちがえた お題を さいごに もう1回 出す
+    assist: 'custom',     // ヒントの つよさ（0〜3 / 'auto' / 'custom'）
     theme: 'auto'         // auto / light / dark
   };
+
+  // ------------------------------------------------------------------
+  // ヒントの つよさ
+  // ------------------------------------------------------------------
+  //
+  // 画面の キーボードを ずっと 出して いると、「画面を 見て 打つ」癖が
+  // かたまります。手もとを 見ない ように するには、なれるに つれて
+  // ヒントを **すこしずつ** 消して いくのが いちばんの ちかみちです。
+  //
+  // ■ つまみを 4つ 目に 足さない
+  // keyboard / fingerGuide / romajiHint の 3つは たがいに 別ものなので、
+  // ここに もう1つ 足すと 言うことが 食いちがいます。そこで assist を
+  // **えらぶ ところ** に して、えらんだら 3つの ほうを 書きかえます。
+  // 読む 道は 1つだけに なり、ぜったいに くいちがいません。
+  // 手で スイッチを さわった ときは assist を 'custom' に もどします。
+  //
+  // ■ ことばの 案内は どの つよさでも 消しません
+  // 「つぎは D を みぎの ひとさしゆびで」は のこします。消えるのは 絵だけです。
+  // 「色だけに たよらない」という きまりを ここでも まもります。
+  // （めかくしだけは べつです。そこでは 色でも 何も 言って いないので、
+  //   ことばを 消しても きまりは やぶれません）
+
+  const ASSIST_LEVELS = [
+    // 0 ぜんぶ 見える
+    { keyboard: true, fingerGuide: true, keyLabels: true, nextGlow: true, romajiHint: true },
+    // 1 ゆびの 色だけ（ローマ字の ヒントを 消す）
+    { keyboard: true, fingerGuide: true, keyLabels: true, nextGlow: true, romajiHint: false },
+    // 2 ばしょだけ（キーの 文字も 指の 色も 消す。ひかりと でっぱりは のこす）
+    { keyboard: true, fingerGuide: false, keyLabels: false, nextGlow: true, romajiHint: false },
+    // 3 なにも 出ない（ことばの 案内だけ）
+    { keyboard: false, fingerGuide: false, keyLabels: false, nextGlow: false, romajiHint: false }
+  ];
+
+  const ASSIST_LABELS = ['ぜんぶ 見える', 'ゆびの 色だけ', 'ばしょだけ', 'なにも 出ない'];
+
+  /**
+   * おぼえぐあいから ちょうどよい つよさを えらびます。
+   *
+   * まもり: **★3つを 1回も とって いない ステージでは 2いじょうに しません**。
+   * まだ できて いない ところで 画面を 消すと、ただ こまるだけです。
+   */
+  function autoAssist(ctx) {
+    const m = ctx && typeof ctx.stageMastery === 'number' ? ctx.stageMastery : null;
+    if (m === null) return 0;
+    let level = m < 0.35 ? 0 : (m < 0.60 ? 1 : (m < 0.85 ? 2 : 3));
+    if (level >= 2 && !(ctx && ctx.everThreeStars)) level = 1;
+    return level;
+  }
+
+  /**
+   * いま 何を 見せるかを 決めます。play.js は これを 1回だけ よび、
+   * あとは 返って きた ものだけを 見ます（せっていを 直接 読みません）。
+   *
+   * @param {Object} settings getSettings() の 中身
+   * @param {Object} [ctx] { stageMastery, everThreeStars, blind }
+   */
+  function resolveAssist(settings, ctx) {
+    const c = ctx || {};
+    // めかくし … その回 だけの おためし。ことばの 案内も 出しません
+    if (c.blind) {
+      return {
+        keyboard: false, fingerGuide: false, keyLabels: false, nextGlow: false,
+        romajiHint: false, fingerWords: false, level: 'blind'
+      };
+    }
+    let level = settings.assist;
+    if (level === 'auto') level = autoAssist(c);
+    if (typeof level !== 'number' || level < 0 || level >= ASSIST_LEVELS.length) {
+      // 'custom' … スイッチを そのまま つかいます
+      return {
+        keyboard: settings.keyboard !== false,
+        fingerGuide: settings.fingerGuide !== false,
+        keyLabels: settings.keyLabels !== false,
+        nextGlow: settings.keyboard !== false,
+        romajiHint: settings.romajiHint !== false,
+        fingerWords: true,
+        level: 'custom'
+      };
+    }
+    return Object.assign({}, ASSIST_LEVELS[level], {
+      fingerWords: true,
+      level: settings.assist === 'auto' ? level : level,
+      auto: settings.assist === 'auto'
+    });
+  }
+
+  /** ヒントの つよさを えらびます。3つの スイッチも いっしょに 書きかえます */
+  function setAssist(level) {
+    const s = getSettings();
+    s.assist = level;
+    if (typeof level === 'number' && ASSIST_LEVELS[level]) {
+      const L = ASSIST_LEVELS[level];
+      s.keyboard = L.keyboard;
+      s.fingerGuide = L.fingerGuide;
+      s.keyLabels = L.keyLabels;
+      s.romajiHint = L.romajiHint;
+    }
+    write(KEYS.settings, s);
+    return s;
+  }
 
   function getSettings() {
     return Object.assign({}, DEFAULT_SETTINGS, read(KEYS.settings, {}));
   }
 
+  /** スイッチを 手で さわった ら、ヒントの つよさは「じぶんで」に もどします */
+  const ASSIST_OWNED = ['keyboard', 'fingerGuide', 'keyLabels', 'romajiHint'];
+
   function setSetting(name, value) {
     const s = getSettings();
     s[name] = value;
+    if (ASSIST_OWNED.indexOf(name) >= 0) s.assist = 'custom';
     write(KEYS.settings, s);
     return s;
   }
@@ -397,6 +503,7 @@
   global.Typa = global.Typa || {};
   global.Typa.Store = {
     KEYS, HISTORY_MAX, DEFAULT_SETTINGS, getSettings, setSetting,
+    ASSIST_LEVELS, ASSIST_LABELS, resolveAssist, setAssist, autoAssist,
     getProgress, applyResult, starsOf,
     REVIEW_DAYS, scheduleReview, dueStages,
     HISTORY_DETAIL_MAX: DETAIL_MAX,

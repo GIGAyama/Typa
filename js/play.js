@@ -56,7 +56,7 @@
     lat: {}, conf: {}, rule: {}, keystrokes: [],
     itemKeyCount: 0, lastOk: true, skipLatency: false,
     running: false, imeWarned: false,
-    settings: null, showKeyboard: true, timerId: 0, onFinish: null
+    settings: null, view: null, showKeyboard: true, timerId: 0, onFinish: null
   };
 
   const $ = id => document.getElementById(id);
@@ -166,7 +166,15 @@
     state.startTime = 0;                    // 0 = まだ 1打も 打って いない
     state.lastKeyTime = 0;
     state.running = true;
-    state.showKeyboard = settings.keyboard !== false;
+    // ヒントの つよさは ここで 1回だけ 決めます。あとは state.view だけを
+    // 見るので、せっていの スイッチと 言うことが 食いちがう ことが ありません。
+    // 1回の 中で 見え方が かわると 子どもが まようので、とちゅうでは かえません
+    state.view = T.Store.resolveAssist(settings, {
+      stageMastery: T.Mastery.stageMastery(T.Store.keySummary().byKey, p.stage),
+      everThreeStars: ((T.Store.getProgress()[p.stage.id] || {}).stars || 0) >= 3,
+      blind: !!p.blind || !!p.stage.blind
+    });
+    state.showKeyboard = state.view.keyboard;
 
     p.mount.innerHTML = screenHtml(p.course, p.stage);
     if (!state.limitMs) $('play-total').textContent = String(state.total);
@@ -174,7 +182,8 @@
     else {
       T.Keyboard.render($('play-kb'), {
         layoutId: settings.layout,
-        fingerGuide: settings.fingerGuide,
+        fingerGuide: state.view.fingerGuide,
+        labels: state.view.keyLabels,
         onTap: tap => handleChar(tap.char, tap.code, 'tap')
       });
     }
@@ -231,7 +240,7 @@
       `<span class="rest">${esc(text.slice(done + 1))}</span>`;
 
     const romaji = $('q-romaji');
-    if (item.raw || !state.settings.romajiHint) {
+    if (item.raw || !state.view.romajiHint) {
       romaji.hidden = true;
     } else {
       const h = state.matcher.hint();
@@ -246,17 +255,21 @@
     const ch = state.matcher.expected();
     const box = $('play-finger');
     if (!box) return;
-    const clear = () => { box.innerHTML = ''; if (state.showKeyboard) T.Keyboard.highlight([]); };
+    const clear = () => { box.innerHTML = ''; if (state.view.nextGlow) T.Keyboard.highlight([]); };
     if (!ch) { clear(); return; }
     const found = T.Layout.findKey(state.settings.layout, ch);
     if (!found) { clear(); return; }
     const finger = T.Layout.fingerOf(found.key.code);
-    if (state.showKeyboard) T.Keyboard.highlight([found.key.code], found.shift);
+    if (state.view.nextGlow) T.Keyboard.highlight([found.key.code], found.shift);
+    // めかくしの ときだけ、ことばの 案内も 出しません。
+    // ほかの つよさでは のこします — 絵を 消しても、
+    // 「どの指か」は かならず ことばで つたわるように するためです
+    if (!state.view.fingerWords) { box.innerHTML = ''; return; }
     // 指が 決まっていない キー（やじるしなど）でも、
     // 「つぎに 何を 押すか」だけは かならず 出します
     const label = esc(ch === ' ' ? 'スペース' : ch.toUpperCase());
     box.innerHTML =
-      (finger ? `<span class="finger-dot" style="--finger:${finger.color}"></span>` : '') +
+      (finger && state.view.fingerGuide ? `<span class="finger-dot" style="--finger:${finger.color}"></span>` : '') +
       `<span class="finger-text">つぎは <b>${label}</b>` +
       (finger ? ` を <b>${esc(finger.label)}</b>で` : '') + '</span>' +
       (found.shift ? '<span class="finger-shift">シフトも いっしょに</span>' : '');

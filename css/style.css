@@ -569,6 +569,33 @@ b, strong { font-weight: 700; }
 .howto { margin: 10px 0 0; padding-left: 1.2em; color: var(--muted); font-size: .88rem; }
 .howto li { margin-bottom: 4px; }
 
+/* ------------------------------------------- 打鍵の タイムライン（けっか） */
+
+/* よこは 打った じゅんばん、たては かかった 時間。
+   ミスは 色だけで なく 下に のびる しるしでも 分けます（色に たよらない） */
+.tl { width: 100%; height: auto; }
+.tl-ok { fill: var(--primary); }
+.tl-retry { fill: color-mix(in srgb, var(--primary) 45%, transparent); }
+.tl-ng { fill: var(--ng); }
+.tl-tick { fill: var(--ng); }
+.tl-mid { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; opacity: .7; }
+
+/* ------------------------------------------- ヒントの つよさ */
+
+/* 「ばしょだけ」の だんかい。キーの 文字を 消しますが、
+   ホームポジションの 色と F・J の でっぱりは のこします。
+   「どこを 押すか」は わかったまま、「どの 字か」だけが 見えなく なります */
+.kb.is-blank .kb-main,
+.kb.is-blank .kb-up,
+.kb.is-blank .kb-kana,
+.kb.is-blank .kb-name { visibility: hidden; }
+
+.more { margin-top: 14px; }
+.more > summary {
+  cursor: pointer; min-height: 44px; display: flex; align-items: center;
+  color: var(--muted); font-size: .92rem; font-weight: 700;
+}
+
 /* ------------------------------------------- おぼえぐあい（きろく） */
 
 /* ミスの 数の ヒートマップとは べつの 見かた。

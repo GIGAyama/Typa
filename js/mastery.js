@@ -311,8 +311,43 @@
     return { keys: weak, slow, pairs, ready: weak.length >= 2 || pairs.length >= 1 };
   }
 
+  /**
+   * その ステージで 打つ ことに なる キーを あつめます。
+   * ローマ字エンジンの 基本の 打ちかたから 引くので、お題を かえても ずれません。
+   */
+  function keysOfStage(stage) {
+    const seen = {};
+    (stage && stage.items ? stage.items : []).forEach(item => {
+      global.Typa.Romaji.buildChunks(item.k).forEach(c => {
+        const cand = c.cands && c.cands[0] ? c.cands[0] : '';
+        for (const ch of cand) if (SAFE_KEY.test(ch)) seen[ch] = true;
+      });
+    });
+    return Object.keys(seen);
+  }
+
+  /**
+   * その ステージの キーを どれくらい おぼえて いるか（0〜1）。
+   * まだ 数の 足りない キーは 入れません。ぜんぶ 足りなければ null。
+   */
+  function stageMastery(byKey, stage) {
+    const keys = keysOfStage(stage);
+    let sum = 0;
+    let n = 0;
+    keys.forEach(ch => {
+      const s = byKey[ch];
+      if (!s || s.mastery === null || s.mastery === undefined) return;
+      sum += s.mastery;
+      n++;
+    });
+    // 半分いじょうの キーが 分からない うちは 決めません
+    if (n === 0 || n < keys.length / 2) return null;
+    return sum / n;
+  }
+
   global.Typa = global.Typa || {};
   global.Typa.Mastery = {
+    keysOfStage, stageMastery,
     EDGES, BUCKETS, MAX_SAMPLE, MIN_SAMPLES, BUCKET_EDGES, RULE_LABELS, RULE_TO_SKILL, SAFE_KEY,
     bucketOf, medianFrom, slowRateFrom, masteryOf, labelOf, idOf,
     keySummary, ruleSummary, weakRules, weakTargets
