@@ -356,11 +356,19 @@ b, strong { font-weight: 700; }
 }
 .ime-warn .ico { flex: none; }
 
-/* ストップウォッチが うごきだす まえの おしらせ。1打目で 消えます */
+/* ストップウォッチが うごきだす まえの おしらせ。1打目で うすくなります。
+
+   ■ 消して しまうと 画面が とびます
+   前は 1打目で display:none に して いたので、**さいしょの 1文字を
+   打った しゅんかんに 画面ぜんたいが 30px 上へ とんで** いました。
+   打ちはじめの いちばん だいじな ところで お題が うごくのは 最悪です。
+   場所は そのまま のこして、うすくするだけに します。 */
 .play-ready {
   display: flex; align-items: center; gap: 8px; justify-content: center;
   margin: 0; color: var(--muted); font-size: .88rem;
+  min-height: 1.7em; transition: opacity .18s ease;
 }
+.play-ready.is-gone { opacity: 0; }
 .play-ready .ico { width: 18px; height: 18px; color: var(--primary); }
 
 /* 練習画面の 足もと。「やめる」は いつでも 見えて いる ことが 大事です。
@@ -404,13 +412,27 @@ b, strong { font-weight: 700; }
 
 /* ---------------------------------------------- 手の イラスト・キャラクター */
 
-/* キーボードの 上に、手の 絵と キャラクターを ならべます。
-   せまい 画面では たてに つみます */
-.play-visual {
-  display: flex; align-items: flex-end; justify-content: center;
-  gap: 16px; flex-wrap: wrap;
+/* 手の 絵と キーボードは ひとくみ。せまい 画面では たてに つみ、
+   ひろい 画面では よこに ならべます（見くらべる ものが 遠いと 目が いききします）。
+
+   ■ たてに みじかい 画面が いちばん 大事です
+   学校の Chromebook は 1366×768 で、ブラウザの わくを のぞくと
+   たては 600px ほど しか ありません。ここが 画面の 外に 出ると、
+   **キーボードを 見るために スクロールする** ことに なります。
+   打ちながら スクロールは できないので、それは 使えない という ことです。 */
+.play-lower {
+  display: flex; flex-wrap: wrap; justify-content: center;
+  align-items: flex-start; gap: 14px; min-width: 0;
 }
-.hands { flex: 1 1 240px; max-width: 380px; }
+.play-visual { display: flex; justify-content: center; flex: 1 1 300px; max-width: 380px; }
+.play-lower .kb-wrap { flex: 1 1 100%; }
+.hands { width: 100%; }
+
+/* よこに ひろい 画面では、手の 絵と キーボードを ならべます。
+   キーボードの 最小はば（540px）＋ 手の 絵（300px）が 入る はばから */
+@media (min-width: 1080px) {
+  .play-lower .kb-wrap { flex: 1 1 560px; }
+}
 .hands-svg { width: 100%; height: auto; display: block; }
 .hands-label {
   display: flex; justify-content: space-around; margin: 2px 0 0;
@@ -450,47 +472,51 @@ b, strong { font-weight: 700; }
   50% { transform: translateY(6px); }
 }
 
-/* いっしょに 打つ キャラクター。ここが 主役に ならないよう 小さく します */
-.buddy { flex: 0 0 auto; width: clamp(76px, 18vw, 108px); }
-.buddy-svg { width: 100%; height: auto; display: block; transform-origin: 60px 100px; }
-.buddy-shadow { fill: var(--line); opacity: .5; }
-.buddy-belly, .buddy-head { fill: var(--c-amber); stroke: none; }
-.buddy-wing { fill: color-mix(in srgb, var(--c-amber) 70%, var(--text)); }
-.buddy-eye { fill: var(--text); }
-.buddy-eye-shut { display: none; fill: none; stroke: var(--text); stroke-width: 2.4; stroke-linecap: round; }
-.buddy-beak { fill: var(--warn); }
-.buddy-tuft, .buddy-foot { fill: none; stroke: var(--warn); stroke-width: 2.6; stroke-linecap: round; }
+/* ---------------------------------------------- はたらく ちびキャラ
 
-/* 1打ごとの はね。左右 こうごに かたむけると リズムに 見えます */
-.buddy-svg.hop-a { animation: buddy-hop-a .22s ease; }
-.buddy-svg.hop-b { animation: buddy-hop-b .22s ease; }
-@keyframes buddy-hop-a {
-  50% { transform: translateY(-7px) rotate(-6deg); }
-}
-@keyframes buddy-hop-b {
-  50% { transform: translateY(-7px) rotate(6deg); }
-}
+   うごきは ぜんぶ js/buddy.js の Web Animations で つけます。
+   ここでは 置きばしょと 入れものの 見た目だけ 決めます。
+   （class の 付けはずしで 動かすと、続けて 打った ときに
+     いったん 描きなおす ことに なり、そこで 1こま とびます） */
 
-/* まちがえた とき。色 だけでは なく 目の 形も かえます */
-.buddy-svg.is-miss { animation: buddy-shake .36s ease; }
-.buddy-svg.is-miss .buddy-eye { display: none; }
-.buddy-svg.is-miss .buddy-eye-shut { display: block; }
-@keyframes buddy-shake {
-  25% { transform: translateX(-5px); }
-  60% { transform: translateX(5px); }
+.buddy { width: 100%; }
+.buddy-svg {
+  display: block; width: 100%; height: auto;
+  /* 絵の 中の 色は 決めうちです。まわりの 色に つられて
+     キャラクターの 顔色が 変わって しまわない ように します */
+  border-radius: var(--radius-s);
+  background: linear-gradient(180deg, #eaf2fb 0%, #f7fbff 62%, #fff 100%);
+}
+html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740 0%, #212f4b 62%, #26365a 100%); }
+@media (prefers-color-scheme: dark) {
+  html[data-theme="auto"] .buddy-svg { background: linear-gradient(180deg, #1b2740 0%, #212f4b 62%, #26365a 100%); }
 }
 
-/* れんぞく・ひとまわり。すこしだけ 大きく はねます */
-.buddy-svg.is-combo { animation: buddy-jump .7s ease; }
-.buddy-svg.is-cheer { animation: buddy-jump .55s ease 2; }
-@keyframes buddy-jump {
-  30% { transform: translateY(-16px) scale(1.06); }
-  55% { transform: translateY(0) scale(.96); }
-  75% { transform: translateY(-6px); }
+/* 打つ 画面の ならび。
+   ひろい 画面では お題と キャラクターを よこに ならべ、
+   せまい 画面では たてに つみます（キャラクターは お題の 下）。 */
+.play-main { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: start; }
+.play-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.play-side { display: flex; justify-content: center; }
+.play-side > div { width: min(260px, 74vw); }
+
+@media (min-width: 820px) {
+  .play-main { grid-template-columns: 1fr minmax(220px, 280px); gap: 16px; }
+  .play-side { align-self: stretch; align-items: center; }
+  .play-side > div { width: 100%; }
 }
 
-/* 「動きを へらす」端末では 形と 色だけで つたえます（下の まとめて 止める
-   ところで アニメーションは 切れますが、目の 形は そのまま のこります） */
+/* ステージ名は そのまま「べつの ステージに かえる」入口です。
+   ボタンだと 分かるように しますが、お題より 目立っては いけません */
+.play-title.is-link {
+  background: none; border: 1px solid transparent; border-radius: 999px;
+  padding: 4px 10px 4px 4px; margin: 0; font: inherit; color: inherit;
+  cursor: pointer; min-height: 44px;
+}
+.play-title.is-link:hover { border-color: var(--line); background: var(--surface-2); }
+.play-title.is-link:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+.play-title-hint { font-size: .74rem; color: var(--muted); }
+.play-title-hint::before { content: "▾ "; }
 
 /* チャレンジの のこり時間。さいごの 10びょうは 色が かわります */
 .play-progress .bar-time span { background: var(--c-teal); transition: width .12s linear; }
@@ -641,8 +667,35 @@ b, strong { font-weight: 700; }
 .stage-lap .lap-bar { height: 6px; max-width: 220px; }
 .stage-lap-text { display: block; margin-top: 3px; font-size: .76rem; color: var(--muted); }
 
-/* ホームの 大きい ボタンの 下の ひとこと */
+/* 大きい ボタンの 下の ひとこと */
 .start-note { margin: 8px 0 0; font-size: .84rem; }
+
+/* ------------------------------------------- えらぶ（階層の 入口）
+
+   ここは「ならべる ところ」では なく「入口」です。
+   1行に 1つの 行き先だけを 置き、中身は それぞれの 下の 階層に わけます。
+   たてに 長い 画面に すると、打ちはじめるまでに 読む ものが ふえます。 */
+
+.menu-list { display: flex; flex-direction: column; gap: 10px; }
+.menu-row {
+  display: flex; align-items: center; gap: 14px; width: 100%;
+  padding: 14px 16px; min-height: 76px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); color: var(--text);
+  box-shadow: var(--shadow); font: inherit; text-align: left; cursor: pointer;
+  transition: transform .12s ease, border-color .12s ease;
+}
+.menu-row:active { transform: translateY(1px) scale(.995); }
+.menu-row:hover { border-color: var(--primary); }
+.menu-row[disabled] { opacity: .55; cursor: default; box-shadow: none; }
+.menu-row[disabled]:hover { border-color: var(--line); }
+.menu-row .row-icon { flex: none; color: var(--primary); display: flex; }
+.menu-row .row-icon .ico { width: 28px; height: 28px; }
+.menu-row .row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.menu-row .row-title { font-weight: 700; }
+.menu-row .row-note { font-size: .86rem; color: var(--muted); }
+.menu-row .row-count { font-size: .8rem; color: var(--primary); font-weight: 700; }
+.menu-row .row-arrow { flex: none; color: var(--muted); display: flex; }
 
 /* ---------------------------------------------------------------- けっか */
 
@@ -1015,7 +1068,72 @@ body.root-bump .view { animation: bump .3s ease; }
 }
 
 /* 大きい 画面では 練習の お題を もっと 大きく */
-@media (min-width: 1000px) {
+@media (min-width: 1000px) and (min-height: 820px) {
   .q-kana { font-size: 3.2rem; }
   .play-stage { padding: 30px 26px; }
+}
+
+/* ---------------------------------------------------------------- たてが みじかい 画面
+
+   学校の Chromebook（1366×768）は、ブラウザの わくを のぞくと たてが
+   600px ほど しか ありません。打つ 画面は アプリの 入口 その ものなので、
+   **キーボードまで ぜんぶ 見えて いる** ことが 何より 大事です。
+   スクロールしないと キーボードが 見えないのは、打ちながら スクロールが
+   できない ぶん「使えない」のと 同じ です。
+
+   そこで たてが みじかい ときだけ、すきまと 絵を つめます。
+   お題の 文字は **いちばん 最後に、いちばん 少しだけ** 小さく します。 */
+
+@media (max-height: 820px) {
+  .view { padding-top: 10px; padding-bottom: 20px; }
+  .play { gap: 8px; }
+  .play-stage { padding: 12px 16px; }
+  .q-kana { font-size: clamp(1.7rem, 4.6vw, 2.4rem); }
+  .play-meter { gap: 6px; }
+  .meter { padding: 4px 12px; }
+  .play-lower { gap: 10px; }
+  .play-visual { max-width: 320px; }
+  .kb { font-size: clamp(8px, 1vw, 12px); }
+  .kb-key { min-height: 2.4em; }
+  .play-ready { font-size: .82rem; }
+}
+
+/* たてが みじかい ときは、おしらせの ぶんを キーボードに ゆずります */
+@media (max-height: 760px) {
+  .play-ready { display: none; }
+  .kb { font-size: clamp(8px, .85vw, 11px); }
+  .kb-key { min-height: 2.2em; }
+}
+
+/* たてが もっと みじかい とき。「やめる」は 1行に して、そえた ことばは
+   しまいます（ボタン じたいは かならず のこします。やめかたが 見えなく
+   なるのが いちばん こまるからです） */
+@media (max-height: 700px) {
+  .play { gap: 6px; }
+  .play-foot { min-height: 0; gap: 8px; }
+  .btn-stop { min-height: 40px; padding: 4px 16px; flex-direction: row; gap: 6px; }
+  .btn-stop .btn-note { display: none; }
+  .play-skip-btn, .play-foot .btn-ghost { min-height: 40px; }
+}
+
+/* 手の 絵を あきらめる ところ。
+ *
+ * よこに ひろい 画面（1080px いじょう）では、手の 絵は キーボードの
+ * となりに ならぶので たてを 食いません。だから **せまくて みじかい**
+ * ときだけ 消します。学校の Chromebook（よこ 1366px）は となりに ならぶ
+ * ほうに 入るので、たてが みじかくても 手の 絵は のこります。
+ *
+ * 消えても キーの ひかりと「みぎの ひとさしゆびで」の ことばは のこるので、
+ * 「どの 指か」は それでも つたわります。 */
+@media (max-height: 660px) and (max-width: 1079px) {
+  .play-visual { display: none; }
+  .play-ready { display: none; }
+  .play-stage { padding: 8px 14px; }
+}
+
+/* どうしても 入らない とき（字を 大きく して いる・ウィンドウが 小さい） */
+@media (max-height: 560px) {
+  .play-visual { display: none; }
+  .play-ready { display: none; }
+  .play-stage { padding: 8px 14px; }
 }

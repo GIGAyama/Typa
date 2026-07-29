@@ -4,10 +4,13 @@
  * =====================================================================
  * Typa は 画面を はっきりした 階層に します。
  *
- *   ホーム
- *   れんしゅう → コース → ステージ → けっか
- *   きろく
- *   せってい → つかいかた
+ *   うつ（ひらいた ところ。すぐ 打てる）→ けっか
+ *   えらぶ → コースから えらぶ → コース → ステージ
+ *          → チャレンジ
+ *          → にがて とっくん
+ *          → そろそろ ふくしゅう
+ *   きろく → バッジ
+ *   せってい → ローマ字ひょう / きろくを もちだす
  *
  * 「もどる」は つぎの 3つが すべて **同じ 1つの 動き** に なります。
  *   1. 画面下の ナビゲーションバーの「もどる」を タップ
@@ -30,17 +33,28 @@
   const EDGE_PX = 28;             // 画面の はしと みなす はば
   const SWIPE_MIN = 60;           // 「もどる」と 判定する よこの うごき
 
-  /** タブ（いちばん 上の 階層）。ここでは 下部バーの ならびも 決めます */
+  /**
+   * タブ（いちばん 上の 階層）。ここでは 下部バーの ならびも 決めます。
+   *
+   * ■ いちばん さいしょが「うつ」です
+   * アプリを ひらいた ところが そのまま 打つ 画面に なります。
+   * えらぶ・きろく・せっていは、その **下の 階層** に します。
+   * 「ひらいてから 打ちはじめるまで」を 0タップに するのが この アプリの
+   * いちばんの ねらいなので、入口に 何かを ならべる ことは しません。
+   */
   const TABS = [
-    { id: 'home', label: 'ホーム', icon: 'home' },
-    { id: 'courses', label: 'れんしゅう', icon: 'keyboard' },
+    { id: 'play', label: 'うつ', icon: 'keyboard' },
+    { id: 'menu', label: 'えらぶ', icon: 'grid' },
     { id: 'records', label: 'きろく', icon: 'chart' },
     { id: 'settings', label: 'せってい', icon: 'gear' }
   ];
 
+  /** もどる先が なくなった ときに かえる ところ */
+  const ROOT_TAB = TABS[0].id;
+
   const state = {
     stack: [],          // [{ screen, params }] いちばん うしろが いま出ている画面
-    tab: 'home',
+    tab: ROOT_TAB,
     lastBackAt: 0,
     handlers: {},       // screen → { render(params), leave(params) }
     onChange: null,     // 画面が かわったときに よばれます
@@ -48,7 +62,18 @@
   };
 
   function current() { return state.stack[state.stack.length - 1] || null; }
-  function canGoBack() { return state.stack.length > 1 || state.tab !== 'home'; }
+
+  /**
+   * 「もどる」で 行くところが あるか。
+   * タブの いちばん 上に いても、そこが タブ本来の 画面で なければ
+   * （たとえば「うつ」タブに 出した けっか画面）まだ もどれます。
+   */
+  function canGoBack() {
+    const cur = current();
+    if (state.stack.length > 1) return true;
+    if (cur && cur.screen !== state.tab) return true;
+    return state.tab !== ROOT_TAB;
+  }
 
   /** 画面の 中身を 描く 担当を 登録します */
   function register(screen, handler) { state.handlers[screen] = handler; }
@@ -108,8 +133,13 @@
 
   /**
    * 1つ 前の 階層へ もどります。
-   * いちばん 上の 階層に いるときは、ホームタブへ もどります。
-   * ホームの いちばん 上では 何も しません（＝アプリから 出ません）。
+   *
+   * じゅんばんに つぎを ためします。
+   *   1. つみあがって いれば 1つ すてる
+   *   2. タブの いちばん 上だが、そのタブ本来の 画面で なければ
+   *      本来の 画面に もどす（「うつ」タブの けっか画面 → 打つ 画面）
+   *   3. いちばん さいしょの タブでは なければ、そこへ もどる
+   *   4. どれも なければ 画面を ゆらして 知らせる（＝アプリから 出ません）
    */
   function back(source) {
     const now = Date.now();
@@ -124,9 +154,14 @@
       render();
       return;
     }
-    if (state.tab !== 'home') {
-      state.tab = 'home';
-      state.stack = [{ screen: 'home', params: {} }];
+    if (cur && cur.screen !== state.tab) {
+      state.stack = [{ screen: state.tab, params: {} }];
+      render();
+      return;
+    }
+    if (state.tab !== ROOT_TAB) {
+      state.tab = ROOT_TAB;
+      state.stack = [{ screen: ROOT_TAB, params: {} }];
       render();
       return;
     }
@@ -226,7 +261,7 @@
   function init(opt) {
     state.onChange = opt.onChange || null;
     state.onRootBack = opt.onRootBack || null;
-    state.tab = opt.start || 'home';
+    state.tab = opt.start || ROOT_TAB;
     state.stack = [{ screen: state.tab, params: {} }];
     setupHistoryGuard();
     if (opt.root) setupEdgeSwipe(opt.root, opt.indicator || null);
@@ -235,7 +270,7 @@
 
   global.Typa = global.Typa || {};
   global.Typa.Nav = {
-    TABS, init, register, go, back, replace, selectTab, render, current, canGoBack,
+    TABS, ROOT_TAB, init, register, go, back, replace, selectTab, render, current, canGoBack,
     get tab() { return state.tab; }
   };
 })(window);

@@ -76,7 +76,7 @@
     itemKeyCount: 0, lastOk: true, skipLatency: false,
     running: false, imeWarned: false,
     settings: null, view: null, showKeyboard: true, showHands: false, showBuddy: false,
-    timerId: 0, onFinish: null, onStop: null
+    timerId: 0, onFinish: null, onStop: null, onPick: null
   };
 
   const $ = id => document.getElementById(id);
@@ -95,10 +95,18 @@
     return `
       <div class="play" id="play-root">
         <div class="play-head">
-          <div class="play-title">
-            <span class="chip chip-${course.color}">${esc(course.short)}</span>
-            <b>${esc(stage.title)}</b>
-          </div>
+          <!-- ステージ名は そのまま 階層への 入口です。「これじゃ ない」と
+               思った ときに、下のバーまで 目を うつさずに 変えられます -->
+          ${stage.noStars
+            ? `<div class="play-title">
+                 <span class="chip chip-${course.color}">${esc(course.short)}</span>
+                 <b>${esc(stage.title)}</b>
+               </div>`
+            : `<button class="play-title is-link" id="play-pick-btn" type="button">
+                 <span class="chip chip-${course.color}">${esc(course.short)}</span>
+                 <b>${esc(stage.title)}</b>
+                 <span class="play-title-hint">かえる</span>
+               </button>`}
           <div class="play-progress" role="group" aria-label="すすみぐあい">
             <div class="bar${limited ? ' bar-time' : ''}"><span id="play-bar"></span></div>
             <span class="num">${limited
@@ -107,21 +115,31 @@
           </div>
         </div>
 
-        <div class="play-stage" id="play-stage">
-          <p class="q-label" id="q-label"></p>
-          <p class="q-kana" id="q-kana"></p>
-          <p class="q-romaji" id="q-romaji"></p>
-          <!-- ひとまわり できた ときの おしらせ。打つのは 止めません -->
-          <p class="lap-flash" id="play-lap-flash" hidden aria-hidden="true"></p>
-        </div>
+        <!-- ひろい 画面では お題と キャラクターを よこに ならべます。
+             お題は いちばん 大きい ままで、たての ながさを へらせます -->
+        <div class="play-main">
+          <div class="play-col">
+            <div class="play-stage" id="play-stage">
+              <p class="q-label" id="q-label"></p>
+              <p class="q-kana" id="q-kana"></p>
+              <p class="q-romaji" id="q-romaji"></p>
+              <!-- ひとまわり できた ときの おしらせ。打つのは 止めません -->
+              <p class="lap-flash" id="play-lap-flash" hidden aria-hidden="true"></p>
+            </div>
 
-        <div class="play-finger" id="play-finger" aria-live="polite"></div>
+            <div class="play-finger" id="play-finger" aria-live="polite"></div>
 
-        <div class="play-meter">
-          <div class="meter"><span class="meter-label">はやさ</span><b id="m-kps">0.0</b><span class="meter-unit">打/びょう</span></div>
-          <div class="meter"><span class="meter-label">正かくさ</span><b id="m-acc">100</b><span class="meter-unit">%</span></div>
-          <div class="meter"><span class="meter-label">ミス</span><b id="m-miss">0</b><span class="meter-unit">かい</span></div>
-          <div class="meter meter-combo" id="m-combo-box"><span class="meter-label">れんぞく</span><b id="m-combo">0</b><span class="meter-unit">だ</span></div>
+            <div class="play-meter">
+              <div class="meter"><span class="meter-label">はやさ</span><b id="m-kps">0.0</b><span class="meter-unit">打/びょう</span></div>
+              <div class="meter"><span class="meter-label">正かくさ</span><b id="m-acc">100</b><span class="meter-unit">%</span></div>
+              <div class="meter"><span class="meter-label">ミス</span><b id="m-miss">0</b><span class="meter-unit">かい</span></div>
+              <div class="meter meter-combo" id="m-combo-box"><span class="meter-label">れんぞく</span><b id="m-combo">0</b><span class="meter-unit">だ</span></div>
+            </div>
+          </div>
+
+          <div class="play-side" id="play-side">
+            <div id="play-buddy"></div>
+          </div>
         </div>
 
         <div class="ime-warn" id="ime-warn" hidden>
@@ -130,12 +148,13 @@
 
         <p class="play-ready" id="play-ready">${T.icon('play')} さいしょの 1打で スタートします。10びょうでも きろくは のこります。</p>
 
-        <div class="play-visual">
-          <div id="play-hands"></div>
-          <div id="play-buddy"></div>
+        <!-- 手の 絵と キーボードは ひとくみ です。ひろい 画面では よこに
+             ならべます。学校の Chromebook は「よこに ひろく、たてに みじかい」
+             ので、たてに つむと キーボードが 画面の 外に 出て しまいます -->
+        <div class="play-lower">
+          <div class="play-visual"><div id="play-hands"></div></div>
+          <div class="kb-wrap"><div id="play-kb"></div></div>
         </div>
-
-        <div class="kb-wrap"><div id="play-kb"></div></div>
 
         <div class="play-foot">
           <button class="btn btn-ghost" id="play-skip-btn" type="button" hidden>この お題を とばす</button>
@@ -151,7 +170,7 @@
   // ------------------------------------------------------------------
 
   /**
-   * @param {Object} p { course, stage, source, mount, special, onStop }
+   * @param {Object} p { course, stage, source, mount, special, onStop, onPick }
    *   stage.endless … お題が つきても じゅんばんを かえて つづけます
    *   stage.limitMs … 時間ぎめ（チャレンジ）
    */
@@ -167,6 +186,7 @@
     state.endless = !!p.stage.endless;
     state.limitMs = p.stage.limitMs || 0;
     state.onStop = typeof p.onStop === 'function' ? p.onStop : null;
+    state.onPick = typeof p.onPick === 'function' ? p.onPick : null;
     state.pool = p.stage.items.slice();
 
     // ひとまわりの ながさと、前の れんしゅうの つづき。
@@ -237,12 +257,14 @@
       });
     }
     if (state.showHands) T.Hands.render($('play-hands'));
-    if (state.showBuddy) T.Buddy.render($('play-buddy'));
-    const visual = document.querySelector('.play-visual');
-    if (visual && !state.showHands && !state.showBuddy) visual.hidden = true;
+    else { const visual = document.querySelector('.play-visual'); if (visual) visual.hidden = true; }
+    if (state.showBuddy) T.Buddy.render($('play-buddy'), { job: settings.buddyJob });
+    else { const side = $('play-side'); if (side) side.hidden = true; }
 
     $('play-skip-btn').addEventListener('click', skipItem);
     $('play-stop-btn').addEventListener('click', () => { if (state.onStop) state.onStop(); });
+    const pick = $('play-pick-btn');
+    if (pick) pick.addEventListener('click', () => { if (state.onPick) state.onPick(); });
     loadItem();
     renderMeters();
     bindKeys();
@@ -505,15 +527,16 @@
       // おまけの 周の あんないは、打ちはじめたら 消します
       state.retryNotice = false;
       const notice = $('play-ready');
-      if (notice) notice.hidden = true;
+      if (notice) notice.classList.add('is-gone');
     }
 
     if (!state.startTime) {
       // さいしょの 1打。ここから 時計が うごきはじめます
       state.startTime = now;
       state.lastKeyTime = now;
+      // 場所は のこして うすくするだけ。消すと 画面が とびます
       const ready = $('play-ready');
-      if (ready) ready.hidden = true;
+      if (ready) ready.classList.add('is-gone');
     } else {
       // 5秒より 長い 手止まりは 学習時間から のぞきます（チャレンジは のぞきません）
       const gap = now - state.lastKeyTime;
@@ -544,7 +567,7 @@
       if (state.combo > state.bestCombo) state.bestCombo = state.combo;
       if (code && state.showKeyboard) T.Keyboard.flash(code, true);
       if (state.showHands && wantFinger) T.Hands.press(wantFinger.id, true);
-      if (state.showBuddy) T.Buddy.react('hit');
+      if (state.showBuddy) T.Buddy.tap();
       if (state.combo > 0 && state.combo % COMBO_STEP === 0) celebrateCombo();
       beep(true);
     } else {
@@ -555,7 +578,7 @@
       recordMiss(ch, expectedChar);
       if (code && state.showKeyboard) T.Keyboard.flash(code, false);
       if (state.showHands && wantFinger) T.Hands.press(wantFinger.id, false);
-      if (state.showBuddy) T.Buddy.react('miss');
+      if (state.showBuddy) T.Buddy.miss();
       shake();
       beep(false);
       if (state.itemMistakes >= SKIP_AFTER) {
@@ -689,6 +712,9 @@
     if (stage && ok) {
       stage.classList.add('is-clear');
       setTimeout(() => stage.classList.remove('is-clear'), 260);
+      // お題 1つぶんの しごとが できあがりました。キャラクターの
+      // よこに ものが つみ上がって いくのは ここです
+      if (state.showBuddy) T.Buddy.done();
     }
 
     // 時間ぎめ（チャレンジ）と おわりの ない れんしゅうは、ひとまわりを 数えません
@@ -723,7 +749,7 @@
     const notice = $('play-ready');
     if (notice) {
       notice.innerHTML = `${T.icon('retry')} もう1かいだけ、さっき まちがえた ことばを やってみよう。`;
-      notice.hidden = false;
+      notice.classList.remove('is-gone');
       state.retryNotice = true;
     }
     return true;
@@ -747,7 +773,7 @@
       const phase = $('play-phase');
       if (phase) phase.hidden = true;
       const notice = $('play-ready');
-      if (notice && state.retryNotice) { notice.hidden = true; state.retryNotice = false; }
+      if (notice && state.retryNotice) { notice.classList.add('is-gone'); state.retryNotice = false; }
     }
     state.laps++;
     state.phase = 'main';
@@ -771,7 +797,7 @@
       flash.classList.add('is-on');
       setTimeout(() => { flash.hidden = true; flash.classList.remove('is-on'); }, 1600);
     }
-    if (state.showBuddy) T.Buddy.react('cheer');
+    if (state.showBuddy) T.Buddy.cheer();
     chime();
   }
 
@@ -884,7 +910,7 @@
       void box.offsetWidth;
       box.classList.add('is-up');
     }
-    if (state.showBuddy) T.Buddy.react('combo');
+    if (state.showBuddy) T.Buddy.combo();
     chime();
   }
 
