@@ -185,10 +185,15 @@
    */
   function bindSubtabs(attr, onPick) {
     const list = view.querySelectorAll(`[data-${attr}]`);
-    list.forEach(el => {
+    list.forEach((el, i) => {
       el.addEventListener('click', () => {
         const id = el.dataset[attr.replace(/-([a-z])/g, (m, c) => c.toUpperCase())];
         if (el.classList.contains('on')) return;
+        // ひきだしの ならびの どちらへ 動いたかを おぼえて おきます。
+        // 中身も その 向きから すべりこむので、下部バーの タブと
+        // 同じ 手ざわりに なります
+        const from = Array.prototype.findIndex.call(list, b => b.classList.contains('on'));
+        sectionDir = from < 0 ? null : (i > from ? 'right' : 'left');
         list.forEach(b => {
           const on = b === el;
           b.classList.toggle('on', on);
@@ -198,6 +203,9 @@
       });
     });
   }
+
+  /** ひきだしを 切りかえた ときの 向き（bindSubtabs → swapSection）*/
+  let sectionDir = null;
 
   /** ひきだしの 中身だけを 入れかえて、その ぶんだけ 出しなおします */
   function swapSection(box, html, bind) {
@@ -209,7 +217,8 @@
     void box.offsetWidth;
     box.classList.add('section-body');
     if (bind) bind(box);
-    if (T.FX) T.FX.enter(box);
+    if (T.FX) T.FX.enter(box, { dir: sectionDir });
+    sectionDir = null;
   }
 
   /** れんぞく日数の 1行 */
@@ -2512,30 +2521,38 @@
    */
   function bindGoButtons(scope) {
     const box = scope || view;
-    box.querySelectorAll('[data-go-course]').forEach(el => {
-      el.addEventListener('click', () => T.Nav.go('course', { courseId: el.dataset.goCourse }));
-    });
-    box.querySelectorAll('[data-go-stage]').forEach(el => {
-      el.addEventListener('click', () => {
-        const [courseId, stageId] = el.dataset.goStage.split(':');
-        T.Nav.go('play', { courseId, stageId, source: 'course' });
+
+    /**
+     * 押した ときに「とびらが ひらく」演出を 見せてから すすみます。
+     * 演出は 0.15びょう だけ で、「動きを へらす」設定の 端末では
+     * 待たずに すぐ すすみます（fx.js の tapThen）。
+     *
+     * ■ なぜ わざわざ 待つのか
+     * 押した ことが 目に 見えないと、とどいたか どうか わからず
+     * もう一度 押して しまいます。ほんの わずかな 間でも
+     * 「押せた」と わかる ほうが、けっきょく はやく すすめます。
+     */
+    const onGo = (sel, run) => {
+      box.querySelectorAll(sel).forEach(el => {
+        el.addEventListener('click', () => {
+          if (T.FX && T.FX.tapThen) T.FX.tapThen(el, () => run(el));
+          else run(el);
+        });
       });
+    };
+
+    onGo('[data-go-course]', el => T.Nav.go('course', { courseId: el.dataset.goCourse }));
+    onGo('[data-go-stage]', el => {
+      const [courseId, stageId] = el.dataset.goStage.split(':');
+      T.Nav.go('play', { courseId, stageId, source: 'course' });
     });
-    box.querySelectorAll('[data-go-screen]').forEach(el => {
-      el.addEventListener('click', () => T.Nav.go(el.dataset.goScreen, {}));
-    });
-    box.querySelectorAll('[data-go-challenge]').forEach(el => {
-      el.addEventListener('click', () => T.Nav.go('play', {
-        special: 'challenge', pool: challengePick.pool, seconds: challengePick.seconds
-      }));
-    });
-    box.querySelectorAll('[data-go-weak]').forEach(el => {
-      el.addEventListener('click', () => T.Nav.go('play', { special: 'weak' }));
-    });
+    onGo('[data-go-screen]', el => T.Nav.go(el.dataset.goScreen, {}));
+    onGo('[data-go-challenge]', () => T.Nav.go('play', {
+      special: 'challenge', pool: challengePick.pool, seconds: challengePick.seconds
+    }));
+    onGo('[data-go-weak]', () => T.Nav.go('play', { special: 'weak' }));
     // タブそのものへ。行き先が タブなら、その タブの いちばん 上に そろえます
-    box.querySelectorAll('[data-tab-go]').forEach(el => {
-      el.addEventListener('click', () => T.Nav.selectTab(el.dataset.tabGo));
-    });
+    onGo('[data-tab-go]', el => T.Nav.selectTab(el.dataset.tabGo));
   }
 
   /**
@@ -2600,11 +2617,30 @@
     // 画面を 出す ときの うごき。**打つ 画面には つけません。**
     // 打ちながら 画面が うごくのは いちばん さけたい こと です
     // （play.js が じぶんで 中身を 組み立てるので、ここでは さわりません）。
+    //
+    // info.dir は「どっちへ 動いたか」（nav.js の DIR）です。
+    // 奥へ 入った ときは 右から、もどった ときは 左から すべりこみます。
     if (T.FX) {
       // まえの 画面の おいわいが とび つづけて いたら、ここで かたづけます
       T.FX.clearLayer();
-      if (cur && cur.screen !== 'play') T.FX.enter(view);
+      if (cur && cur.screen !== 'play') T.FX.enter(view, { dir: info.dir });
     }
+  }
+
+  /**
+   * 中身を 描きかえる 直前に よばれます。
+   * いまの 見た目を 写しとって、反対がわへ すべらせながら 消します
+   * （入って くる 画面と すれちがいます）。
+   *
+   * 打つ 画面に かかわる ときは 写しません。play.js が 画面を はかって
+   * キーボードの 大きさを 決めるので、よけいな ものを 画面に
+   * のこしたく ない からです。
+   */
+  function beforeRender(dir, next) {
+    if (!T.FX || !view) return;
+    if (!dir || !next || next.screen === 'play') return;
+    if (document.body.dataset.screen === 'play') return;
+    T.FX.ghost(view, dir === 'back' || dir === 'left' ? 'back' : 'fwd');
   }
 
   // ------------------------------------------------------------------
@@ -2657,6 +2693,7 @@
       indicator: $('edge-hint'),
       start,
       onChange: updateChrome,
+      onBeforeRender: beforeRender,
       onRootBack: () => {
         document.body.classList.add('root-bump');
         setTimeout(() => document.body.classList.remove('root-bump'), 300);
