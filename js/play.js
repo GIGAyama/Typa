@@ -56,6 +56,16 @@
   const COMBO_STEP = 10;       // れんぞくが これの ばいすうに なると ほめます
   const RETRY_MAX = 5;         // さいごに もう1回 出す お題の 数の かぎり
 
+  /**
+   * これだけ 画面を はなれて いたら、きろくを そこで 1つ 区切ります。
+   *
+   * 5分より みじかく すると、**先生の 話を 聞くための 数分の 離席**まで
+   * 区切りに なって しまいます。長く すると、朝 ひらいて 昼に もどって きた
+   * 回が ひとつづきの れんしゅうとして 数えられます。
+   * 学習ログの きまり（§5.4）に そろえて 5分に します。
+   */
+  const AWAY_SPLIT_MS = 300000;
+
   const state = {
     course: null, stage: null, source: 'course', special: '',
     pool: [], queue: [], current: null, index: 0,
@@ -64,11 +74,15 @@
     // つづいて いる ぶんも 入って います（0 から はじまるとは かぎりません）
     lapNeed: 1, lapPos: 0, lapStart: 0, doneItems: 0, laps: 0,
     matcher: null,
-    startedAt: null, startTime: 0, lastKeyTime: 0, idleMs: 0, pausedAt: 0, pausedMs: 0,
+    startedAt: null, clockStartedAt: null, startTime: 0, lastKeyTime: 0,
+    idleMs: 0, pausedAt: 0, pausedMs: 0, leftAt: 0,
     itemStart: 0, itemMistakes: 0, itemWrong: [], itemFirstTry: true,
     results: [],
     correctKeys: 0, missKeys: 0, combo: 0, bestCombo: 0,
     missByKey: {}, missByFinger: {},
+    // おまけの 周（打ち直し）の ミスは べつに 数えます。学習ログでは 本編と
+    // 分けて のこすためです（にがての 集計には ぜんぶ つかいます）
+    retryMissByKey: {}, retryMissByFinger: {},
     phase: 'main', retryPool: [], retryTotal: 0, retryUse: true, retryNotice: false,
     // おまけの 周に つかった 時間は はやさの 計算から のぞきます
     retryMs: 0, retryEnter: 0, retryIdleMs: 0, idleEnter: 0,
@@ -76,7 +90,7 @@
     itemKeyCount: 0, lastOk: true, skipLatency: false,
     running: false, imeWarned: false,
     settings: null, view: null, showKeyboard: true, showHands: false, showBuddy: false,
-    timerId: 0, onFinish: null, onStop: null, onPick: null
+    timerId: 0, onFinish: null, onStop: null, onPick: null, onAway: null
   };
 
   const $ = id => document.getElementById(id);
@@ -202,6 +216,8 @@
     state.limitMs = p.stage.limitMs || 0;
     state.onStop = typeof p.onStop === 'function' ? p.onStop : null;
     state.onPick = typeof p.onPick === 'function' ? p.onPick : null;
+    // 5分いじょう 画面を はなれて もどって きた ときの 行き先（app.js が 決めます）
+    state.onAway = typeof p.onAway === 'function' ? p.onAway : null;
     state.pool = p.stage.items.slice();
 
     // ひとまわりの ながさと、前の れんしゅうの つづき。
@@ -222,6 +238,8 @@
     state.bestCombo = 0;
     state.missByKey = {};
     state.missByFinger = {};
+    state.retryMissByKey = {};
+    state.retryMissByFinger = {};
     state.lat = {};
     state.conf = {};
     state.rule = {};
@@ -244,9 +262,14 @@
     state.pausedMs = 0;
     state.imeWarned = false;
     state.startedAt = new Date();
+    state.clockStartedAt = null;            // さいしょの 1打の 時こく（学習ログの startedAt）
     state.startTime = 0;                    // 0 = まだ 1打も 打って いない
     state.lastKeyTime = 0;
+    state.leftAt = 0;
     state.running = true;
+    // 学習ログの 時計（60秒 基準・8アプリ 共通）。画面に 出す 速さの 計算とは
+    // べつ物です。ここを 5秒 基準に すると Typa だけ 学習時間が みじかく 出ます
+    if (T.Study) T.Study.beginSession();
     // ヒントの つよさは ここで 1回だけ 決めます。あとは state.view だけを
     // 見るので、せっていの スイッチと 言うことが 食いちがう ことが ありません。
     // 1回の 中で 見え方が かわると 子どもが まようので、とちゅうでは かえません
@@ -286,6 +309,7 @@
     bindKeys();
     bindFit();
     bindLeaveGuard();
+    bindVisibility();
     if (state.limitMs) startTimer();
   }
 
@@ -620,19 +644,52 @@
       renderProgress();
       if (state.startTime && elapsed() >= state.limitMs) finish('completed');
     }, 100);
-    document.addEventListener('visibilitychange', onVisibility);
   }
 
   function stopTimer() {
     if (state.timerId) clearInterval(state.timerId);
     state.timerId = 0;
-    document.removeEventListener('visibilitychange', onVisibility);
   }
 
-  /** ほかの 画面に うつって いる あいだは 時計を 止めます（ずるにも ならず、そんにも なりません） */
+  // ------------------------------------------------------------------
+  // ほかの タブへ うつって いる あいだ
+  // ------------------------------------------------------------------
+  //
+  // ■ 時計は 止めます
+  // ずるにも ならず、そんにも なりません。前は 時間ぎめの チャレンジだけで
+  // 止めて いましたが、ふつうの れんしゅうでも 止めます。**止めないと、
+  // 画面を ひらいた まま 図書室へ 行った 時間まで「れんしゅうした 時間」に
+  // 入って しまう**からです。きょうの じかんも、先生が 見る 学習時間も
+  // 実さいより 長く 出ます。
+  //
+  // ■ 5分より 長く はなれて いたら、そこで きろくを 1つ 区切ります
+  // 朝 ひらいて 昼に もどって きた 回を ひとつづきの れんしゅうと して
+  // 数えないためです。**はなれた 時こくで きろくを 締め**、もどって きたら
+  // 新しい きろくを はじめます。打った ぶんは すすみぐあいに たまって いるので、
+  // ステージは とちゅうの お題から そのまま つづきます。
+
+  let visibilityHandler = null;
+
+  function bindVisibility() {
+    unbindVisibility();
+    visibilityHandler = onVisibility;
+    document.addEventListener('visibilitychange', visibilityHandler);
+  }
+
+  function unbindVisibility() {
+    if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler);
+    visibilityHandler = null;
+  }
+
   function onVisibility() {
-    if (!state.running || !state.startTime) return;
-    if (document.hidden) { state.pausedAt = performance.now(); return; }
+    if (!state.running) return;
+    if (document.hidden) {
+      state.leftAt = Date.now();
+      if (state.startTime) state.pausedAt = performance.now();
+      return;
+    }
+    const away = state.leftAt ? Math.max(0, Date.now() - state.leftAt) : 0;
+    state.leftAt = 0;
     if (state.pausedAt) {
       state.pausedMs += performance.now() - state.pausedAt;
       state.pausedAt = 0;
@@ -641,6 +698,13 @@
       // これを 数えると、ありもしない「速い キー」が できて しまいます
       state.skipLatency = true;
     }
+    // 1打も 打って いない 回は 区切りません。中身の ない きろくが
+    // ログの わく（500件）を うめて しまいます
+    if (away < AWAY_SPLIT_MS || !hasWork() || !state.onAway) return;
+    const resume = state.onAway;
+    // 待って いた 5分を 学習時間に 入れない ため、**はなれた 時こく**で 締めます
+    finish('left', new Date(Date.now() - away).toISOString());
+    resume();
   }
 
   // ------------------------------------------------------------------
@@ -697,8 +761,11 @@
     }
 
     if (!state.startTime) {
-      // さいしょの 1打。ここから 時計が うごきはじめます
+      // さいしょの 1打。ここから 時計が うごきはじめます。
+      // performance.now() は 経過時間を はかる ための 時計なので、
+      // 「何時 何分に はじめたか」は べつに Date から とります
       state.startTime = now;
+      state.clockStartedAt = new Date();
       state.lastKeyTime = now;
       // 場所は のこして うすくするだけ。消すと 画面が とびます
       const ready = $('play-ready');
@@ -834,6 +901,13 @@
     const found = T.Layout.findKey(state.settings.layout, expectedChar);
     const finger = found ? T.Layout.fingerOf(found.key.code) : null;
     if (finger) state.missByFinger[finger.id] = (state.missByFinger[finger.id] || 0) + 1;
+    // おまけの 周の ぶんは、うえの 合計に 入れた まま べつにも 数えます。
+    // にがての 集計（missSummary）は これまでどおり 合計を つかい、
+    // 学習ログだけが 本編と 打ち直しを 分けて 見ます
+    if (state.phase === 'retry') {
+      state.retryMissByKey[key] = (state.retryMissByKey[key] || 0) + 1;
+      if (finger) state.retryMissByFinger[finger.id] = (state.retryMissByFinger[finger.id] || 0) + 1;
+    }
   }
 
   /** その 文字を 打つ ことに なって いる 指（見つからなければ null） */
@@ -968,6 +1042,22 @@
   }
 
   /**
+   * ヒントの つよさを、あとから 読める 名前に します。
+   * 数字（0〜3）の ままだと、つよさの だんかいを 足した ときに
+   * 過去の きろくの 意味が ずれます。
+   */
+  const HINT_NAMES = ['all', 'finger-color', 'position-only', 'none'];
+
+  function hintLevelName(view) {
+    if (!view) return '';
+    const level = view.level;
+    if (typeof level === 'number' && HINT_NAMES[level]) {
+      return view.auto ? `auto-${HINT_NAMES[level]}` : HINT_NAMES[level];
+    }
+    return String(level || '');
+  }
+
+  /**
    * いま までの ぶんを まとめて 返します。
    *
    * status
@@ -977,17 +1067,23 @@
    *
    * **どの status でも 中身は 同じ です。** 「さいごまで やった 回だけ
    * 数える」という 分けかたを やめた ので、ここで 分ける ものが ありません。
+   *
+   * @param {string} status
+   * @param {string} [endedAt] おわりの 時こく（ISO）。5分いじょう はなれて いた ときは
+   *   **はなれた 時こく**を わたします。待って いた 時間を きろくに 入れない ためです
    */
-  function finish(status) {
+  function finish(status, endedAt) {
     if (!state.running) return null;
     state.running = false;
     stopTimer();
     unbindKeys();
     unbindFit();
     unbindLeaveGuard();
+    unbindVisibility();
     T.Buddy.stop();
 
     const stats = liveStats();
+    const activeMs60 = T.Study ? T.Study.endSession() : null;
     const total = state.correctKeys + state.missKeys;
     const result = {
       course: state.course,
@@ -996,9 +1092,15 @@
       special: state.special,
       status,
       startedAt: state.startedAt,
-      finishedAt: new Date().toISOString(),
+      // さいしょの 1打の 時こく。学習ログの startedAt は こちらを つかいます
+      // （elapsedMs も そこから 数えて いるので、2つの 数字が 合います）
+      clockStartedAt: state.clockStartedAt || state.startedAt,
+      finishedAt: endedAt || new Date().toISOString(),
       elapsedMs: stats.elapsedMs,
+      // 5秒 基準（アプリの 速さの 計算に つかう 時間）
       activeMs: stats.activeMs,
+      // 60秒 基準（8アプリ 共通の 学習時間）。名前を 分けて、まざらない ように します
+      activeMs60: activeMs60,
       items: state.results,
       correctKeys: state.correctKeys,
       totalKeys: total,
@@ -1008,6 +1110,13 @@
       combo: state.bestCombo,
       missByKey: state.missByKey,
       missByFinger: state.missByFinger,
+      // おまけの 周（打ち直し）の ぶん。学習ログが 本編と 分けるのに つかいます
+      retryMissByKey: state.retryMissByKey,
+      retryMissByFinger: state.retryMissByFinger,
+      retryMs: Math.round(retryElapsed()),
+      // ヒントの つよさ。強い ヒントの まま 高い 正答率なのか、
+      // ヒントを 消しても たもてて いるのかで、身に ついた ぐあいが ちがいます
+      hintLevel: hintLevelName(state.view),
       lat: state.lat,
       conf: state.conf,
       rule: state.rule,

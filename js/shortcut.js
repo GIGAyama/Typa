@@ -29,6 +29,9 @@
   const state = {
     course: null, stage: null, tasks: [], index: 0,
     results: [], startedAt: null, startTime: 0,
+    // ほかの タブへ うつって いた あいだは 時計を 止めます。止めないと、
+    // 画面を ひらいた まま わすれた 時間まで「れんしゅうした 時間」に なります
+    pausedAt: 0, pausedMs: 0,
     copiedText: '', beforeValue: '', running: false,
     onFinish: null, attempts: 0
   };
@@ -111,7 +114,11 @@
     state.results = [];
     state.startedAt = new Date();
     state.startTime = performance.now();
+    state.pausedAt = 0;
+    state.pausedMs = 0;
     state.running = true;
+    // 学習ログの 時計（60秒 基準・8アプリ 共通）
+    if (T.Study) T.Study.beginSession();
 
     p.mount.innerHTML = screenHtml(p.course, p.stage);
     $('sc-total').textContent = String(state.tasks.length);
@@ -119,6 +126,59 @@
     resetEditor();
     renderTask();
     bind();
+    bindLeaveGuard();
+    bindVisibility();
+  }
+
+  /** はじめから いままでの 時間。ほかの タブに いた あいだは 入れません */
+  function elapsed() {
+    const now = state.pausedAt || performance.now();
+    return Math.max(0, now - state.startTime - state.pausedMs);
+  }
+
+  // ------------------------------------------------------------------
+  // 画面を はなれた ときに とりこぼさない
+  // ------------------------------------------------------------------
+  //
+  // ここは 打つ 画面（play.js）と 同じ 考えかたです。タブを とじられた ときに
+  // 何も よばれないと、やった 課題が まるごと 消えます。Chromebook では
+  // メモリ不足で タブが すてられる ことも あるので、pagehide で かならず 締めます。
+  //
+  // 打つ 画面と ちがい、**もどって きた ときに 区切り直しは しません**。
+  // ショートカットは 課題の じゅんばんに 意味が あり（コピー → はりつけ）、
+  // 入れなおすと さいしょの 課題まで もどって しまうからです。
+  // 時計を 止めるだけに して、はなれて いた 時間を きろくに 入れません。
+
+  let leaveHandler = null;
+  let visibilityHandler = null;
+
+  function bindLeaveGuard() {
+    unbindLeaveGuard();
+    leaveHandler = () => { if (state.running && hasWork()) finish('left'); };
+    global.addEventListener('pagehide', leaveHandler);
+  }
+
+  function unbindLeaveGuard() {
+    if (leaveHandler) global.removeEventListener('pagehide', leaveHandler);
+    leaveHandler = null;
+  }
+
+  function bindVisibility() {
+    unbindVisibility();
+    visibilityHandler = () => {
+      if (!state.running) return;
+      if (document.hidden) { state.pausedAt = performance.now(); return; }
+      if (state.pausedAt) {
+        state.pausedMs += performance.now() - state.pausedAt;
+        state.pausedAt = 0;
+      }
+    };
+    document.addEventListener('visibilitychange', visibilityHandler);
+  }
+
+  function unbindVisibility() {
+    if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler);
+    visibilityHandler = null;
   }
 
   function resetEditor() {
@@ -249,6 +309,9 @@
     judge(ok, '');
     state.results.push({
       q: task.name,
+      // 学習ログの 設問IDは 課題の id を つかいます。名前（表示用）は
+      // 言いまわしを 直す たびに かわり、過去の きろくと つながらなく なります
+      qid: task.id,
       ok: !!ok,
       firstTry: !!ok && state.attempts === 0,
       tries: state.attempts + 1,
@@ -280,16 +343,23 @@
     if (!state.running) return null;
     state.running = false;
     unbind();
-    const elapsed = performance.now() - state.startTime;
+    unbindLeaveGuard();
+    unbindVisibility();
+    const elapsedMs = elapsed();
+    const activeMs60 = T.Study ? T.Study.endSession() : null;
     const result = {
       course: state.course,
       stage: state.stage,
       source: 'course',
       status,
       startedAt: state.startedAt,
+      // ショートカットは 画面を ひらいた ところから 時計を うごかします。
+      // 打つ 練習と ちがい、読んで 考える 時間も れんしゅうの うちだからです
+      clockStartedAt: state.startedAt,
       finishedAt: new Date().toISOString(),
-      elapsedMs: elapsed,
-      activeMs: elapsed,
+      elapsedMs: elapsedMs,
+      activeMs: elapsedMs,
+      activeMs60: activeMs60,
       items: state.results,
       // ショートカットは 打鍵数を 数えません。「はやさ」の きろくには 入れず、
       // できた 課題の 数だけを のこします

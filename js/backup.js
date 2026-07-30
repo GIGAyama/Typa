@@ -30,7 +30,14 @@
   /** この 形式の ばんごう。中身を かえたら 1つ 上げます */
   const SCHEMA = 1;
 
-  /** 書き出す localStorage の キー。Store.KEYS と そろえます */
+  /**
+   * 書き出す localStorage の キー。Store.KEYS と そろえます。
+   *
+   * 学習ログ（`study.records.v1`）は **わざと 入れて いません**。
+   * ほかの アプリと 共有して いる キーなので、読みこみ（置きかえ）の ときに
+   * ほかの アプリの きろくまで 消えて しまいます。学習ログを 先生に わたす 道は
+   * 送信ページの ほうに あり、この ファイルの しごとでは ありません。
+   */
   function keyList() {
     const K = T.Store.KEYS;
     return [K.settings, K.progress, K.history, K.awards, K.challenge];

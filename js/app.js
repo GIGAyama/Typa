@@ -27,7 +27,11 @@
   const esc = s => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-  const APP_VERSION = '3.2.0';
+  /**
+   * アプリの ばんごう。**ここ 1か所だけ**に 書きます。
+   * せってい画面の 表示にも、学習ログの appVersion にも これを つかいます。
+   */
+  const APP_VERSION = '3.3.0';
 
   let view = null;
   let installPrompt = null;
@@ -438,7 +442,12 @@
       onStop: () => T.Nav.back('stop'),
       // ステージ名を おしたら、その コースの ステージ一覧へ。
       // 打つ 画面から 階層に 上がる いちばん みじかい 道です
-      onPick: () => T.Nav.go('course', { courseId: found.course.id })
+      onPick: () => T.Nav.go('course', { courseId: found.course.id }),
+      // 5分いじょう ほかの タブに いて もどって きた とき。
+      // そこまでの きろくは play.js が 締めて いるので、ここでは
+      // **同じ ステージで 新しい 回を はじめる**だけです。打った ぶんは
+      // すすみぐあいに たまって いるので、とちゅうの お題から つづきます
+      onAway: () => T.Nav.replace('play', sessionParams(found, params))
     };
     if (found.stage.mode === 'shortcut') {
       T.Shortcut.setOnFinish(onSessionFinish);
@@ -447,6 +456,28 @@
       T.Play.setOnFinish(onSessionFinish);
       T.Play.start(opt);
     }
+  }
+
+  /**
+   * いま やって いる れんしゅうを もう一度 はじめる ための params。
+   *
+   * renderPlay は 行き先が 決まって いなくても はじめられる ので、
+   * params が 空の ことが あります。そのまま つかい回すと
+   * **べつの ステージに とんで しまう** ため、じっさいに 出した
+   * コース・ステージから 組み立て直します。
+   */
+  function sessionParams(found, params) {
+    const special = params.special || '';
+    if (special === 'challenge') {
+      return { special, pool: found.stage.pool, seconds: found.stage.seconds };
+    }
+    if (special === 'weak') return { special };
+    return {
+      courseId: found.course.id,
+      stageId: found.stage.id,
+      source: params.source || 'course',
+      blind: !!params.blind
+    };
   }
 
   /**
@@ -566,6 +597,12 @@
       conf: result.conf,
       rule: result.rule
     });
+
+    // 学習ログ（study.v1）。**ほかの アプリと 共通の かたち**で、
+    // 同じ ドメインの ほかの 学習アプリと 同じ キーに ならべて のこします。
+    // ここから 外へ おくる しくみは ありません（送信は べつの ページの しごと）。
+    // 保存に しくじっても null が 返るだけで、れんしゅうは 止まりません
+    if (T.Study) T.Study.save(result, { appVersion: APP_VERSION });
 
     const awarded = T.Awards.applyResult(result, meta);
     return { meta, awarded };
@@ -975,6 +1012,48 @@
     // 出口を 1つに まとめて いるので、2つ ならべると まよいます
   }
 
+  /**
+   * 学習ログ（study.v1）から 出す まとめ。
+   *
+   * ■ どうして きろく画面に もう1つ 数字を ふやすのか
+   * 画面の「正かくさ」は **打鍵**で 数えます。1文字 まちがえても すこし 下がるだけ です。
+   * ここで 出すのは **お題**で 数えた 数字で、「一度も まちがえずに さいごまで
+   * 打てた お題」の わりあいです。1文字でも まちがえたら その お題は 数えません。
+   * だから いつも 低く 出ます。**それが 見たい 数字**です。
+   * 「だいたい 打てる」と「ひとりで 打ち切れる」は べつの ことだからです。
+   *
+   * ■ 「やりとげた わりあい」は 出しません
+   * Typa は とちゅうで やめても のこる ことを ねらいに して います。
+   * 10びょうで やめる のは 正しい つかいかたなので、それを 低い 数字に して
+   * 見せるのは うそに なります。出すのは 取り組んだ 量と、打てた わりあいだけ です。
+   */
+  function studyCard() {
+    if (!T.StudyStats) return '';
+    const records = T.StudyStats.loadRecords();
+    if (records.length === 0) return '';
+    const week = T.StudyStats.summary(7, records);
+    if (week.sessions === 0) return '';
+    // 10もん いじょう 打った ステージだけ。2〜3もんの わりあいは まぐれに ふれます
+    const units = T.StudyStats.byUnit(10, records).slice(0, 3);
+
+    return card(`
+      <p class="lead">${icon('chart')} この 1しゅうかんの つみあげ</p>
+      <div class="today">
+        <div class="today-item"><span class="today-num">${week.sessions}</span><span class="today-unit">かい</span><span class="today-label">れんしゅう</span></div>
+        <div class="today-item"><span class="today-num">${week.items}</span><span class="today-unit">こ</span><span class="today-label">打った お題</span></div>
+        <div class="today-item"><span class="today-num">${week.minutes}</span><span class="today-unit">ふん</span><span class="today-label">うちこんだ 時間</span></div>
+      </div>
+      ${week.rate === null ? '' : `
+        <p class="muted mt">ひとりで さいごまで 打てた お題は
+          <b>${Math.round(week.rate)}%</b>（${week.firstTryCorrect} / ${week.attempted} こ）。
+          1文字でも まちがえた お題は 入れて いないので、画面の「正かくさ」より 低く 出ます。</p>`}
+      ${units.length ? `
+        <p class="muted mt">もう1かい やると のびる ところ</p>
+        <ul class="weak-list">
+          ${units.map(u => `<li>${esc(u.title)}<span class="weak-count">${Math.round(u.rate)}%</span></li>`).join('')}
+        </ul>` : ''}`);
+  }
+
   // ------------------------------------------------------------------
   // きろく
   // ------------------------------------------------------------------
@@ -1026,6 +1105,8 @@
         </div>`) : card(`<p class="muted">${best
           ? 'さいこう記録は、すこし まとまって 打った 回から つきます。もう ちょっと つづけて みよう。'
           : 'まだ きろくが ありません。下の「うつ」から はじめよう。'}</p>`)}
+
+      ${studyCard()}
 
       ${history.length ? card(`
         <p class="lead">${icon('chart')} はやさの うつりかわり</p>
