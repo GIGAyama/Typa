@@ -15,37 +15,99 @@
    3. どの 端末でも 本文が 広い
       ・せまい 画面では 上のバーを 出さず、下の ナビゲーションバーだけ
       ・下部バーと iPhone の ホームバーの ぶんは safe-area で よけます
+
+   ---------------------------------------------------------------------
+   見た目の かたち（manabi-quest と おなじ 家族に します）
+
+   おなじ 学校で つかう manabi-quest に そろえて、「ポップだけれど
+   すっきり」を ねらいます。前の 版は ふとい すみ色の わくで かこむ
+   やりかたでしたが、かわいい かわりに 画面が つよく なりすぎて
+   いました。そこで 3つを 入れかえて います。
+
+     1. わくで かこまない。**白い 面と やわらかい かげ**で 浮かせます
+        （--shadow）。線を 引くのは 中の 区切りと 入力欄だけ です。
+     2. カードの 上に **6px の 色の おび**（--accent）を 引き、
+        アイコンは その 色の うすい 四角に 入れます。
+        「ここは 何の カードか」が 色で ひと目で わかります。
+     3. ボタンは 下に 4〜5px の「あつみ」を もった 立体です。
+        押すと その ぶん しずみます（--btn-edge / .btn:active）。
+
+   色は manabi-quest の パレットを そのまま もらいます。
+   地は うすい 青（#eef4fb）、面は 白、文字は #2f3d4f。
+   色わけは 7色（青・緑・だいだい・桃・紫・水・金）で、それぞれ
+     ・そのまま（-）… ぬりつぶし・おび
+     ・こい（-d）  … 文字と アイコン（白い 面の 上に のる ところ）
+     ・うすい（-s）… 地・タグ・アイコンの 四角
+   の 3つを もちます。**文字には かならず -d を つかいます。**
+   あかるい 色を そのまま 文字に すると、教室の Chromebook では
+   コントラストが 足りず 読めなく なる からです。
    ===================================================================== */
 
 :root {
   color-scheme: light dark;
 
-  --bg: #eef2f9;
+  --bg: #eef4fb;
   --bg-2: #ffffff;
   --surface: #ffffff;
-  --surface-2: #f7f9fd;
-  --text: #16202e;
-  --muted: #5b6a7d;
-  --line: #dde4ef;
-  --primary: #1d4ed8;
-  --primary-soft: #e5edff;
-  --primary-ink: #ffffff;
-  --ok: #0f7b5f;
-  --ok-soft: #dff5ec;
-  --ng: #c0392b;
-  --ng-soft: #fdeceb;
-  --warn: #b06a12;
-  --shadow: 0 1px 2px rgba(16, 30, 54, .08), 0 8px 24px rgba(16, 30, 54, .06);
+  --surface-2: #f5f9ff;
+  --text: #2f3d4f;
+  /* そえる ことばの 色。manabi-quest は #8a99a8 ですが、それでは
+     白い 面で コントラストが 3.6 しか なく、教室の Chromebook では
+     読みにくく なります。4.5 を こえる ところまで こく して います */
+  --text-2: #4b5c70;
+  --muted: #5a6b80;
+  /* カードの 中の こまかい 区切り線と、入力欄の わく */
+  --line: #dbe6f3;
 
-  --c-blue: #2563eb;
-  --c-teal: #0d9488;
-  --c-green: #4d7c0f;
-  --c-violet: #7c3aed;
-  --c-amber: #b45309;
+  --primary: #4a90e2;
+  --primary-deep: #2b68b4;
+  --primary-soft: #eaf3ff;
+  --primary-ink: #ffffff;
+
+  /* 7色の パレット。-d は 文字用、-s は 地用 です */
+  --c-blue: #4a90e2;   --c-blue-d: #2b68b4;   --c-blue-s: #eaf3ff;
+  --c-green: #2fb673;  --c-green-d: #197f4c;  --c-green-s: #e6f8ef;
+  --c-orange: #f5942a; --c-orange-d: #a75d05; --c-orange-s: #fff2e0;
+  --c-pink: #ef5f92;   --c-pink-d: #bb2f65;   --c-pink-s: #ffedf3;
+  --c-violet: #8b7cf6; --c-violet-d: #5b48cf; --c-violet-s: #f0edff;
+  --c-cyan: #21b6c8;   --c-cyan-d: #0d7b88;   --c-cyan-s: #e2f8fb;
+  --c-gold: #f0b429;   --c-gold-d: #8f6300;   --c-gold-s: #fff6dd;
+
+  /* 前の 版から つかって いる 名まえ（コースの 色わけなど）を、
+     あたらしい パレットに つなぎます */
+  --c-teal: var(--c-cyan-d);
+  --c-amber: var(--c-orange-d);
+
+  --accent: var(--c-gold);
+  --accent-soft: var(--c-gold-s);
+  --accent-deep: var(--c-gold-d);
+  /* きいろの 上に のせる 文字の 色。きいろは くらい 画面でも あかるい ままなので、
+     ここだけは テーマで 色を 変えません */
+  --on-accent: #4a3200;
+
+  --ok: #197f4c;
+  --ok-soft: #e6f8ef;
+  --ng: #c62828;
+  --ng-soft: #ffeeee;
+  --warn: #a75d05;
+
+  /* やわらかい かげ。ぼかして 下に おとします（前の 版の「かたい かげ」は
+     やめました。かわいい かわりに 画面が うるさく なる ためです）*/
+  --shadow: 0 .35rem .9rem rgba(47, 61, 79, .10);
+  --shadow-lift: 0 .8rem 1.6rem rgba(47, 61, 79, .16);
+  /* ボタンの「あつみ」。押すと この ぶん しずみます（.btn:active）*/
+  --press: 4px;
+  --btn-edge: #2a5fae;
 
   --nav-h: 62px;
-  --radius: 16px;
-  --radius-s: 10px;
+  --radius: 1.25rem;
+  --radius-s: .9rem;
+  /* わくは もう つかいませんが、キーや 入力欄の ために のこします */
+  --bw: 2px;
+
+  /* 画面の 出しいれの うごきかた。1か所に まとめて おきます */
+  --ease: cubic-bezier(.2, .85, .3, 1);
+  --bounce: cubic-bezier(.25, 1.6, .45, 1);
 
   /* 指の 色分けの こさ。あかるい 教室の Chromebook では 色が とんで
      見えなく なるので、うすくし すぎません（キーの 文字は 読めるはば で）*/
@@ -68,37 +130,73 @@
 }
 
 /* くらい 画面の 色。「せってい → くらい」を えらんだ ときの 見た目です。
-   「じどう」の ときは、下の @media で 端末の せっていに あわせます */
+   「じどう」の ときは、下の @media で 端末の せっていに あわせます。
+
+   ■ 色わけの 7色は、くらい 画面では 明るい ほうに ふりなおします
+   あかるい 画面では「-d（こい 色）＝ 文字」でしたが、くらい 画面では
+   こい 色は 地に しずんで 読めません。そこで -d を **明るい 色**に
+   入れかえ、-s（うすい 地）を **くらい 地**に 入れかえます。
+   つかう がわ（.tile-blue など）は 名まえを 変えなくて すみます。 */
 html[data-theme="dark"] {
-  --bg: #0b1220;
-  --bg-2: #101a2b;
-  --surface: #141f33;
-  --surface-2: #1a2740;
-  --text: #e9eff8;
-  --muted: #a4b5cb;
-  --line: #27354d;
-  --primary: #6f9bff;
-  --primary-soft: #1b2b4d;
-  --primary-ink: #08111f;
-  --ok: #4ad3a5;
-  --warn: #e0a458;
-  --ok-soft: #12312a;
+  --bg: #131a24;
+  --bg-2: #1a2330;
+  --surface: #1e2937;
+  --surface-2: #263243;
+  --text: #e8eff8;
+  --text-2: #b9c7d8;
+  --muted: #93a3b6;
+  --line: #35455a;
+
+  --primary: #5ba2f0;
+  --primary-deep: #8ec5ff;
+  --primary-soft: #1c3350;
+  --primary-ink: #0b1622;
+
+  --c-blue: #5ba2f0;   --c-blue-d: #8ec5ff;   --c-blue-s: #1c3350;
+  --c-green: #3ecb87;  --c-green-d: #6fe3ad;  --c-green-s: #14382a;
+  --c-orange: #ffa947; --c-orange-d: #ffc584; --c-orange-s: #3d2a13;
+  --c-pink: #ff7fac;   --c-pink-d: #ffa8c6;   --c-pink-s: #3d1f2c;
+  --c-violet: #a394ff; --c-violet-d: #c3b8ff; --c-violet-s: #2a2650;
+  --c-cyan: #38ccdd;   --c-cyan-d: #7ce3ef;   --c-cyan-s: #123640;
+  --c-gold: #ffc94d;   --c-gold-d: #ffdd8a;   --c-gold-s: #3d3113;
+
+  --accent: var(--c-gold);
+  --accent-soft: var(--c-gold-s);
+  --accent-deep: var(--c-gold-d);
+  --on-accent: #3a2800;
+
+  --ok: #6fe3ad;
+  --ok-soft: #14382a;
   --ng: #ff8f83;
-  --ng-soft: #3a1c1c;
-  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 28px rgba(0, 0, 0, .35);
-  --c-blue: #7aa2ff; --c-teal: #4ec9b8; --c-green: #a3d160; --c-violet: #b294ff; --c-amber: #f0b45e;
+  --ng-soft: #3d1f1f;
+  --warn: #ffc584;
+
+  --shadow: 0 .35rem .9rem rgba(0, 0, 0, .45);
+  --shadow-lift: 0 .8rem 1.6rem rgba(0, 0, 0, .55);
+  --btn-edge: #16375f;
+
   /* くらい 画面では 同じ こさでも 色が しずんで 見えるので、すこし こく します */
   --finger-tint: 34%;
 }
 
 @media (prefers-color-scheme: dark) {
   html[data-theme="auto"] {
-    --bg: #0b1220; --bg-2: #101a2b; --surface: #141f33; --surface-2: #1a2740;
-    --text: #e9eff8; --muted: #a4b5cb; --line: #27354d;
-    --primary: #6f9bff; --primary-soft: #1b2b4d; --primary-ink: #08111f;
-    --ok: #4ad3a5; --ok-soft: #12312a; --ng: #ff8f83; --ng-soft: #3a1c1c; --warn: #e0a458;
-    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 28px rgba(0, 0, 0, .35);
-    --c-blue: #7aa2ff; --c-teal: #4ec9b8; --c-green: #a3d160; --c-violet: #b294ff; --c-amber: #f0b45e;
+    --bg: #131a24; --bg-2: #1a2330; --surface: #1e2937; --surface-2: #263243;
+    --text: #e8eff8; --text-2: #b9c7d8; --muted: #93a3b6; --line: #35455a;
+    --primary: #5ba2f0; --primary-deep: #8ec5ff; --primary-soft: #1c3350; --primary-ink: #0b1622;
+    --c-blue: #5ba2f0;   --c-blue-d: #8ec5ff;   --c-blue-s: #1c3350;
+    --c-green: #3ecb87;  --c-green-d: #6fe3ad;  --c-green-s: #14382a;
+    --c-orange: #ffa947; --c-orange-d: #ffc584; --c-orange-s: #3d2a13;
+    --c-pink: #ff7fac;   --c-pink-d: #ffa8c6;   --c-pink-s: #3d1f2c;
+    --c-violet: #a394ff; --c-violet-d: #c3b8ff; --c-violet-s: #2a2650;
+    --c-cyan: #38ccdd;   --c-cyan-d: #7ce3ef;   --c-cyan-s: #123640;
+    --c-gold: #ffc94d;   --c-gold-d: #ffdd8a;   --c-gold-s: #3d3113;
+    --accent: var(--c-gold); --accent-soft: var(--c-gold-s); --accent-deep: var(--c-gold-d);
+    --on-accent: #3a2800;
+    --ok: #6fe3ad; --ok-soft: #14382a; --ng: #ff8f83; --ng-soft: #3d1f1f; --warn: #ffc584;
+    --shadow: 0 .35rem .9rem rgba(0, 0, 0, .45);
+    --shadow-lift: 0 .8rem 1.6rem rgba(0, 0, 0, .55);
+    --btn-edge: #16375f;
     --finger-tint: 34%;
   }
 }
@@ -127,17 +225,26 @@ body {
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
   padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom));
+
+  /* 本文を たてに まんなか よせ する ための 土台。
+     下の .view の「たての まんなか よせ」を 見て ください。
+     下部バーは position: fixed なので、この ならびには 入りません */
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
 }
 
 html.big-text body { font-size: 18.5px; }
 
+/* キーボード操作の しるし。さんご色 その ものは 白い 地の 上で うすいので、
+   こい ほう（--primary-deep）を つかいます */
 :focus-visible {
-  outline: 3px solid var(--primary);
+  outline: 3px solid var(--primary-deep);
   outline-offset: 2px;
   border-radius: 6px;
 }
 
-b, strong { font-weight: 700; }
+b, strong { font-weight: 800; }
 
 /* みじかい 説明の 行おくりを、ことばの きれめで します（Chrome 119〜）。
    「クリ／アした」のような、読みにくい おれかたを へらします。
@@ -147,16 +254,23 @@ b, strong { font-weight: 700; }
 
 /* ---------------------------------------------------------------- 上のバー */
 
+/* 上のバー。線で 区切らず、**白い 面と やわらかい かげ**で 本文から 浮かせます */
 .brand {
   display: none;
-  align-items: baseline;
+  align-items: center;
   gap: 12px;
   padding: 10px 22px;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg-2);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 .2rem .7rem rgba(47, 61, 79, .08);
+  position: relative; z-index: 5;
 }
-.brand-mark { font-weight: 800; letter-spacing: .06em; color: var(--primary); font-size: 1.1rem; }
-.brand-note { color: var(--muted); font-size: .85rem; }
+.brand-mark {
+  font-weight: 800; letter-spacing: .04em; color: var(--text); font-size: 1.3rem;
+  line-height: 1.2;
+}
+.brand-mark::after { content: "."; color: var(--primary); }
+.brand-note { color: var(--muted); font-size: .85rem; font-weight: 700; }
 
 @media (min-width: 900px) { .brand { display: flex; } }
 
@@ -168,130 +282,253 @@ b, strong { font-weight: 700; }
   padding: 16px max(14px, env(safe-area-inset-left)) 40px max(14px, env(safe-area-inset-right));
 }
 
-.page-head { margin: 4px 2px 14px; }
-.page-head h1 { font-size: clamp(1.35rem, 4vw, 1.9rem); margin: 0; letter-spacing: .02em; }
-.page-note { margin: 2px 0 0; color: var(--muted); font-size: .95rem; }
+/* 本文が 1画面に おさまる ときは、たての まんなかに おきます。
 
+   ■ なぜ
+   「スクロールしないで 見わたせる」ように 中身を つめた けっか、
+   えらぶ画面は 上に かたまり、下に 大きな 空きが のこって いました。
+   さらに よこ 2れつの ところでは、左の れつ（つづきから）が 右の れつより
+   ずっと みじかい ので、ボタンだけが 宙に うかんで 見えました。
+   中身を まんなかに よせると、上と 下の 空きが 同じに なり、
+   スクロールが 出ない ことは そのまま です。
+
+   ■ 「safe」を つけて いる わけ
+   中身が 画面より 長く なった ときに ふつうの center を つかうと、
+   はみ出した ぶんが **上に 出て スクロールでは もどれなく** なります。
+   safe を つけると、その ときだけ 上ぞろえに もどります。
+   safe を 知らない ブラウザは この 1行を まるごと 読みとばすので、
+   やはり 上ぞろえ（いままでと 同じ）に なります。
+
+   ■ 打つ 画面には かけません
+   キーボードの 大きさは play.js が「お題の 下から 下部バーまで」を
+   はかって 決めます。中身を たてに うごかすと その はかりが くるいます。 */
+body:not([data-screen="play"]) .view {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: safe center;
+}
+
+.page-head { margin: 4px 2px 14px; }
+.page-head h1 { font-size: clamp(1.4rem, 4vw, 1.9rem); margin: 0; letter-spacing: .01em; font-weight: 800; }
+.page-note { margin: 2px 0 0; color: var(--muted); font-size: .95rem; font-weight: 700; }
+
+/* カードは わくで かこまず、**白い 面と やわらかい かげ**で 浮かせます。
+   上に 6px の 色の おびを 引いて、「ここは 何の カードか」を 色で 出します。
+   色は --tile（コースの 色）が あれば それ、なければ 青 です。 */
 .card {
+  position: relative; overflow: hidden;
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: 0;
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 16px 18px;
-  margin-bottom: 14px;
+  padding: 18px 18px 16px;
+  margin-bottom: 16px;
 }
-.lead { display: flex; align-items: center; gap: 8px; font-weight: 700; margin: 0 0 10px; }
-.lead .ico { width: 22px; height: 22px; color: var(--primary); flex: none; }
+.card::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 6px;
+  background: linear-gradient(90deg,
+    var(--tile, var(--primary)),
+    color-mix(in srgb, var(--tile, var(--primary)) 45%, var(--surface)));
+}
+.lead { display: flex; align-items: center; gap: 10px; font-weight: 800; margin: 0 0 10px; }
+/* 見出しの アイコンは、その 色の **うすい 四角**に 入れます。
+   ぬりつぶしの 上に 白ぬきに するより しずかで、ならべても うるさく なりません */
+.lead .ico {
+  width: 34px; height: 34px; padding: 6px; flex: none;
+  color: var(--tile-d, var(--primary-deep));
+  background: var(--tile-s, var(--primary-soft));
+  border-radius: var(--radius-s);
+  stroke-width: 2.4;
+}
 .muted { color: var(--muted); font-size: .93rem; margin: 6px 0; }
 .hint-box {
   display: flex; gap: 10px; align-items: flex-start;
-  background: var(--primary-soft); color: var(--text);
-  border-radius: var(--radius-s); padding: 12px 14px; margin: 0 0 14px; font-size: .93rem;
+  background: var(--primary-soft); color: var(--text-2);
+  border-radius: var(--radius-s); padding: 11px 14px; margin: 0 0 14px;
+  font-size: .93rem; font-weight: 700;
 }
-.hint-box .ico { flex: none; color: var(--primary); }
+.hint-box .ico { flex: none; color: var(--primary-deep); }
 
 .ico { width: 24px; height: 24px; vertical-align: -.15em; }
 
 /* ---------------------------------------------------------------- ボタン */
 
+/* ボタンは「あつみの ある 板」です。
+   下に 4px の へり（--btn-edge）を しいて おき、押すと その ぶん しずみます。
+   ゆびで さわった ときに **へこんだ** ことが 目で わかるので、
+   タップが とどいたか どうかで まよいません。
+
+   ■ 地は 上から 下への グラデーションに します
+   まっ平らな ぬりつぶしより、光が 当たった 板に 見えます。
+   ただし 上の はしも 白い 文字が 読める こさ（コントラスト 4.5 いじょう）
+   より 明るく しません。ポップに 見せる ために 読めなく なるのは 本末転倒です。 */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  min-height: 48px; padding: 10px 18px;
-  border-radius: 999px; border: 2px solid transparent;
+  min-height: 48px; padding: 10px 20px;
+  border-radius: 999px; border: 0;
   font: inherit; font-weight: 700; cursor: pointer;
-  background: var(--surface-2); color: var(--text);
-  transition: transform .12s ease, background-color .12s ease;
+  background: var(--surface); color: var(--text-2);
+  box-shadow: 0 var(--press) 0 var(--line), var(--shadow);
+  transition: transform .09s ease, box-shadow .09s ease, filter .15s ease;
 }
-.btn:active { transform: translateY(1px) scale(.99); }
-.btn-primary { background: var(--primary); color: var(--primary-ink); }
-.btn-outline { background: transparent; border-color: var(--primary); color: var(--primary); }
-.btn-ghost { background: transparent; color: var(--muted); }
+.btn:hover { filter: brightness(1.04); }
+.btn:active { transform: translateY(var(--press)); box-shadow: 0 0 0 transparent, var(--shadow); }
+.btn-primary {
+  background: linear-gradient(180deg, #3572bd, #265ea4);
+  color: #fff;
+  box-shadow: 0 var(--press) 0 var(--btn-edge), var(--shadow);
+}
+.btn-primary:active { box-shadow: 0 0 0 var(--btn-edge), var(--shadow); }
+/* 「ふちどりだけ」の ボタン。白い 面に、こい 青の 文字と うすい わく */
+.btn-outline {
+  background: var(--surface); color: var(--primary-deep);
+  box-shadow: inset 0 0 0 2px var(--line), 0 3px 0 var(--line);
+}
+.btn-outline:active { transform: translateY(3px); box-shadow: inset 0 0 0 2px var(--line); }
+/* ひかえめな ボタン。ここだけ あつみも かげも 出しません
+   （「やめる」など、押して ほしくない ものに つかいます） */
+.btn-ghost {
+  background: transparent; color: var(--muted);
+  box-shadow: none;
+}
+.btn-ghost:active { transform: translateY(1px); box-shadow: none; }
 .btn-big {
-  width: 100%; min-height: 74px; justify-content: space-between;
-  border-radius: var(--radius); text-align: left; padding: 12px 18px;
+  width: 100%; min-height: 76px; justify-content: space-between;
+  border-radius: var(--radius); text-align: left; padding: 12px 22px;
 }
-.btn-big .btn-sub { display: block; font-size: .78rem; opacity: .85; font-weight: 600; }
-.btn-big .btn-main { display: block; font-size: 1.15rem; }
+.btn-big .btn-sub { display: block; font-size: .78rem; opacity: .9; font-weight: 600; }
+.btn-big .btn-main { display: block; font-size: 1.15rem; font-weight: 800; }
 /* コース名は 1行に おさめます（「ゆびの ばし／ょ」のような 変な 折り返しを ふせぎます） */
 .btn-big > span:first-child { flex: 1; min-width: 0; }
 .btn-big .btn-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------------------------------------------------------------- ホーム */
 
-.card-today { background: linear-gradient(140deg, var(--primary-soft), var(--surface) 70%); }
-.today { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; }
+.card-today { background: var(--accent-soft); }
+.today { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center; }
 .today-item { display: flex; flex-direction: column; }
-.today-num { font-size: clamp(1.6rem, 6vw, 2.3rem); font-weight: 800; line-height: 1.1; color: var(--primary); }
+.today-num { font-size: clamp(1.6rem, 6vw, 2.3rem); font-weight: 900; line-height: 1.1; color: var(--primary-deep); }
 .today-unit { font-size: .78rem; color: var(--muted); }
-.today-label { font-size: .8rem; color: var(--muted); margin-top: 2px; }
+.today-label { font-size: .8rem; color: var(--muted); margin-top: 2px; font-weight: 700; }
 
-.course-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+.course-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
+/* コースの タイル。上に 色の おびを 引き、下に あつみを もたせます */
 .course-tile {
+  position: relative; overflow: hidden;
   display: flex; flex-direction: column; gap: 4px; align-items: flex-start;
-  padding: 16px; border-radius: var(--radius); cursor: pointer;
-  border: 2px solid var(--line); background: var(--surface-2); color: var(--text);
+  padding: 20px 16px 16px; border-radius: var(--radius); cursor: pointer;
+  border: 0; background: var(--surface); color: var(--text);
+  box-shadow: 0 4px 0 var(--tile-s, var(--primary-soft)), var(--shadow);
   font: inherit; text-align: left; min-height: 132px;
-  border-left-width: 8px; border-left-color: var(--tile, var(--primary));
-  transition: transform .12s ease, box-shadow .12s ease;
+  transition: transform .12s var(--ease), box-shadow .12s var(--ease);
 }
-.course-tile:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
-.tile-icon { color: var(--tile, var(--primary)); }
-.tile-icon .ico { width: 28px; height: 28px; }
-.tile-title { font-weight: 700; font-size: 1.02rem; }
-.tile-note, .tile-count { font-size: .82rem; color: var(--muted); }
+.course-tile::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 6px;
+  background: linear-gradient(90deg,
+    var(--tile, var(--primary)),
+    color-mix(in srgb, var(--tile, var(--primary)) 45%, var(--surface)));
+}
+.course-tile:hover { transform: translateY(-3px); box-shadow: 0 7px 0 var(--tile-s, var(--primary-soft)), var(--shadow-lift); }
+.course-tile:active { transform: translateY(4px); box-shadow: 0 0 0 var(--tile-s, var(--primary-soft)), var(--shadow); }
+.tile-icon { color: var(--tile-d, var(--primary-deep)); }
+.tile-icon .ico { width: 30px; height: 30px; }
+.tile-title { font-weight: 800; font-size: 1.05rem; }
+.tile-note, .tile-count { font-size: .82rem; color: var(--muted); font-weight: 700; }
 .tile-count { margin-top: auto; }
 
-.tile-blue { --tile: var(--c-blue); }
-.tile-teal { --tile: var(--c-teal); }
-.tile-green { --tile: var(--c-green); }
-.tile-violet { --tile: var(--c-violet); }
-.tile-amber { --tile: var(--c-amber); }
+/* 色わけ。1つの class で 3つの 色（そのまま・こい・うすい）が そろいます。
+   --tile   … おび・ぬりつぶし
+   --tile-d … 文字と アイコン（白い 面の 上に のる ところ）
+   --tile-s … うすい 地（アイコンの 四角・タグ）
+   lessons.js の color（blue / teal / green / violet / amber）と 同じ 名まえ です */
+.tile-blue   { --tile: var(--c-blue);   --tile-d: var(--c-blue-d);   --tile-s: var(--c-blue-s); }
+.tile-teal   { --tile: var(--c-cyan);   --tile-d: var(--c-cyan-d);   --tile-s: var(--c-cyan-s); }
+.tile-green  { --tile: var(--c-green);  --tile-d: var(--c-green-d);  --tile-s: var(--c-green-s); }
+.tile-violet { --tile: var(--c-violet); --tile-d: var(--c-violet-d); --tile-s: var(--c-violet-s); }
+.tile-amber  { --tile: var(--c-orange); --tile-d: var(--c-orange-d); --tile-s: var(--c-orange-s); }
+.tile-pink   { --tile: var(--c-pink);   --tile-d: var(--c-pink-d);   --tile-s: var(--c-pink-s); }
+.tile-gold   { --tile: var(--c-gold);   --tile-d: var(--c-gold-d);   --tile-s: var(--c-gold-s); }
 
 .best-row { display: flex; gap: 22px; flex-wrap: wrap; }
 .best-row div { display: flex; align-items: baseline; gap: 6px; }
-.best-row b { font-size: 1.7rem; color: var(--primary); }
-.best-row span { color: var(--muted); font-size: .85rem; }
+.best-row b { font-size: 1.7rem; color: var(--primary-deep); font-weight: 900; }
+.best-row span { color: var(--muted); font-size: .85rem; font-weight: 700; }
 .pending { margin: 8px 0; }
-.pending b { color: var(--primary); font-size: 1.2rem; }
+.pending b { color: var(--primary-deep); font-size: 1.2rem; }
 
 /* ---------------------------------------------------------------- 一覧 */
 
-.course-list, .stage-list { display: flex; flex-direction: column; gap: 10px; }
+.course-list, .stage-list { display: flex; flex-direction: column; gap: 12px; }
 
-.course-row, .stage-row {
-  display: flex; align-items: center; gap: 12px; width: 100%;
-  padding: 14px 14px; min-height: 72px; cursor: pointer;
-  background: var(--surface); border: 1px solid var(--line);
-  border-left: 8px solid var(--tile, var(--primary));
-  border-radius: var(--radius); font: inherit; color: var(--text); text-align: left;
-  transition: transform .12s ease, box-shadow .12s ease;
+/* =========================================================== とびら
+
+   つぎの 階層へ すすむ ための 1行ボタン（コース・ステージ・えらぶ画面の 行）。
+   manabi-quest の「とびら」と 同じ 組みかたに して います。
+
+     ・地は 白から その 色の うすい 地への ななめ グラデーション
+     ・まわりは うすい 色の わく（2px）。ふとい すみ色では ありません
+     ・下に 5px の あつみ。押すと その ぶん しずみます
+     ・押した ときは 光が さっと 横切り、矢じるしが 先に 走ります（fx.css）
+
+   「押せる ものは あつみが ある」を どの 画面でも 同じに して、
+   カード（あつみ なし）と 見分けられる ように します。 */
+.mq-door, .course-row, .stage-row, .menu-row {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; gap: 14px; width: 100%;
+  padding: 14px 16px; min-height: 76px; cursor: pointer;
+  border: 2px solid var(--tile-s, var(--primary-soft));
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, var(--surface) 42%, var(--tile-s, var(--primary-soft)));
+  box-shadow: 0 5px 0 var(--tile-s, var(--primary-soft)), var(--shadow);
+  font: inherit; color: var(--text); text-align: left;
+  transition: transform .1s var(--ease), box-shadow .1s var(--ease), border-color .15s ease;
 }
-.course-row:hover, .stage-row:hover { transform: translateX(2px); box-shadow: var(--shadow); }
-.row-icon { color: var(--tile, var(--primary)); flex: none; }
-.row-icon .ico { width: 30px; height: 30px; }
+.course-row:hover, .stage-row:hover, .menu-row:hover { border-color: var(--tile, var(--primary)); }
+.course-row:active, .stage-row:active, .menu-row:active {
+  transform: translateY(5px);
+  box-shadow: 0 0 0 var(--tile-s, var(--primary-soft)), var(--shadow);
+}
+/* 行の アイコンは、白い まるい 四角に 入れて うかせます */
+.row-icon {
+  flex: none; color: var(--tile-d, var(--primary-deep));
+  display: flex; align-items: center; justify-content: center;
+  width: 3.2rem; height: 3.2rem; border-radius: var(--radius-s);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 2px var(--tile-s, var(--primary-soft));
+}
+.row-icon .ico { width: 28px; height: 28px; }
 .row-body, .stage-body { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.row-title, .stage-title { font-weight: 700; }
-/* 想定学年。じゃまに ならないよう、小さく うすく そえます */
+.row-title, .stage-title { font-weight: 800; }
+/* 想定学年。じゃまに ならないよう、小さく そえます */
 .grade-chip {
-  font-size: .68rem; font-weight: 600; color: var(--muted);
-  background: var(--surface-2); border: 1px solid var(--line);
-  border-radius: 999px; padding: 1px 8px; margin-left: 8px; white-space: nowrap;
+  font-size: .68rem; font-weight: 700; color: var(--text-2);
+  background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--line);
+  border-radius: 999px; padding: 1px 9px; margin-left: 8px; white-space: nowrap;
 }
-.row-note, .stage-note, .stage-best, .row-count { font-size: .82rem; color: var(--muted); }
-.row-bar { display: block; height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; margin: 4px 0 2px; }
-.row-bar span { display: block; height: 100%; background: var(--tile, var(--primary)); border-radius: 3px; }
-.row-arrow { color: var(--muted); flex: none; }
-.stage-row { border-left-color: var(--primary); }
+.row-note, .stage-note, .stage-best, .row-count { font-size: .84rem; color: var(--muted); font-weight: 700; }
+.row-bar {
+  display: block; height: 8px; border-radius: 999px; overflow: hidden; margin: 5px 0 2px;
+  background: var(--line);
+}
+.row-bar span {
+  display: block; height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, var(--tile, var(--primary)),
+    color-mix(in srgb, var(--tile, var(--primary)) 55%, #fff));
+}
+.row-arrow { color: var(--tile-d, var(--primary-deep)); flex: none; opacity: .75; }
+.stage-row { --tile: var(--c-blue); --tile-d: var(--c-blue-d); --tile-s: var(--c-blue-s); }
 .stage-no {
-  flex: none; width: 34px; height: 34px; border-radius: 50%;
-  display: grid; place-items: center; font-weight: 700;
-  background: var(--primary-soft); color: var(--primary);
+  flex: none; width: 2.6rem; height: 2.6rem; border-radius: 50%;
+  display: grid; place-items: center; font-weight: 800; font-size: 1.05rem;
+  background: var(--surface); color: var(--tile-d, var(--primary-deep));
+  box-shadow: inset 0 0 0 2px var(--tile-s, var(--primary-soft));
 }
 
 .stars { display: inline-flex; gap: 2px; flex: none; }
 .stars .star { color: var(--line); }
 .stars .star .ico { width: 20px; height: 20px; fill: currentColor; stroke: none; }
-.stars .star.on { color: #f0a500; }
+.stars .star.on { color: var(--c-gold); }
 
 /* ---------------------------------------------------------------- 練習画面 */
 
@@ -314,35 +551,48 @@ body[data-screen="play"] .play > *:not(.play-lower) {
 }
 
 .play-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.play-title { display: flex; align-items: center; gap: 8px; font-size: 1.02rem; }
+.play-title { display: flex; align-items: center; gap: 8px; font-size: 1.02rem; font-weight: 800; }
+/* コースの しるし。うすい 地に こい 文字（-s と -d の 組み）です */
 .chip {
-  font-size: .74rem; font-weight: 700; padding: 3px 10px; border-radius: 999px;
-  background: var(--primary-soft); color: var(--primary);
+  font-size: .74rem; font-weight: 700; padding: 2px 11px; border-radius: 999px;
+  background: var(--primary-soft); color: var(--primary-deep);
 }
-.chip-blue { color: var(--c-blue); } .chip-teal { color: var(--c-teal); }
-.chip-green { color: var(--c-green); } .chip-violet { color: var(--c-violet); }
-.chip-amber { color: var(--c-amber); }
+.chip-blue   { background: var(--c-blue-s);   color: var(--c-blue-d); }
+.chip-teal   { background: var(--c-cyan-s);   color: var(--c-cyan-d); }
+.chip-green  { background: var(--c-green-s);  color: var(--c-green-d); }
+.chip-violet { background: var(--c-violet-s); color: var(--c-violet-d); }
+.chip-amber  { background: var(--c-orange-s); color: var(--c-orange-d); }
 
 .play-progress { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 180px; }
-.play-progress .bar { flex: 1; height: 10px; border-radius: 5px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
-.play-progress .bar span { display: block; height: 100%; width: 0; background: var(--primary); transition: width .25s ease; }
-.play-progress .num { font-size: .88rem; color: var(--muted); white-space: nowrap; }
+.play-progress .bar {
+  flex: 1; height: .55rem; border-radius: 999px; overflow: hidden;
+  background: var(--line);
+}
+.play-progress .bar span {
+  display: block; height: 100%; width: 0; border-radius: 999px;
+  background: linear-gradient(90deg, var(--primary-deep), var(--primary));
+  transition: width .25s ease;
+}
+.play-progress .num { font-size: .88rem; color: var(--muted); white-space: nowrap; font-weight: 800; }
 
-/* お題。画面の 中で いちばん 大きく、いちばん はっきり 見せます */
+/* お題。画面の 中で いちばん 大きく、いちばん はっきり 見せます。
+   ここだけ かげを ひとまわり 大きく して、いちばん 手前に 見せます */
 .play-stage {
   position: relative;                 /* ひとまわりの おしらせを 上に かさねます */
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-  box-shadow: var(--shadow); padding: 22px 20px; text-align: center;
+  background: var(--surface); border: 0; border-radius: var(--radius);
+  box-shadow: var(--shadow-lift); padding: 20px; text-align: center;
 }
-.q-label { margin: 0 0 6px; color: var(--muted); font-size: clamp(1rem, 3vw, 1.25rem); }
+.q-label { margin: 0 0 6px; color: var(--muted); font-size: clamp(1rem, 3vw, 1.25rem); font-weight: 700; }
 .q-kana {
-  margin: 0; font-size: clamp(1.7rem, 6.2vw, 3rem); font-weight: 700;
+  margin: 0; font-size: clamp(1.7rem, 6.2vw, 3rem); font-weight: 800;
   letter-spacing: .06em; line-height: 1.5; word-break: break-all;
 }
 .q-kana .done { color: var(--muted); opacity: .55; }
+/* いま 打つ 字。文字は こい 色（読める こと が さいゆうせん）、
+   下の 線は あかるい さんご色（遠くからでも どこかが 分かる）*/
 .q-kana .now {
-  color: var(--primary);
-  border-bottom: 5px solid var(--primary); border-radius: 2px; padding-bottom: 2px;
+  color: var(--primary-deep);
+  border-bottom: 6px solid var(--primary); border-radius: 2px; padding-bottom: 2px;
 }
 .q-romaji {
   margin: 10px 0 0; font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
@@ -351,8 +601,10 @@ body[data-screen="play"] .play > *:not(.play-lower) {
 .q-romaji .done { color: var(--ok); }
 .q-romaji .rest { color: var(--muted); }
 
-.play-stage.is-miss { animation: shake .22s ease; border-color: var(--ng); }
-.play-stage.is-clear { animation: pop .26s ease; border-color: var(--ok); }
+/* 正誤は かげでは なく **内がわの わく**で 出します。
+   かげを 色に すると まわりの カードにも 色が うつって にじみます */
+.play-stage.is-miss { animation: shake .22s ease; box-shadow: inset 0 0 0 3px var(--ng), var(--shadow-lift); }
+.play-stage.is-clear { animation: pop .26s ease; box-shadow: inset 0 0 0 3px var(--ok), var(--shadow-lift); }
 @keyframes shake { 25% { transform: translateX(-7px); } 75% { transform: translateX(7px); } }
 @keyframes pop { 50% { transform: scale(1.015); } }
 
@@ -360,28 +612,31 @@ body[data-screen="play"] .play > *:not(.play-lower) {
 .play-finger {
   display: flex; align-items: center; gap: 10px; justify-content: center;
   min-height: 44px; flex-wrap: wrap;
-  background: var(--surface-2); border: 1px solid var(--line);
-  border-radius: 999px; padding: 6px 16px;
+  background: var(--surface); border: 0;
+  border-radius: 999px; padding: 6px 18px; box-shadow: var(--shadow);
 }
 .finger-dot {
   width: 18px; height: 18px; border-radius: 50%; flex: none;
   background: var(--finger, var(--primary));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--finger, var(--primary)) 25%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--finger, var(--primary)) 22%, transparent);
 }
-.finger-text { font-size: clamp(.9rem, 2.6vw, 1.05rem); }
-.finger-text b { color: var(--primary); }
-.finger-shift { font-size: .8rem; background: var(--primary-soft); color: var(--primary); border-radius: 999px; padding: 2px 10px; }
+.finger-text { font-size: clamp(.9rem, 2.6vw, 1.05rem); font-weight: 700; }
+.finger-text b { color: var(--primary-deep); font-weight: 900; }
+.finger-shift {
+  font-size: .8rem; font-weight: 700; background: var(--primary-soft); color: var(--primary-deep);
+  border-radius: 999px; padding: 1px 11px;
+}
 
 /* 「つぎの 指」と きろくの 数字。ふつうは たてに 2行 です */
 .play-status { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .play-meter { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .meter {
   display: flex; align-items: baseline; gap: 5px;
-  background: var(--surface); border: 1px solid var(--line);
-  border-radius: 999px; padding: 4px 14px;
+  background: var(--surface); border: 0;
+  border-radius: 999px; padding: 4px 15px; box-shadow: var(--shadow);
 }
-.meter-label { font-size: .78rem; color: var(--muted); }
-.meter b { font-size: 1.15rem; }
+.meter-label { font-size: .78rem; color: var(--muted); font-weight: 700; }
+.meter b { font-size: 1.15rem; font-weight: 900; }
 .meter-unit { font-size: .74rem; color: var(--muted); }
 
 /* そのさき（だん）を ねらって いる ときだけ 出る はやさの めやす。
@@ -393,8 +648,9 @@ body[data-screen="play"] .play > *:not(.play-lower) {
 
 .ime-warn {
   display: flex; align-items: center; gap: 8px;
-  background: var(--ng-soft); color: var(--ng); border-radius: var(--radius-s);
-  padding: 10px 14px; font-size: .9rem; font-weight: 600;
+  background: var(--ng-soft); color: var(--ng);
+  border: 2px solid var(--ng); border-radius: var(--radius-s);
+  padding: 9px 14px; font-size: .9rem; font-weight: 800;
 }
 .ime-warn .ico { flex: none; }
 
@@ -411,7 +667,7 @@ body[data-screen="play"] .play > *:not(.play-lower) {
   min-height: 1.7em; transition: opacity .18s ease;
 }
 .play-ready.is-gone { opacity: 0; }
-.play-ready .ico { width: 18px; height: 18px; color: var(--primary); }
+.play-ready .ico { width: 18px; height: 18px; color: var(--primary-deep); }
 
 /* 練習画面の 足もと。「やめる」は いつでも 見えて いる ことが 大事です。
    やめかたが 分からない ことが、そのまま「はじめない」理由に なります */
@@ -511,6 +767,8 @@ body[data-screen="play"] .play > *:not(.play-lower) {
 /* 手のひらと 指。指は キーボードと 同じ 指の 色で うすく ぬります。
    キーの 色と 指の 色が 同じ だから、「この 色の キーは この 指」が
    ことばを 読まなくても つながります */
+/* 手の 絵も キーと 同じ すみ色の わくで かこみます。
+   キーボードと 手が 「同じ 絵の 部品」に 見えます */
 .hand-palm { fill: var(--surface-2); stroke: var(--line); stroke-width: 2.5; }
 .hand-finger rect {
   fill: color-mix(in srgb, var(--finger) var(--finger-tint), var(--surface-2));
@@ -518,7 +776,7 @@ body[data-screen="play"] .play > *:not(.play-lower) {
   transition: fill .12s ease, stroke .12s ease, transform .12s ease;
 }
 .hand-finger text {
-  fill: var(--text); font-size: 24px; font-weight: 700; text-anchor: middle;
+  fill: var(--text); font-size: 24px; font-weight: 800; text-anchor: middle;
   transition: fill .12s ease;
 }
 
@@ -555,13 +813,14 @@ body[data-screen="play"] .play > *:not(.play-lower) {
 .buddy-svg {
   display: block; width: 100%; height: auto;
   /* 絵の 中の 色は 決めうちです。まわりの 色に つられて
-     キャラクターの 顔色が 変わって しまわない ように します */
+     キャラクターの 顔色が 変わって しまわない ように します。
+     わくは まわりと そろえて、キャラクターも「1まいの カード」に 見せます */
   border-radius: var(--radius-s);
-  background: linear-gradient(180deg, #eaf2fb 0%, #f7fbff 62%, #fff 100%);
+  background: linear-gradient(180deg, #dceafa 0%, #eef5fd 62%, #ffffff 100%);
 }
-html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740 0%, #212f4b 62%, #26365a 100%); }
+html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1c2a3d 0%, #24344a 62%, #2c3d55 100%); }
 @media (prefers-color-scheme: dark) {
-  html[data-theme="auto"] .buddy-svg { background: linear-gradient(180deg, #1b2740 0%, #212f4b 62%, #26365a 100%); }
+  html[data-theme="auto"] .buddy-svg { background: linear-gradient(180deg, #1c2a3d 0%, #24344a 62%, #2c3d55 100%); }
 }
 
 /* 打つ 画面の ならび。
@@ -585,9 +844,9 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
   padding: 4px 10px 4px 4px; margin: 0; font: inherit; color: inherit;
   cursor: pointer; min-height: 44px;
 }
-.play-title.is-link:hover { border-color: var(--line); background: var(--surface-2); }
-.play-title.is-link:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
-.play-title-hint { font-size: .74rem; color: var(--muted); }
+.play-title.is-link:hover { border-color: var(--line); background: var(--surface); }
+.play-title.is-link:focus-visible { outline: 3px solid var(--primary-deep); outline-offset: 2px; }
+.play-title-hint { font-size: .74rem; color: var(--muted); font-weight: 700; }
 .play-title-hint::before { content: "▾ "; }
 
 /* チャレンジの のこり時間。さいごの 10びょうは 色が かわります */
@@ -615,25 +874,37 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
   font-size: var(--kb-em);
   user-select: none; touch-action: manipulation;
 }
+/* キーは「キーキャップ」に 見せます。まわりを すみ色で かこみ、
+   下だけ ふとく して あつみを 出します。
+
+   ■ margin は 2px から かえないで ください
+   play.js が キーの ましかくの たかさを「キーボードの はば ÷ 15 − 4」で
+   もとめて います。この 4 が 左右の margin 2px + 2px です。
+   ■ border を ふとく しても たかさは かわりません
+   box-sizing: border-box なので、わくは min-height の 中に 入ります。
+   だから ここを ふとくしても キーボードは 小さく なりません。 */
 .kb-key {
   position: relative;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   min-height: var(--kb-row, 2.6em); margin: 2px; padding: 2px;
-  border: 1.5px solid var(--line); border-bottom-width: 3px;
-  border-radius: 7px; background: var(--surface);
+  border: 1.5px solid var(--line); border-bottom-width: 4px;
+  border-radius: 9px; background: var(--surface);
   color: var(--text); line-height: 1.2; overflow: hidden;
   transition: background-color .1s ease, border-color .1s ease, transform .06s ease;
 }
-.kb-main { font-weight: 700; font-size: 1.25em; }
+.kb-main { font-weight: 800; font-size: 1.25em; }
 .kb-up { position: absolute; top: 2px; left: 4px; font-size: .8em; color: var(--muted); }
 .kb-kana { position: absolute; right: 4px; bottom: 2px; font-size: .8em; color: var(--muted); }
 .kb-name { font-size: .82em; color: var(--muted); text-align: center; padding: 0 2px; }
 /* いちばん上の 行（ブラウザ操作キー）は 練習に つかわないので すこし ひくく */
-.kb-key.is-top { min-height: calc(var(--kb-row, 2.6em) * .73); opacity: .62; background: var(--surface-2); }
+.kb-key.is-top {
+  min-height: calc(var(--kb-row, 2.6em) * .73); opacity: .62;
+  background: var(--surface-2); border-bottom-width: 2px;
+}
 .kb-key.is-home { background: var(--surface-2); }
 .kb-key.is-bump::after {
-  content: ""; position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%);
-  width: 26%; height: 3px; border-radius: 2px; background: var(--muted); opacity: .7;
+  content: ""; position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%);
+  width: 26%; height: 3px; border-radius: 2px; background: var(--muted); opacity: .8;
 }
 
 /* 指の 色分け（せっていで 消せます）。
@@ -648,15 +919,20 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
         → 同じ 指の キーが 同じ 色の 線で つながって 見えます
      3. ホームポジションの キーだけ 内がわに わくを 足す
    手の 絵の 指も 同じ 色で ぬって あるので（.hand-finger）、
-   「この 色の キーは この 指」が ことばを 読まなくても つながります。 */
+   「この 色の キーは この 指」が ことばを 読まなくても つながります。
+
+   ■ まわりの わくは すみ色の まま のこします
+   わくまで 指の 色に すると、キーの かたち（キーキャップ）が
+   ぼやけて しまいます。指の 色は「地の 色」と「下の わく」の
+   2つで 出し、かたちを つくる わくは さわりません。 */
 .kb.show-finger .kb-key {
   background: color-mix(in srgb, var(--finger, var(--surface)) var(--finger-tint), var(--surface));
-  border-color: color-mix(in srgb, var(--finger, var(--line)) 40%, var(--line));
+  border-color: color-mix(in srgb, var(--finger, var(--line)) 35%, var(--line));
   border-bottom-color: var(--finger, var(--line));
   border-bottom-width: 5px;
 }
 .kb.show-finger .kb-key.is-top {
-  background: var(--surface-2); border-color: var(--line); border-bottom-width: 3px;
+  background: var(--surface-2); border-color: var(--line); border-bottom-width: 2px;
 }
 .kb.show-finger .kb-key.is-home {
   box-shadow: inset 0 0 0 2.5px color-mix(in srgb, var(--finger, var(--line)) 70%, transparent);
@@ -666,8 +942,8 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
    指の 色分けより 強く 出したいので、セレクタを .kb から 書きます */
 .kb .kb-key.is-next {
   background: var(--primary); color: var(--primary-ink);
-  border-color: var(--primary); transform: translateY(-2px);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 35%, transparent);
+  border-color: var(--primary-deep); transform: translateY(-2px);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 45%, transparent);
   z-index: 2;
 }
 .kb .kb-key.is-next .kb-up,
@@ -691,10 +967,12 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
   border-left: 5px solid transparent; border-right: 5px solid transparent;
   border-top: 7px solid currentColor;
 }
-.kb .kb-key.is-next-shift { border-color: var(--primary); box-shadow: inset 0 0 0 2px var(--primary); }
+.kb .kb-key.is-next-shift { box-shadow: inset 0 0 0 3px var(--primary); }
 
-.kb .kb-key.hit-ok { background: var(--ok); border-color: var(--ok); color: #fff; }
-.kb .kb-key.hit-miss { background: var(--ng); border-color: var(--ng); color: #fff; }
+/* 打った しゅんかん。地の 色は 正誤で 分けますが、わくは すみ色の まま です
+   （かたちが 変わらないので、色が 見分けにくい 子でも キーを 見うしないません）*/
+.kb .kb-key.hit-ok { background: var(--ok); color: #fff; }
+.kb .kb-key.hit-miss { background: var(--ng); color: #fff; }
 .kb.shift-on .kb-key[data-code^="Shift"] { background: var(--primary); color: var(--primary-ink); }
 
 /* にがてな キーの ヒートマップ（きろく画面）。
@@ -717,8 +995,8 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
 }
 .heat-foot .heat-legend { margin: 0; }
 .heat-sample {
-  width: 18px; height: 18px; border-radius: 4px; display: inline-block;
-  border: 1px solid var(--line); margin-left: 8px;
+  width: 18px; height: 18px; border-radius: 5px; display: inline-block;
+  box-shadow: inset 0 0 0 1.5px var(--line); margin-left: 8px;
 }
 .heat-sample.lv1 { background: color-mix(in srgb, var(--ng) 24%, var(--surface)); }
 .heat-sample.lv2 { background: color-mix(in srgb, var(--ng) 50%, var(--surface)); }
@@ -742,17 +1020,17 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
 /* ---------------------------------------------------------------- ショートカット */
 
 .sc-task {
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-  box-shadow: var(--shadow); padding: 16px 18px; text-align: center;
+  background: var(--surface); border: 0; border-radius: var(--radius);
+  box-shadow: var(--shadow-lift); padding: 16px 18px; text-align: center;
 }
-.sc-name { margin: 0 0 4px; font-weight: 700; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.sc-name { margin: 0 0 4px; font-weight: 800; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; gap: 8px; }
 .sc-name .ico { color: var(--c-amber); }
 .sc-instruct { margin: 0 0 10px; font-size: clamp(1rem, 3vw, 1.15rem); }
 .sc-combo { margin: 0 0 6px; display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
 .sc-combo kbd {
-  font-family: var(--font); font-weight: 700; font-size: 1.05rem;
-  background: var(--surface-2); border: 1.5px solid var(--line); border-bottom-width: 3px;
-  border-radius: 8px; padding: 5px 12px; min-width: 44px; display: inline-block; text-align: center;
+  font-family: var(--font); font-weight: 800; font-size: 1.05rem;
+  background: var(--surface); border: 1.5px solid var(--line); border-bottom-width: 4px;
+  border-radius: 9px; padding: 4px 12px; min-width: 44px; display: inline-block; text-align: center;
 }
 .sc-combo .plus { color: var(--muted); }
 .sc-hint { margin: 0; color: var(--muted); font-size: .88rem; }
@@ -767,10 +1045,10 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
 .sc-field textarea {
   font: inherit; font-size: 1.02rem; line-height: 1.8;
   padding: 12px 14px; border-radius: var(--radius-s);
-  border: 2px solid var(--line); background: var(--surface); color: var(--text);
+  border: 2px solid var(--line); background: var(--surface-2); color: var(--text);
   resize: vertical; min-height: 96px;
 }
-.sc-field textarea:focus { border-color: var(--primary); outline: none; }
+.sc-field textarea:focus { border-color: var(--primary); background: var(--surface); box-shadow: 0 0 0 .25rem color-mix(in srgb, var(--primary) 20%, transparent); outline: none; }
 .sc-note { color: var(--muted); font-size: .86rem; display: flex; align-items: center; gap: 8px; }
 .sc-skip { text-align: center; }
 
@@ -781,14 +1059,14 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
    **その 3もんが ちゃんと のこって いる** ことです。 */
 
 .lap-bar {
-  display: block; height: 10px; border-radius: 5px; overflow: hidden;
-  background: var(--surface-2); border: 1px solid var(--line);
+  display: block; height: 12px; border-radius: 999px; overflow: hidden;
+  background: var(--line);
 }
 .lap-bar > span {
   display: block; height: 100%; width: 0;
   background: var(--c-teal); transition: width .3s ease;
 }
-.lap-note { margin: 6px 0 0; font-size: .86rem; color: var(--muted); }
+.lap-note { margin: 6px 0 0; font-size: .86rem; color: var(--muted); font-weight: 700; }
 .card-lap .lap-bar { margin-top: 4px; }
 
 /* ------------------------------------------------------------------
@@ -825,25 +1103,14 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
    1行に 1つの 行き先だけを 置き、中身は それぞれの 下の 階層に わけます。
    たてに 長い 画面に すると、打ちはじめるまでに 読む ものが ふえます。 */
 
-.menu-list { display: flex; flex-direction: column; gap: 10px; }
-.menu-row {
-  display: flex; align-items: center; gap: 14px; width: 100%;
-  padding: 14px 16px; min-height: 76px;
-  border: 1px solid var(--line); border-radius: var(--radius);
-  background: var(--surface); color: var(--text);
-  box-shadow: var(--shadow); font: inherit; text-align: left; cursor: pointer;
-  transition: transform .12s ease, border-color .12s ease;
-}
-.menu-row:active { transform: translateY(1px) scale(.995); }
-.menu-row:hover { border-color: var(--primary); }
-.menu-row[disabled] { opacity: .55; cursor: default; box-shadow: none; }
-.menu-row[disabled]:hover { border-color: var(--line); }
-.menu-row .row-icon { flex: none; color: var(--primary); display: flex; }
+.menu-list { display: flex; flex-direction: column; gap: 12px; }
+.menu-row[disabled] { opacity: .5; cursor: default; box-shadow: none; }
+.menu-row .row-icon { flex: none; color: var(--primary-deep); display: flex; }
 .menu-row .row-icon .ico { width: 28px; height: 28px; }
 .menu-row .row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.menu-row .row-title { font-weight: 700; }
-.menu-row .row-note { font-size: .86rem; color: var(--muted); }
-.menu-row .row-count { font-size: .8rem; color: var(--primary); font-weight: 700; }
+.menu-row .row-title { font-weight: 800; font-size: 1.05rem; }
+.menu-row .row-note { font-size: .86rem; color: var(--muted); font-weight: 700; }
+.menu-row .row-count { font-size: .8rem; color: var(--primary-deep); font-weight: 800; }
 .menu-row .row-arrow { flex: none; color: var(--muted); display: flex; }
 
 /* ---------------------------------------------------------------- けっか */
@@ -856,11 +1123,12 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
   display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px;
 }
 .result-grid div {
-  background: var(--surface-2); border-radius: var(--radius-s); padding: 10px 6px;
+  background: var(--surface-2);
+  border-radius: var(--radius-s); padding: 12px 6px;
   display: flex; flex-direction: column; align-items: center;
 }
-.result-grid span { font-size: .78rem; color: var(--muted); }
-.result-grid b { font-size: 1.8rem; color: var(--primary); line-height: 1.2; }
+.result-grid span { font-size: .78rem; color: var(--muted); font-weight: 700; }
+.result-grid b { font-size: 1.8rem; color: var(--primary-deep); line-height: 1.2; font-weight: 900; }
 .result-grid small { font-size: .74rem; color: var(--muted); }
 .result-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 20px; }
 
@@ -870,44 +1138,52 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
 
 /* ---------------------------------------------------------------- きろく */
 
-.spark { width: 100%; height: auto; color: var(--primary); }
-.spark-area { fill: color-mix(in srgb, var(--primary) 16%, transparent); }
-.spark-dot { fill: var(--primary); }
+.spark { width: 100%; height: auto; color: var(--primary-deep); }
+.spark-area { fill: color-mix(in srgb, var(--primary) 22%, transparent); }
+.spark-dot { fill: var(--primary-deep); }
 .hist-list { list-style: none; padding: 0; margin: 0; }
-.hist-list li { display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: .9rem; flex-wrap: wrap; }
+.hist-list li { display: flex; gap: 10px; padding: 7px 0; border-bottom: 2px solid var(--line); font-size: .9rem; flex-wrap: wrap; }
 .hist-list li:last-child { border-bottom: 0; }
-.hist-date { color: var(--muted); min-width: 44px; }
-.hist-title { flex: 1; min-width: 120px; }
-.hist-num { color: var(--primary); font-weight: 700; }
+.hist-date { color: var(--muted); min-width: 44px; font-weight: 700; }
+.hist-title { flex: 1; min-width: 120px; font-weight: 700; }
+.hist-num { color: var(--primary-deep); font-weight: 800; }
 
 .star-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
-.star-course-title { font-weight: 700; margin: 0 0 4px; color: var(--muted); font-size: .85rem; }
+.star-course-title { font-weight: 800; margin: 0 0 4px; color: var(--muted); font-size: .85rem; }
 .star-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: .88rem; padding: 3px 0; }
 
 /* ---------------------------------------------------------------- せってい */
 
-.seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.seg { display: flex; gap: 8px; flex-wrap: wrap; }
 .seg.mt { margin-top: 12px; }
 .seg-btn {
-  font: inherit; font-weight: 700; cursor: pointer; min-height: 44px; padding: 8px 16px;
-  border-radius: 999px; border: 2px solid var(--line); background: var(--surface-2); color: var(--text);
+  font: inherit; font-weight: 800; cursor: pointer; min-height: 44px; padding: 6px 16px;
+  border-radius: 999px; border: 2px solid var(--line); background: var(--surface); color: var(--text-2);
+  box-shadow: 0 3px 0 var(--line);
+  transition: transform .1s ease, box-shadow .1s ease, background-color .12s ease;
 }
-.seg-btn.on { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
+.seg-btn:active { transform: translateY(3px); box-shadow: 0 0 0 transparent; }
+/* えらばれて いる ものは、色だけ でなく **しずんだ かたち**でも しめします */
+.seg-btn.on {
+  background: linear-gradient(180deg, #3572bd, #265ea4); color: #fff;
+  border-color: transparent;
+  transform: translateY(3px); box-shadow: 0 0 0 transparent;
+}
 
 .switch { display: flex; align-items: center; gap: 12px; min-height: 48px; cursor: pointer; }
 .switch input { position: absolute; opacity: 0; width: 0; height: 0; }
 .switch-box {
   width: 30px; height: 30px; border-radius: 9px; flex: none;
-  border: 2px solid var(--line); background: var(--surface-2);
+  border: 2px solid var(--line); background: var(--surface);
   display: grid; place-items: center; color: transparent;
 }
-.switch-box .ico { width: 20px; height: 20px; }
-.switch input:checked + .switch-box { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
-.switch input:focus-visible + .switch-box { outline: 3px solid var(--primary); outline-offset: 2px; }
-.switch-label { font-size: .98rem; }
+.switch-box .ico { width: 20px; height: 20px; stroke-width: 3; }
+.switch input:checked + .switch-box { background: var(--primary); color: var(--primary-ink); }
+.switch input:focus-visible + .switch-box { outline: 3px solid var(--primary-deep); outline-offset: 2px; }
+.switch-label { font-size: .98rem; font-weight: 700; }
 
 /* きろくを けす ボタン。まちがえて 押しても すぐには 消えません（2だんかい） */
-.btn-danger { border-color: var(--ng); color: var(--ng); background: transparent; }
+.btn-danger { color: var(--ng); background: var(--surface); }
 .btn-danger-solid { background: var(--ng); color: #fff; }
 .reset-confirm { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
 
@@ -919,8 +1195,8 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
 /* よこは 打った じゅんばん、たては かかった 時間。
    ミスは 色だけで なく 下に のびる しるしでも 分けます（色に たよらない） */
 .tl { width: 100%; height: auto; }
-.tl-ok { fill: var(--primary); }
-.tl-retry { fill: color-mix(in srgb, var(--primary) 45%, transparent); }
+.tl-ok { fill: var(--primary-deep); }
+.tl-retry { fill: color-mix(in srgb, var(--primary-deep) 45%, transparent); }
 .tl-ng { fill: var(--ng); }
 .tl-tick { fill: var(--ng); }
 .tl-mid { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; opacity: .7; }
@@ -958,12 +1234,12 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
    2回 打っただけの キーを にがてと 言い切るのは まちがいです */
 .kb-key.is-mastery.m-unknown::after {
   background: transparent; opacity: 1;
-  border: 2px dashed var(--line);
+  border: 2px dashed var(--muted);
 }
 
 .mastery-sample {
   display: inline-block; width: 18px; height: 18px; border-radius: 5px;
-  vertical-align: -4px; margin: 0 4px 0 10px; border: 1px solid var(--line);
+  vertical-align: -4px; margin: 0 4px 0 10px; box-shadow: inset 0 0 0 1.5px var(--line);
 }
 .mastery-sample.m-good { background: var(--ok); }
 .mastery-sample.m-soso { background: var(--warn); }
@@ -972,8 +1248,8 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
 
 .weak-key {
   display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 6px;
-  border-radius: 8px; border: 2px solid var(--line); background: var(--surface-2);
-  font-size: .92rem;
+  border-radius: 9px; border: 1.5px solid var(--line); border-bottom-width: 4px;
+  background: var(--surface); font-size: .92rem; font-weight: 800;
 }
 .weak-finger { color: var(--muted); font-size: .88rem; }
 .rule-row { flex-wrap: wrap; }
@@ -1006,13 +1282,13 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
 }
 .bk-error {
   margin: 10px 0 0; padding: 10px 12px; border-radius: 12px;
-  background: color-mix(in srgb, var(--ng) 12%, transparent);
-  border: 2px solid var(--ng); color: var(--text); font-size: .92rem;
+  background: var(--ng-soft);
+  border: 2px solid var(--ng); color: var(--text); font-size: .92rem; font-weight: 700;
 }
 .bk-summary { list-style: none; padding: 0; margin: 12px 0; }
 .bk-summary li {
   display: flex; justify-content: space-between; gap: 10px;
-  padding: 7px 0; border-bottom: 1px solid var(--line); font-size: .92rem;
+  padding: 7px 0; border-bottom: 2px solid var(--line); font-size: .92rem; font-weight: 700;
 }
 .bk-summary li:last-child { border-bottom: 0; }
 .bk-summary span { color: var(--muted); }
@@ -1033,18 +1309,20 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
 .level-box { margin-bottom: 10px; }
 .level-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
 .level-badge {
-  font-weight: 800; font-size: 1.15rem; color: var(--primary-ink);
-  background: var(--primary); border-radius: 999px; padding: 2px 14px;
+  font-weight: 800; font-size: 1.15rem; color: #fff;
+  background: linear-gradient(180deg, #3572bd, #265ea4);
+  border-radius: 999px; padding: 1px 14px;
 }
-.level-rank { font-weight: 700; }
-.level-xp { margin-left: auto; color: var(--muted); font-size: .82rem; }
+.level-rank { font-weight: 800; }
+.level-xp { margin-left: auto; color: var(--muted); font-size: .82rem; font-weight: 700; }
 .level-bar {
-  height: 12px; border-radius: 6px; background: var(--surface-2);
-  border: 1px solid var(--line); overflow: hidden;
+  height: .6rem; border-radius: 999px; background: var(--line);
+  overflow: hidden;
 }
 .level-bar span {
-  display: block; height: 100%; border-radius: 6px;
-  background: linear-gradient(90deg, var(--primary), var(--c-teal));
+  display: block; height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, var(--c-green), #8fe6b7);
+  box-shadow: 0 0 .4rem color-mix(in srgb, var(--c-green) 50%, transparent);
   transition: width .4s ease;
 }
 
@@ -1056,84 +1334,96 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
 
 /* れんしゅうした 日の カレンダー（4週間ぶん） */
 .cal { display: grid; grid-template-columns: repeat(14, 1fr); gap: 5px; margin: 10px 0; max-width: 420px; }
-.cal-cell { display: block; aspect-ratio: 1; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--line); }
-.cal-cell.lv1 { background: color-mix(in srgb, var(--primary) 28%, var(--surface)); }
-.cal-cell.lv2 { background: color-mix(in srgb, var(--primary) 58%, var(--surface)); }
-.cal-cell.lv3 { background: var(--primary); border-color: var(--primary); }
+.cal-cell {
+  display: block; aspect-ratio: 1; border-radius: 5px;
+  background: var(--line);
+}
+.cal-cell.lv1 { background: color-mix(in srgb, var(--primary) 34%, var(--surface)); }
+.cal-cell.lv2 { background: color-mix(in srgb, var(--primary) 65%, var(--surface)); }
+.cal-cell.lv3 { background: var(--primary-deep); }
 .cal-axis {
   display: flex; justify-content: space-between; max-width: 420px;
-  margin: 0; color: var(--muted); font-size: .74rem;
+  margin: 0; color: var(--muted); font-size: .74rem; font-weight: 700;
 }
 
 /* ---------------------------------------------------------------- とくべつ れんしゅう */
 
 .special-grid, .pool-grid {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px;
 }
 .special-tile, .pool-tile {
   display: flex; flex-direction: column; gap: 3px; align-items: flex-start;
   padding: 14px 16px; border-radius: var(--radius); cursor: pointer;
-  border: 2px solid var(--line); background: var(--surface-2); color: var(--text);
+  border: 2px solid var(--tile-s, var(--primary-soft)); background: var(--surface); color: var(--text);
+  box-shadow: 0 4px 0 var(--tile-s, var(--primary-soft)), var(--shadow);
   font: inherit; text-align: left; min-height: 108px;
-  border-left-width: 8px; border-left-color: var(--tile, var(--primary));
   transition: transform .12s ease, box-shadow .12s ease;
 }
-.special-tile:hover:not(:disabled), .pool-tile:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
-.special-tile:disabled { cursor: default; opacity: .55; }
-.pool-tile { border-left-width: 2px; }
-.pool-tile.on { border-color: var(--primary); background: var(--primary-soft); }
-.pool-tile.on .tile-icon { color: var(--primary); }
+.special-tile { background: linear-gradient(to right, var(--tile, var(--primary)) 0 10px, var(--surface) 10px); padding-left: 22px; }
+.special-tile:hover:not(:disabled), .pool-tile:hover { transform: translate(-2px, -2px); box-shadow: var(--shadow-lift); }
+.special-tile:active:not(:disabled), .pool-tile:active { transform: translate(2px, 2px); box-shadow: 0 0 0 transparent; }
+.special-tile:disabled { cursor: default; opacity: .5; box-shadow: none; }
+/* えらばれて いる ものは、きいろの 地と **しずんだ かたち**で しめします */
+.pool-tile.on {
+  background: var(--accent-soft);
+  transform: translate(2px, 2px); box-shadow: 0 0 0 transparent;
+}
+.pool-tile.on .tile-icon { color: var(--accent-deep); }
 
 .course-extra { margin: 0 0 14px; }
 .mt { margin-top: 12px; }
 
 /* ---------------------------------------------------------------- バッジ */
 
-.badge-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 10px; }
+.badge-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 12px; }
 .badge-grid-all { margin-bottom: 24px; }
 .badge-tile {
   display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px;
   padding: 12px 8px; border-radius: var(--radius-s);
-  background: var(--surface-2); border: 1px solid var(--line);
+  background: var(--surface-2);
 }
-.badge-tile.got { background: var(--primary-soft); border-color: color-mix(in srgb, var(--primary) 40%, transparent); }
+/* もらった バッジだけ 白い 面に して、かげで 浮かせます。
+   ならんだ ときに「あつめた もの」だけが とび出して 見えます */
+.badge-tile.got { background: var(--surface); box-shadow: var(--shadow); }
 .badge-icon { color: var(--muted); }
 .badge-icon .ico { width: 30px; height: 30px; }
-.badge-tile.got .badge-icon { color: var(--primary); }
-.badge-title { font-weight: 700; font-size: .92rem; }
+.badge-tile.got .badge-icon { color: var(--accent-deep); }
+.badge-title { font-weight: 800; font-size: .92rem; }
 .badge-note { font-size: .76rem; color: var(--muted); line-height: 1.5; }
-.card-badge-new { border-color: color-mix(in srgb, var(--primary) 45%, transparent); }
+.card-badge-new { border-color: var(--primary); }
 
 /* ---------------------------------------------------------------- けっかの ごほうび */
 
 .result-best {
   display: inline-flex; align-items: center; gap: 6px; margin: 0 0 8px;
-  font-weight: 800; color: var(--primary-ink); background: var(--primary);
+  font-weight: 800; color: #fff;
+  background: linear-gradient(180deg, #ffb054, #ef8a17);
   border-radius: 999px; padding: 4px 16px;
 }
 .level-up {
   display: flex; align-items: center; justify-content: center; gap: 8px;
-  margin: 0 0 10px; font-weight: 700; color: var(--ok);
-  background: var(--ok-soft); border-radius: var(--radius-s); padding: 10px 14px;
+  margin: 0 0 10px; font-weight: 800; color: var(--ok);
+  background: var(--ok-soft); border: 2px solid var(--ok);
+  border-radius: var(--radius-s); padding: 9px 14px;
 }
-.xp-total { margin: 0; font-size: 1.9rem; font-weight: 800; color: var(--primary); }
-.xp-total span { font-size: .82rem; color: var(--muted); font-weight: 600; margin-left: 4px; }
+.xp-total { margin: 0; font-size: 1.9rem; font-weight: 900; color: var(--primary-deep); }
+.xp-total span { font-size: .82rem; color: var(--muted); font-weight: 700; margin-left: 4px; }
 .xp-list { list-style: none; padding: 0; margin: 6px 0 12px; }
-.xp-list li { display: flex; justify-content: space-between; gap: 10px; font-size: .88rem; padding: 3px 0; color: var(--muted); }
-.xp-list li span { font-weight: 700; color: var(--text); }
+.xp-list li { display: flex; justify-content: space-between; gap: 10px; font-size: .88rem; padding: 3px 0; color: var(--muted); font-weight: 700; }
+.xp-list li span { font-weight: 800; color: var(--text); }
 
 /* ---------------------------------------------------------------- ローマ字ひょう */
 
 .rt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 24px; }
 .rt-section {
-  background: var(--surface); border: 1px solid var(--line);
-  border-radius: var(--radius); padding: 12px 14px;
+  background: var(--surface); border: 0;
+  border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px 14px;
 }
-.rt-title { margin: 0 0 6px; font-size: .95rem; color: var(--primary); }
+.rt-title { margin: 0 0 6px; font-size: .95rem; color: var(--primary-deep); font-weight: 800; }
 .rt-list { list-style: none; padding: 0; margin: 0; }
-.rt-list li { display: flex; align-items: baseline; gap: 10px; padding: 3px 0; border-bottom: 1px solid var(--line); }
+.rt-list li { display: flex; align-items: baseline; gap: 10px; padding: 3px 0; border-bottom: 2px solid var(--line); }
 .rt-list li:last-child { border-bottom: 0; }
-.rt-kana { font-size: 1.15rem; font-weight: 700; min-width: 2.4em; }
+.rt-kana { font-size: 1.15rem; font-weight: 800; min-width: 2.4em; }
 .rt-romaji { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; letter-spacing: .06em; }
 .rt-alt { color: var(--muted); font-size: .85em; }
 .rt-note { margin: 8px 0 0; font-size: .8rem; color: var(--muted); }
@@ -1145,19 +1435,21 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
   display: flex; align-items: stretch;
   height: calc(var(--nav-h) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  background: color-mix(in srgb, var(--surface) 93%, transparent);
   backdrop-filter: blur(10px);
+  /* 線では なく かげで 本文から 浮かせます（上のバーと 同じ 考えかた）*/
   border-top: 1px solid var(--line);
+  box-shadow: 0 -.2rem .8rem rgba(47, 61, 79, .08);
 }
 .nav-btn {
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
-  border: 0; background: transparent; color: var(--muted); font: inherit; font-size: .7rem;
+  border: 0; background: transparent; color: var(--muted); font: inherit; font-size: .7rem; font-weight: 700;
   cursor: pointer; min-width: 44px; padding: 4px 2px;
 }
 .nav-btn .ico { width: 24px; height: 24px; }
-.nav-btn.on { color: var(--primary); font-weight: 700; }
-.nav-btn.on .ico { stroke-width: 2.4; }
-.nav-back { color: var(--text); font-weight: 700; }
+.nav-btn.on { color: var(--primary-deep); font-weight: 900; }
+.nav-btn.on .ico { stroke-width: 2.6; }
+.nav-back { color: var(--text); font-weight: 800; }
 .nav-back:disabled { color: var(--line); cursor: default; }
 .nav-back:not(:disabled) { border-right: 1px solid var(--line); }
 
@@ -1179,11 +1471,11 @@ body.root-bump .view { animation: bump .3s ease; }
 }
 .edge-hint.is-active { opacity: calc(var(--pull, 0) * .95); }
 .edge-arrow {
-  width: 34px; height: 34px; border-radius: 50%;
-  background: var(--primary); color: var(--primary-ink);
+  width: 36px; height: 36px; border-radius: 50%;
+  background: linear-gradient(180deg, #3572bd, #265ea4); color: #fff;
   transform: scale(calc(.6 + var(--pull, 0) * .4));
   display: grid; place-items: center;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, .25);
+  box-shadow: var(--shadow-lift);
 }
 .edge-arrow::after {
   content: ""; width: 9px; height: 9px;
@@ -1201,9 +1493,10 @@ body.root-bump .view { animation: bump .3s ease; }
   width: min(560px, calc(100% - 24px)); pointer-events: none;
 }
 .toast-item {
-  background: var(--text); color: var(--bg);
-  border-radius: 12px; padding: 10px 16px; font-size: .92rem; font-weight: 600;
-  box-shadow: var(--shadow); text-align: center;
+  background: var(--text); color: var(--surface);
+  border-radius: 999px;
+  padding: 10px 18px; font-size: .92rem; font-weight: 700;
+  box-shadow: var(--shadow-lift); text-align: center;
 }
 
 /* ---------------------------------------------------------------- 動きを へらす */
@@ -1353,12 +1646,26 @@ body.root-bump .view { animation: bump .3s ease; }
   .cal-axis { max-width: none; }
 
   /* えらぶ画面。「つづきから」の かたまりと 行き先の ならびを よこに おきます。
-     auto-fit なので、つづきの カードが ない ときは ならびが はば いっぱいに なります */
+     auto-fit なので、つづきの カードが ない ときは ならびが はば いっぱいに なります。
+
+     ■ 左の れつは 右と 同じ たかさまで のばします
+     左は カード1まい（つづきから）、右は 行き先が 4つ ならぶ ので、
+     上ぞろえに すると 左の ボタンだけが 宙に うかんで 見えました。
+     左の さいごの カードに あまった たかさを わたし、その 中身を
+     たての まんなかに おきます。2つの れつが 同じ 高さで おわるので、
+     ページの 下の へりが そろいます。 */
   .menu-grid {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-    gap: 16px; align-items: start;
+    gap: 16px; align-items: stretch;
   }
-  .menu-col > .card:last-child { margin-bottom: 0; }
+  .menu-col { display: flex; flex-direction: column; }
+  .menu-col > .card { margin-bottom: 16px; }
+  /* さいごの カードは **のばさず**、あまった たかさを 上下に 分けて
+     まんなかに おきます。
+     まえは カードじたいを のばして いましたが、わくの ない 白い カードに
+     なった いまは、のばすと ただの 大きな 空白に 見えます。
+     カードは 中身ぶんの 大きさの まま、位置だけ まんなかに します。 */
+  .menu-col > .card:last-child { margin-top: auto; margin-bottom: auto; }
 
   /* コースと ステージの 一覧。行が 高い ので、2れつに すると
      たての ながさが ほぼ はんぶんに なります */

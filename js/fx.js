@@ -20,6 +20,9 @@
  * つかいかた
  *   T.FX.enter(view)              画面を 出した ときに 1回だけ
  *   T.FX.enter(el, { base: 0 })   中の 一部だけ 差しかえた とき
+ *   T.FX.enter(el, { dir: 'fwd' })「奥へ 入った」向きで 出します
+ *   T.FX.ghost(el, 'fwd')         いまの 見た目を 写して 外へ すべらせる
+ *   T.FX.tapThen(el, run)         とびらを 押した 演出 → つぎの 画面へ
  *   T.FX.confetti({ x, y })       おいわいの ひらひら
  *   T.FX.pop(el)                  ぴょこんと はねる
  */
@@ -77,9 +80,25 @@
   ];
 
   /**
+   * 出てくる 向き。**どっちへ 動いたか**を 体で つたえる ための ものです。
+   *
+   *   fwd   … 奥の 階層へ 入った  → 中身は 右から 入る
+   *   back  … 1つ 前へ もどった   → 中身は 左から 入る
+   *   right … 右どなりの タブへ    → 右から
+   *   left  … 左どなりの タブへ    → 左から
+   *   null  … 向きなし（ひらいた ばかりの とき）→ 下から ふわっと
+   *
+   * 数字は「入ってくる ときの ずれ」です。大きく すると にぎやかに
+   * なりますが、**目が 追いつかなく なる**ので 40px までに して います。
+   */
+  const SLIDE = { fwd: 26, back: -26, right: 34, left: -34 };
+
+  /**
    * 画面（や その 一部）を 出します。
    * @param {Element} root
-   * @param {{base?: number, self?: boolean}} [opt] self:true なら root じしんも 出します
+   * @param {{base?: number, self?: boolean, dir?: string}} [opt]
+   *   self:true なら root じしんも 出します。
+   *   dir を わたすと、その 向きから すべりこんで 来ます。
    */
   function enter(root, opt) {
     if (!root) return;
@@ -87,6 +106,11 @@
     const base = o.base != null ? o.base : 0;
 
     if (!reduced()) {
+      // 向きが ない ときも 0px を 入れて おきます。
+      // --fx-x は 親から 受けつぐので、消すだけ では 1つ 上（#view）に
+      // のこって いる 向きが そのまま つかわれて しまいます
+      root.style.setProperty('--fx-x', (SLIDE[o.dir] || 0) + 'px');
+
       if (o.self) stagger([root], base);
       else stagger(root.children, base);
       INNER_LISTS.forEach(sel => {
@@ -96,6 +120,62 @@
     numbers(root);
     bars(root);
     rings(root);
+  }
+
+  // ------------------------------------------------------------------
+  // 出て いく 画面（ゴースト）
+  // ------------------------------------------------------------------
+
+  /**
+   * いまの 見た目を **写しとって**、反対がわへ すべらせながら 消します。
+   * 入って くる 画面と すれちがうので、「奥に 入った」「帰ってきた」が
+   * ことばを 読まなくても つたわります。
+   *
+   * ■ 写しとった ほうの id は ぜんぶ 消します
+   * app.js は document.getElementById で 画面の 中の ものを さがします。
+   * 写しを そのまま おくと、**古い ほうが 先に 見つかって**
+   * あたらしい 画面の ボタンが うごかなく なります。
+   *
+   * @param {Element} el うつす もと（#view）
+   * @param {string} dir 'fwd'（奥へ）/ 'back'（もどる）
+   */
+  function ghost(el, dir) {
+    if (!el || reduced()) return;
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+
+    // まるごと 写します（class も いっしょに 写るので、中の ならびかたが
+    // そのまま 出ます。中身だけを 別の 入れものに 移すと、まんなか よせなどの
+    // ならびが くずれて 一瞬 形が とんで 見えます）
+    const box = el.cloneNode(true);
+    box.classList.add('fx-ghost');
+    box.setAttribute('aria-hidden', 'true');
+    box.removeAttribute('id');
+    box.querySelectorAll('[id]').forEach(n => n.removeAttribute('id'));
+    box.style.left = r.left + 'px';
+    box.style.top = r.top + 'px';
+    box.style.width = r.width + 'px';
+    box.style.height = r.height + 'px';
+    box.style.setProperty('--fx-gx', (dir === 'back' ? 22 : -22) + 'px');
+    doc.body.appendChild(box);
+    setTimeout(() => { if (box.parentNode) box.parentNode.removeChild(box); }, 320);
+  }
+
+  /**
+   * 「とびら」を 押した 演出を 見せてから、つぎの 画面へ すすみます。
+   * 待ち時間は 0.15びょう だけ なので、反応が にぶく 感じる ことは ありません。
+   * 「動きを へらす」設定の 端末では、待たずに すぐ すすみます。
+   *
+   * @param {Element} el 押された ボタン
+   * @param {Function} run じっさいの 行き先
+   */
+  function tapThen(el, run) {
+    if (!el || reduced()) { run(); return; }
+    el.classList.remove('tapped');
+    void el.offsetWidth;          // アニメーションを さいしょから やりなおします
+    el.classList.add('tapped');
+    setTimeout(() => el.classList.remove('tapped'), 520);
+    setTimeout(run, 150);
   }
 
   /** 出しいれの あとしまつ。おなじ 要素を 2回 出しても かさならない ように します */
@@ -292,6 +372,7 @@
 
   T.FX = {
     reduced, enter, clear, clearLayer, stagger, numbers, bars, rings,
+    ghost, tapThen,
     confetti, confettiAt, ripple, pop, popAll
   };
 })(window);

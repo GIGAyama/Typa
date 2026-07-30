@@ -58,8 +58,33 @@
     lastBackAt: 0,
     handlers: {},       // screen → { render(params), leave(params) }
     onChange: null,     // 画面が かわったときに よばれます
+    onBeforeRender: null, // 中身を 描きかえる **直前**に よばれます
+    dir: null,          // こんかいの うごきの 向き（下の DIR を 見てください）
     guardArmed: false
   };
+
+  /**
+   * 画面が 入れかわる ときの「向き」。
+   * 見た目の うごき（右から すべる／左から すべる）を 決める ためだけの
+   * ものですが、これが あると「奥に 入った」「帰ってきた」が
+   * ことばを 読まなくても わかります。
+   *
+   *   'fwd'   … 1つ 下の 階層へ すすんだ
+   *   'back'  … 1つ 前へ もどった
+   *   'right' … 右どなりの タブへ うつった
+   *   'left'  … 左どなりの タブへ うつった
+   *   null    … 向きなし（ひらいた ばかり・その場の 描きなおし）
+   */
+  const DIR = { FWD: 'fwd', BACK: 'back', RIGHT: 'right', LEFT: 'left' };
+
+  /** タブの ならびを 見て、右へ 動いたか 左へ 動いたかを かえします */
+  function tabDir(fromTab, toTab) {
+    if (!fromTab || fromTab === toTab) return null;
+    const from = TABS.findIndex(t => t.id === fromTab);
+    const to = TABS.findIndex(t => t.id === toTab);
+    if (from < 0 || to < 0) return null;
+    return to > from ? DIR.RIGHT : DIR.LEFT;
+  }
 
   function current() { return state.stack[state.stack.length - 1] || null; }
 
@@ -79,13 +104,24 @@
   function register(screen, handler) { state.handlers[screen] = handler; }
 
   function emit() {
-    if (typeof state.onChange === 'function') state.onChange(current(), { canGoBack: canGoBack(), tab: state.tab });
+    if (typeof state.onChange === 'function') {
+      state.onChange(current(), { canGoBack: canGoBack(), tab: state.tab, dir: state.dir });
+    }
   }
 
-  /** いまの 画面を 描きなおします */
-  function render() {
+  /**
+   * いまの 画面を 描きなおします。
+   * @param {string|null} [dir] こんかいの 向き（DIR）。省くと 向きなし です。
+   *
+   * 中身を 描きかえる **前**に onBeforeRender を よびます。
+   * 出ていく 画面の 見た目を 写しとるのは、描きかえて しまうと
+   * もう 写せない からです（app.js が 写して 外へ すべらせます）。
+   */
+  function render(dir) {
     const cur = current();
     if (!cur) return;
+    state.dir = dir || null;
+    if (typeof state.onBeforeRender === 'function') state.onBeforeRender(state.dir, cur);
     const handler = state.handlers[cur.screen];
     if (handler && typeof handler.render === 'function') handler.render(cur.params || {});
     emit();
@@ -100,7 +136,7 @@
     const cur = current();
     if (cur && !leaveOk(cur, 'go')) return false;
     state.stack.push({ screen, params: params || {} });
-    render();
+    render(DIR.FWD);
     return true;
   }
 
@@ -109,9 +145,10 @@
     const cur = current();
     if (cur && cur.screen === tabId && state.stack.length === 1) return;
     if (cur && !leaveOk(cur, 'tab')) return;
+    const dir = tabDir(state.tab, tabId);
     state.tab = tabId;
     state.stack = [{ screen: tabId, params: {} }];
-    render();
+    render(dir);
   }
 
   /**
@@ -151,18 +188,19 @@
 
     if (state.stack.length > 1) {
       state.stack.pop();
-      render();
+      render(DIR.BACK);
       return;
     }
     if (cur && cur.screen !== state.tab) {
       state.stack = [{ screen: state.tab, params: {} }];
-      render();
+      render(DIR.BACK);
       return;
     }
     if (state.tab !== ROOT_TAB) {
+      const dir = tabDir(state.tab, ROOT_TAB);
       state.tab = ROOT_TAB;
       state.stack = [{ screen: ROOT_TAB, params: {} }];
-      render();
+      render(dir || DIR.BACK);
       return;
     }
     // ここが いちばん 上。もどる先が ないので、画面を ゆらして 知らせます
@@ -173,7 +211,8 @@
   function replace(screen, params) {
     if (state.stack.length > 0) state.stack.pop();
     state.stack.push({ screen, params: params || {} });
-    render();
+    // 階層は 変わって いないので、奥へ すすんだ ときと 同じ 向きに します
+    render(DIR.FWD);
   }
 
   // ------------------------------------------------------------------
@@ -260,6 +299,7 @@
    */
   function init(opt) {
     state.onChange = opt.onChange || null;
+    state.onBeforeRender = opt.onBeforeRender || null;
     state.onRootBack = opt.onRootBack || null;
     state.tab = opt.start || ROOT_TAB;
     state.stack = [{ screen: state.tab, params: {} }];
@@ -270,7 +310,7 @@
 
   global.Typa = global.Typa || {};
   global.Typa.Nav = {
-    TABS, ROOT_TAB, init, register, go, back, replace, selectTab, render, current, canGoBack,
+    TABS, ROOT_TAB, DIR, init, register, go, back, replace, selectTab, render, current, canGoBack,
     get tab() { return state.tab; }
   };
 })(window);
