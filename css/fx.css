@@ -1,0 +1,437 @@
+/* =====================================================================
+   Typa — fx.css（見た目の たのしさと、情報の 階層）
+   =====================================================================
+   style.css は「読みやすさ」を うけもち、この ファイルは
+   「たのしさ」と「まとまり（階層）」を うけもちます。
+
+   ■ どうして 分けたのか
+   きろく画面が 12まいの カードの たてならびに なり、ひらいた 子が
+   どこを 見れば いいのか わからなく なりました。**数が 多い ことが
+   問題では なく、ならんで いる ことが 問題**です。そこで
+     1. いちばん 上に「いまの じぶん」を 1つだけ 大きく 出す（.hero）
+     2. のこりは 4つの ひきだしに 分け、1つずつ 見せる（.subtabs）
+     3. その 中も、さらに たたんで おける ように する（.fold）
+   という 3段の 階層に しました。1画面に 出る カードは 多くて 3まいです。
+
+   ■ うごきの きまり
+   うごきは js/fx.js が つけます。ここには その うごきの 中身だけを
+   書きます。「動きを へらす」設定の 端末では style.css の おわりに ある
+   きまりで ぜんぶ 止まります（この ファイルの うごきも 同じです）。
+   ===================================================================== */
+
+:root {
+  --fx-ease: cubic-bezier(.2, .85, .3, 1);
+  --fx-bounce: cubic-bezier(.2, 1.5, .4, 1);
+}
+
+/* ---------------------------------------------------------------- 出しいれ */
+
+/* 画面に 出てくる ときの うごき。--fx-d で ひとつずつ ずらします */
+.fx-rise {
+  animation: fx-rise .42s var(--fx-ease) both;
+  animation-delay: var(--fx-d, 0ms);
+}
+@keyframes fx-rise {
+  from { opacity: 0; transform: translateY(14px) scale(.985); }
+  to { opacity: 1; transform: none; }
+}
+
+/* おいわいの ひらひらを 出す ところ。画面の いちばん 上に かぶせますが、
+   さわれない ように します（打つ じゃまを しません） */
+.fx-layer {
+  position: fixed; inset: 0; z-index: 90;
+  pointer-events: none; overflow: hidden;
+}
+.fx-bit { position: absolute; will-change: transform, opacity; }
+.fx-ripple {
+  position: absolute; width: 160px; height: 160px; border-radius: 50%;
+  border: 4px solid var(--primary);
+}
+
+/* ---------------------------------------------------------------- 背景
+
+   うすい 色の たまが ゆっくり うごきます。カードは すきとおって いないので
+   文字の 読みやすさは かわりません。打つ 画面では 止めます
+   （視界の はしで 何かが うごいて いると、そちらに 目が いきます）。 */
+
+body::before {
+  content: ""; position: fixed; inset: -25vmax; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(38vmax 38vmax at 14% 10%, color-mix(in srgb, var(--c-blue) 20%, transparent), transparent 62%),
+    radial-gradient(32vmax 32vmax at 86% 16%, color-mix(in srgb, var(--c-violet) 17%, transparent), transparent 62%),
+    radial-gradient(36vmax 36vmax at 72% 92%, color-mix(in srgb, var(--c-teal) 17%, transparent), transparent 62%);
+  animation: bg-drift 30s ease-in-out infinite alternate;
+}
+@keyframes bg-drift {
+  from { transform: translate3d(-2.5%, -1.5%, 0) scale(1); }
+  to { transform: translate3d(2.5%, 2%, 0) scale(1.08); }
+}
+body[data-screen="play"]::before { animation: none; opacity: .4; }
+
+/* ---------------------------------------------------------------- カード */
+
+.card {
+  position: relative;
+  transition: transform .18s var(--fx-ease), box-shadow .18s var(--fx-ease);
+}
+
+/* 押せる ものは、さわると すこし もち上がります。
+   押せない ものは うごかしません（うごく＝押せる、を まもります） */
+.menu-row:hover, .course-row:hover, .stage-row:hover, .badge-tile.got:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+.menu-row, .course-row, .stage-row {
+  transition: transform .18s var(--fx-ease), box-shadow .18s var(--fx-ease), border-color .18s ease;
+}
+.menu-row:active, .course-row:active, .stage-row:active { transform: translateY(0) scale(.99); }
+
+/* 行の 矢じるしが、さわると すこし 前に 出ます */
+.row-arrow { transition: transform .18s var(--fx-ease); }
+.menu-row:hover .row-arrow, .course-row:hover .row-arrow, .stage-row:hover .row-arrow {
+  transform: translateX(4px);
+}
+
+/* おびは かならず なめらかに のびます（fx.js が 0 から のばします）*/
+.lap-bar > span, .level-bar span, .row-bar span, .ring-fg {
+  transition: width .8s var(--fx-ease);
+}
+
+/* ---------------------------------------------------------------- ヒーロー
+
+   「いまの じぶん」を 1つだけ 大きく 出す ところ。
+   きろく画面を ひらいて **さいしょに 目に 入る もの**です。
+   数字を ならべるのでは なく、わっか（レベル）と ひとことで 見せます。 */
+
+.hero {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  padding: 18px 20px; margin-bottom: 14px;
+  border-radius: var(--radius); border: 1px solid var(--line);
+  background:
+    linear-gradient(135deg,
+      color-mix(in srgb, var(--primary) 16%, var(--surface)),
+      var(--surface) 58%,
+      color-mix(in srgb, var(--c-teal) 14%, var(--surface)));
+  box-shadow: var(--shadow);
+}
+
+/* ななめに ゆっくり ながれる ひかり。7びょうに 1回だけ 通ります */
+.hero::after {
+  content: ""; position: absolute; top: -60%; bottom: -60%; width: 42%;
+  left: -60%; pointer-events: none;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .38), transparent);
+  transform: skewX(-18deg);
+  animation: hero-shine 7s ease-in-out 1.2s infinite;
+}
+@keyframes hero-shine {
+  0% { left: -60%; } 26%, 100% { left: 130%; }
+}
+html[data-theme="dark"] .hero::after { background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .12), transparent); }
+
+.hero-ring { position: relative; width: 118px; height: 118px; flex: none; }
+.hero-ring .ring { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring-bg { fill: none; stroke: color-mix(in srgb, var(--line) 90%, transparent); stroke-width: 11; }
+.ring-fg {
+  fill: none; stroke: url(#fx-ring-grad); stroke-width: 11; stroke-linecap: round;
+}
+.hero-lv {
+  position: absolute; inset: 0; display: grid; place-content: center; text-align: center;
+  line-height: 1.1;
+}
+.hero-lv-num { display: block; font-size: 2.5rem; font-weight: 800; color: var(--primary); }
+.hero-lv-cap { display: block; font-size: .68rem; color: var(--muted); letter-spacing: .12em; }
+
+.hero-body { flex: 1; min-width: 190px; }
+.hero-rank { margin: 0; font-size: 1.35rem; font-weight: 800; letter-spacing: .02em; }
+.hero-xp { margin: 2px 0 10px; color: var(--muted); font-size: .88rem; }
+.hero-xp b { color: var(--primary); font-size: 1.05rem; }
+.hero-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.hero-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 4px 13px; font-size: .84rem; color: var(--muted);
+}
+.hero-chip b { color: var(--text); font-size: 1.05rem; }
+.hero-chip .ico { width: 18px; height: 18px; color: var(--muted); }
+.hero-chip.is-fire { border-color: color-mix(in srgb, #e2600a 45%, transparent); }
+.hero-chip.is-fire .ico { color: #e2600a; animation: flicker 2.4s ease-in-out infinite; }
+@keyframes flicker {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  30% { transform: scale(1.16) rotate(-5deg); }
+  62% { transform: scale(1.05) rotate(4deg); }
+}
+
+/* ---------------------------------------------------------------- ひきだし（サブタブ）
+
+   1つの 画面に ぜんぶ ならべる かわりに、4つの ひきだしに 分けて
+   1つずつ 見せます。**下の バーの タブとは 見た目を はっきり 変えます**
+   （同じ 見た目だと、どちらが 上の 階層か わからなく なります）。 */
+
+.subtabs {
+  display: flex; gap: 6px; margin: 0 0 14px;
+  padding: 5px; border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border: 1px solid var(--line);
+  overflow-x: auto; scrollbar-width: none;
+}
+.subtabs::-webkit-scrollbar { display: none; }
+.subtab {
+  flex: 1 0 auto; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 44px; padding: 6px 15px; white-space: nowrap;
+  border: 0; border-radius: 999px; background: transparent;
+  font: inherit; font-weight: 700; font-size: .9rem; color: var(--muted);
+  cursor: pointer; position: relative;
+  transition: color .18s ease, background-color .22s var(--fx-ease), transform .18s var(--fx-bounce);
+}
+.subtab .ico { width: 19px; height: 19px; transition: transform .3s var(--fx-bounce); }
+.subtab:hover { color: var(--text); }
+.subtab.on {
+  background: var(--primary); color: var(--primary-ink);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--primary) 40%, transparent);
+}
+.subtab.on .ico { transform: scale(1.16) rotate(-6deg); }
+.subtab.on::after {
+  content: ""; position: absolute; left: 50%; bottom: -1px; width: 0; height: 0;
+}
+
+/* ひきだしの 中身。切りかえた ときに すっと 入れかわります */
+.section-body { animation: fx-slide .3s var(--fx-ease) both; }
+@keyframes fx-slide {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 中身が ない ひきだし。「まだ ない」ことを、さびしく なく つたえます */
+.empty {
+  text-align: center; padding: 26px 18px;
+  color: var(--muted);
+}
+.empty .ico { width: 46px; height: 46px; color: color-mix(in srgb, var(--primary) 55%, transparent); }
+.empty-title { margin: 8px 0 4px; font-weight: 700; color: var(--text); font-size: 1.02rem; }
+.empty p { margin: 0; font-size: .9rem; }
+.empty .btn { margin-top: 14px; }
+
+/* ---------------------------------------------------------------- たたむ
+
+   ひきだしの 中を さらに たためる ように します。
+   コースごとの ★や、ふるい れんしゅうの ならびは、ふだんは
+   **数だけ 見えて いれば じゅうぶん**です。 */
+
+.fold {
+  border: 1px solid var(--line); border-radius: var(--radius-s);
+  background: var(--surface-2); margin-top: 10px; overflow: hidden;
+}
+.fold + .fold { margin-top: 8px; }
+.fold > summary {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 50px; padding: 8px 14px; cursor: pointer;
+  font-weight: 700; list-style: none;
+}
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::after {
+  content: ""; margin-left: auto; flex: none;
+  width: 9px; height: 9px; border-right: 2.5px solid var(--muted); border-bottom: 2.5px solid var(--muted);
+  transform: rotate(45deg) translate(-2px, -2px);
+  transition: transform .25s var(--fx-ease);
+}
+.fold[open] > summary::after { transform: rotate(-135deg) translate(-2px, -2px); }
+.fold > summary:hover { background: color-mix(in srgb, var(--primary) 8%, transparent); }
+.fold-count { margin-left: auto; font-size: .82rem; color: var(--muted); font-weight: 700; }
+.fold > summary::after { margin-left: 10px; }
+.fold-body { padding: 4px 14px 14px; animation: fx-slide .26s var(--fx-ease) both; }
+
+/* ---------------------------------------------------------------- ならんだ 数字
+
+   「きょうの ようす」などの 3つの 数字。数字が そだつ うごき（fx.js）と
+   あわせて、1つずつ 大きさの ある はこに 入れます。 */
+
+.today-item {
+  position: relative; padding: 10px 4px; border-radius: var(--radius-s);
+  background: color-mix(in srgb, var(--surface-2) 80%, transparent);
+  transition: transform .2s var(--fx-ease);
+}
+.today-item:hover { transform: translateY(-2px); }
+.today-num { font-variant-numeric: tabular-nums; }
+
+/* ---------------------------------------------------------------- ★ */
+
+.stars .star { transition: transform .2s var(--fx-bounce), color .2s ease; }
+.stars .star.on { animation: star-glow 2.6s ease-in-out infinite; }
+.stars .star.on:nth-child(2) { animation-delay: .25s; }
+.stars .star.on:nth-child(3) { animation-delay: .5s; }
+@keyframes star-glow {
+  0%, 78%, 100% { transform: scale(1); filter: none; }
+  86% { transform: scale(1.2) rotate(-8deg); filter: drop-shadow(0 0 6px #f0a50088); }
+}
+
+/* けっか画面の ★は 大きいので、じゅんばんに ぴょこんと 出します（fx.js）*/
+.result-stars .star { display: inline-block; }
+
+/* ---------------------------------------------------------------- バッジ */
+
+.badge-tile {
+  position: relative; overflow: hidden;
+  transition: transform .2s var(--fx-ease), box-shadow .2s var(--fx-ease);
+}
+.badge-tile.got::before {
+  content: ""; position: absolute; top: -50%; bottom: -50%; left: -70%; width: 45%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .5), transparent);
+  transform: skewX(-20deg);
+  animation: badge-shine 6s ease-in-out infinite;
+}
+@keyframes badge-shine { 0% { left: -70%; } 22%, 100% { left: 150%; } }
+html[data-theme="dark"] .badge-tile.got::before { background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .16), transparent); }
+.badge-tile .badge-icon .ico { transition: transform .3s var(--fx-bounce); }
+.badge-tile.got:hover .badge-icon .ico { transform: scale(1.2) rotate(-8deg); }
+/* まだ もらって いない バッジは しずかに します（見せますが 目立たせません） */
+.badge-tile:not(.got) { opacity: .72; }
+
+/* あつめぐあいの おび */
+.collect-bar {
+  display: block; height: 12px; border-radius: 6px; overflow: hidden;
+  background: var(--surface-2); border: 1px solid var(--line); margin: 8px 0 4px;
+}
+.collect-bar > span {
+  display: block; height: 100%; width: 0; border-radius: 6px;
+  background: linear-gradient(90deg, var(--c-amber), var(--primary));
+}
+
+/* ---------------------------------------------------------------- ステージの みち
+
+   ステージは 1つずつ すすむ ものなので、**たての 線で つなぎます**。
+   一覧では なく「みち」に 見えると、つぎに どこへ 行くかが わかります。 */
+
+.stage-list { position: relative; }
+.stage-row { position: relative; }
+.stage-row + .stage-row::before {
+  content: ""; position: absolute; left: 30px; top: -11px; width: 3px; height: 11px;
+  background: color-mix(in srgb, var(--primary) 35%, var(--line));
+  border-radius: 2px;
+}
+.stage-no {
+  transition: transform .2s var(--fx-bounce), background-color .2s ease, color .2s ease;
+}
+.stage-row:hover .stage-no { transform: scale(1.12) rotate(-6deg); }
+/* ★3つの ステージは、番号を 金色に して「やりきった」ことを 見せます */
+.stage-row.is-full .stage-no {
+  background: linear-gradient(140deg, #ffd166, #f0a500);
+  color: #4a3000;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #f0a500 28%, transparent);
+}
+.stage-row.is-doing { border-left-color: var(--c-teal); }
+.stage-row.is-doing .stage-no { background: color-mix(in srgb, var(--c-teal) 22%, var(--surface)); color: var(--c-teal); }
+
+/* ---------------------------------------------------------------- えらぶ画面 */
+
+/* いちばん 大きい「つづきから」の ボタン。押したく なる 見た目に します */
+.card-next .btn-primary.btn-big {
+  position: relative; overflow: hidden;
+  background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--c-violet) 55%, var(--primary)));
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--primary) 40%, transparent);
+  transition: transform .2s var(--fx-ease), box-shadow .2s var(--fx-ease);
+}
+.card-next .btn-primary.btn-big:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--primary) 50%, transparent);
+}
+.card-next .btn-primary.btn-big::after {
+  content: ""; position: absolute; top: -60%; bottom: -60%; left: -60%; width: 40%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .34), transparent);
+  transform: skewX(-18deg); animation: hero-shine 5.5s ease-in-out 1s infinite;
+}
+.card-next .btn-primary.btn-big .ico { animation: nudge 2.2s ease-in-out infinite; }
+@keyframes nudge { 0%, 70%, 100% { transform: translateX(0); } 82% { transform: translateX(5px); } }
+
+/* えらぶ画面の 行は、アイコンを 色で 分けます（行き先ごとに 色が ちがいます）*/
+.menu-row .row-icon {
+  width: 46px; height: 46px; border-radius: 14px; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--tile, var(--primary)) 16%, transparent);
+  color: var(--tile, var(--primary));
+  transition: transform .25s var(--fx-bounce), background-color .2s ease;
+}
+.menu-row:hover .row-icon { transform: rotate(-7deg) scale(1.08); }
+
+/* ---------------------------------------------------------------- けっか画面 */
+
+.card-result { position: relative; overflow: hidden; }
+.result-best {
+  animation: pop-in .5s var(--fx-bounce) both;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--primary) 45%, transparent);
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(.5); }
+  to { opacity: 1; transform: scale(1); }
+}
+.result-grid div { transition: transform .2s var(--fx-ease); }
+.result-grid div:hover { transform: translateY(-3px); }
+.result-grid b { font-variant-numeric: tabular-nums; }
+.level-up { animation: pop-in .55s var(--fx-bounce) .1s both; }
+.xp-total { font-variant-numeric: tabular-nums; }
+.xp-list li { animation: fx-slide .35s var(--fx-ease) both; }
+.xp-list li:nth-child(2) { animation-delay: .07s; }
+.xp-list li:nth-child(3) { animation-delay: .14s; }
+.xp-list li:nth-child(4) { animation-delay: .21s; }
+
+/* ---------------------------------------------------------------- 下の バー */
+
+.nav-btn .ico { transition: transform .3s var(--fx-bounce); }
+.nav-btn:hover .ico { transform: translateY(-2px); }
+.nav-btn.on .ico { transform: translateY(-3px) scale(1.1); }
+/* えらばれて いる タブの 下に、まるい しるしを つけます */
+.nav-btn.on::after {
+  content: ""; position: absolute; bottom: 6px; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--primary);
+  animation: pop-in .3s var(--fx-bounce) both;
+}
+.nav-btn { position: relative; }
+
+/* ---------------------------------------------------------------- しらせ */
+
+.toast-item { animation: toast-in .32s var(--fx-bounce) both; }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(16px) scale(.94); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---------------------------------------------------------------- こまかい ところ */
+
+/* たたんだ 中で ふたつの 話を 分ける 線 */
+.fold-line { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+.fold .lead { margin-top: 0; }
+.fold .btn-small { margin-left: 0; }
+
+/* ★3つの ステージの 番号は かんむりに なります（数より うれしい しるし）*/
+.stage-no .ico { width: 20px; height: 20px; }
+.grade-chip .ico { width: 14px; height: 14px; vertical-align: -.2em; margin-right: 2px; }
+
+/* コースの さいしょに 出す「すすみ」カード。左の へりを コースの 色に します */
+.card-course { border-left: 8px solid var(--tile, var(--primary)); }
+.card-course .lead .ico { color: var(--tile, var(--primary)); }
+.card-course .row-bar { margin: 8px 0 4px; height: 10px; border-radius: 5px; }
+
+/* ぜんぶ クリアした コースは、へりを 金色に して 一覧の 中で 目立たせます */
+.course-row.is-full { border-left-color: #f0a500; }
+.course-row.is-full .grade-chip {
+  color: #8a5b00; background: color-mix(in srgb, #f0a500 22%, var(--surface));
+  border-color: color-mix(in srgb, #f0a500 45%, transparent);
+}
+html[data-theme="dark"] .course-row.is-full .grade-chip { color: #ffd166; }
+
+.xp-total b { font-size: inherit; color: inherit; }
+
+/* ---------------------------------------------------------------- せまい 画面 */
+
+@media (max-width: 560px) {
+  .hero { gap: 14px; padding: 14px 16px; }
+  .hero-ring { width: 96px; height: 96px; }
+  .hero-lv-num { font-size: 2.05rem; }
+  .subtab { padding: 6px 12px; font-size: .84rem; }
+  .subtab .ico { display: none; }
+}
+
+/* たてが みじかい 端末では、かざりの うごきを へらして 中身を ひろげます */
+@media (max-height: 620px) {
+  .hero::after, .badge-tile.got::before { animation: none; }
+}

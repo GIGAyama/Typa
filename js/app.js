@@ -8,8 +8,15 @@
  *   れんしゅう → コース → ステージ（練習）→ けっか
  *   　　　　　  → チャレンジ（時間ぎめ）→ けっか
  *   　　　　　  → にがて とっくん → けっか
- *   きろく → バッジ
- *   せってい → ローマ字ひょう
+ *   きろく → ［きょう／にがて／たからもの／あゆみ］→ バッジ
+ *   せってい → ［ヒント／みため／キーボード／データ］→ ローマ字ひょう / もちだし
+ *
+ * ■ 「ひきだし」（サブタブ）は 階層の 4段目です
+ * きろくと せっていは、あつめられる ものが ふえるほど カードの
+ * たてならびが 長く なります。ならべる かわりに 4つの ひきだしに
+ * 分けて、1つずつ 見せます。ひきだしを 切りかえた ときは
+ * **その 中だけ** を 描きなおします（swapSection）。上の ヒーローまで
+ * 描きなおすと、レベルの わっかが 何度も 0から まわって うるさく なります。
  *
  * どの 画面でも、下部バーの「もどる」・画面の はしからの スワイプ・
  * 端末の 戻る の 3つが 同じ 1つの 動きに なります（nav.js を 見てください）。
@@ -31,7 +38,7 @@
    * アプリの ばんごう。**ここ 1か所だけ**に 書きます。
    * せってい画面の 表示にも、学習ログの appVersion にも これを つかいます。
    */
-  const APP_VERSION = '3.3.0';
+  const APP_VERSION = '4.0.0';
 
   let view = null;
   let installPrompt = null;
@@ -41,6 +48,22 @@
 
   /** きろく画面の キーボードの 見かた（miss = まちがえた かず / mastery = おぼえぐあい） */
   let heatMode = 'miss';
+
+  /**
+   * ひきだし（サブタブ）で いま ひらいて いる ところ。
+   *
+   * ■ どうして 1画面に ぜんぶ 出さないのか
+   * きろく画面は カードが 12まいの たてならびに なって いました。
+   * 中身は どれも 意味の ある ものですが、**ひらいた 子が どこを 見れば
+   * いいのか わからない** 画面でした。数を へらすのでは なく、
+   * 「きょう／にがて／たからもの／あゆみ」の 4つに 分けて、
+   * 1つずつ 見せます。1画面に 出る カードは 多くて 3まいです。
+   *
+   * 画面を いききしても のこします。まえに 見て いた ところに もどるほうが、
+   * いつも さいしょの ひきだしに 戻されるより 迷いません。
+   */
+  let recordTab = 'today';
+  let settingsTab = 'hint';
 
   /**
    * れんしゅうを やめた 理由。'show' なら けっか画面を 出します。
@@ -74,9 +97,119 @@
           <span class="level-xp">つぎの レベルまで あと ${Math.max(0, lv.need - lv.xp)}</span>
         </div>
         <div class="level-bar" role="img" aria-label="レベル ${lv.level}、つぎまで ${Math.max(0, lv.need - lv.xp)}">
-          <span style="width:${Math.round(lv.ratio * 100)}%"></span>
+          <span data-grow="${Math.round(lv.ratio * 100)}"></span>
         </div>
       </div>`;
+  }
+
+  /**
+   * 「いまの じぶん」を 1つだけ 大きく 出す ところ（きろく画面の いちばん 上）。
+   *
+   * ■ 数字を ならべるのを やめました
+   * まえは レベル・けいけんち・れんぞく日数・きょうの 3つの 数字が
+   * ばらばらの カードに 入って いました。ひらいて さいしょに 見る ものが
+   * 7つの 数字 だった、という ことです。
+   * ここでは **わっか（レベル）1つと、ひとことの 名前**を 中心に して、
+   * のこりは 小さな しるしに します。数字は fx.js が 0から そだてます。
+   */
+  function levelHero(lv, st, today) {
+    const left = Math.max(0, lv.need - lv.xp);
+    return `
+      <section class="hero" role="img"
+        aria-label="レベル ${lv.level}、${lv.rank}。つぎの レベルまで あと ${left}。れんぞく ${st.days}日。">
+        <div class="hero-ring">
+          <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
+            <circle class="ring-bg" cx="60" cy="60" r="52"/>
+            <circle class="ring-fg" cx="60" cy="60" r="52" data-ring="${lv.ratio.toFixed(3)}"/>
+          </svg>
+          <span class="hero-lv">
+            <b class="hero-lv-num" data-count="${lv.level}">0</b>
+            <span class="hero-lv-cap">レベル</span>
+          </span>
+        </div>
+        <div class="hero-body">
+          <p class="hero-rank">${esc(lv.rank)}</p>
+          <p class="hero-xp">つぎの レベルまで あと <b>${left}</b></p>
+          <div class="hero-chips">
+            <span class="hero-chip${st.days > 0 ? ' is-fire' : ''}">${icon('fire')}<b>${st.days}</b>日 れんぞく</span>
+            <span class="hero-chip">${icon('keyboard')}<b>${today.keys}</b>だ きょう</span>
+          </div>
+        </div>
+      </section>`;
+  }
+
+  /**
+   * ひきだしの 見出し（サブタブ）。
+   * 下部バーの タブとは **わざと 見た目を 変えて** います。同じ 見た目だと
+   * どちらが 上の 階層なのか わからなく なります。
+   */
+  function subtabs(list, currentId, attr, label) {
+    return `
+      <div class="subtabs" role="tablist" aria-label="${esc(label)}">
+        ${list.map(t => `
+          <button class="subtab${t.id === currentId ? ' on' : ''}" type="button" role="tab"
+            aria-selected="${t.id === currentId}" data-${attr}="${esc(t.id)}">
+            ${icon(t.icon)}<span>${esc(t.label)}</span>
+          </button>`).join('')}
+      </div>`;
+  }
+
+  /** たためる ひとかたまり。ふだんは 見出しと 数だけ 見えて いれば じゅうぶんな ものに つかいます */
+  function fold(title, count, inner, open) {
+    return `
+      <details class="fold"${open ? ' open' : ''}>
+        <summary>${esc(title)}${count ? `<span class="fold-count">${esc(count)}</span>` : ''}</summary>
+        <div class="fold-body">${inner}</div>
+      </details>`;
+  }
+
+  /**
+   * まだ 何も ない ときの ひきだし。
+   * 空の 画面を そのまま 見せると「こわれて いる」ように 見えます。
+   * ここでは かならず **つぎに 何を すれば いいか**を 1つ 出します。
+   */
+  function empty(iconName, title, note, action) {
+    return card(`
+      <div class="empty">
+        ${icon(iconName)}
+        <p class="empty-title">${esc(title)}</p>
+        <p>${esc(note)}</p>
+        ${action || ''}
+      </div>`);
+  }
+
+  /**
+   * ひきだしの 見出しを つなぎます。
+   * 押しても **画面ぜんぶは 描きなおしません**。上の ヒーローが 出しなおしに
+   * なると、レベルの わっかが 何度も 0から まわって うるさく なります。
+   */
+  function bindSubtabs(attr, onPick) {
+    const list = view.querySelectorAll(`[data-${attr}]`);
+    list.forEach(el => {
+      el.addEventListener('click', () => {
+        const id = el.dataset[attr.replace(/-([a-z])/g, (m, c) => c.toUpperCase())];
+        if (el.classList.contains('on')) return;
+        list.forEach(b => {
+          const on = b === el;
+          b.classList.toggle('on', on);
+          b.setAttribute('aria-selected', String(on));
+        });
+        onPick(id);
+      });
+    });
+  }
+
+  /** ひきだしの 中身だけを 入れかえて、その ぶんだけ 出しなおします */
+  function swapSection(box, html, bind) {
+    if (!box) return;
+    box.innerHTML = html;
+    // アニメーションを もう一度 さいしょから 出すには、いったん class を
+    // はずして レイアウトを 読みなおす 必要が あります
+    box.classList.remove('section-body');
+    void box.offsetWidth;
+    box.classList.add('section-body');
+    if (bind) bind(box);
+    if (T.FX) T.FX.enter(box);
   }
 
   /** れんぞく日数の 1行 */
@@ -131,17 +264,18 @@
       ${reviewCard(due)}
 
       <div class="menu-list">
-        <button class="menu-row" data-go-screen="courses">
+        <button class="menu-row tile-blue" data-go-screen="courses">
           <span class="row-icon">${icon('keyboard')}</span>
           <span class="row-body">
             <span class="row-title">コースから えらぶ</span>
             <span class="row-note">ゆびの ばしょ・ローマ字・ことば・文・ショートカット</span>
+            <span class="row-bar"><span data-grow="${Math.round(clearedStages / Math.max(1, T.Lessons.totalStages()) * 100)}"></span></span>
             <span class="row-count">${clearedStages} / ${T.Lessons.totalStages()} ステージ</span>
           </span>
           <span class="row-arrow">${icon('next')}</span>
         </button>
 
-        <button class="menu-row" data-go-screen="challenge">
+        <button class="menu-row tile-amber" data-go-screen="challenge">
           <span class="row-icon">${icon('timer')}</span>
           <span class="row-body">
             <span class="row-title">チャレンジ</span>
@@ -151,7 +285,7 @@
           <span class="row-arrow">${icon('next')}</span>
         </button>
 
-        <button class="menu-row" data-go-weak ${weak.ready ? '' : 'disabled'}>
+        <button class="menu-row tile-violet" data-go-weak ${weak.ready ? '' : 'disabled'}>
           <span class="row-icon">${icon('finger')}</span>
           <span class="row-body">
             <span class="row-title">にがて とっくん</span>
@@ -162,7 +296,7 @@
           <span class="row-arrow">${icon('next')}</span>
         </button>
 
-        <button class="menu-row" data-tab-go="records">
+        <button class="menu-row tile-teal" data-tab-go="records">
           <span class="row-icon">${icon('chart')}</span>
           <span class="row-body">
             <span class="row-title">きょうの ようす・きろく</span>
@@ -270,13 +404,14 @@
       <div class="course-list">
         ${T.Lessons.COURSES.map(c => {
           const cleared = c.stages.filter(s => (progress[s.id] || {}).clears > 0).length;
+          const done = cleared >= c.stages.length;
           return `
-          <button class="course-row tile-${c.color}" data-go-course="${esc(c.id)}">
+          <button class="course-row tile-${c.color}${done ? ' is-full' : ''}" data-go-course="${esc(c.id)}">
             <span class="row-icon">${icon(c.icon)}</span>
             <span class="row-body">
-              <span class="row-title">${esc(c.title)}</span>
+              <span class="row-title">${esc(c.title)}${done ? `<span class="grade-chip">${icon('check')} ぜんぶ クリア</span>` : ''}</span>
               <span class="row-note">${esc(c.note)}</span>
-              <span class="row-bar"><span style="width:${Math.round(cleared / c.stages.length * 100)}%"></span></span>
+              <span class="row-bar"><span data-grow="${Math.round(cleared / c.stages.length * 100)}"></span></span>
               <span class="row-count">${cleared} / ${c.stages.length} ステージ</span>
             </span>
             <span class="row-arrow">${icon('next')}</span>
@@ -308,25 +443,40 @@
     const course = T.Lessons.findCourse(params.courseId);
     if (!course) { T.Nav.selectTab('courses'); return; }
     const progress = T.Store.getProgress();
+    const cleared = course.stages.filter(s => (progress[s.id] || {}).clears > 0).length;
+    const starSum = course.stages.reduce((n, s) => n + ((progress[s.id] || {}).stars || 0), 0);
+
     view.innerHTML = `
       ${pageTitle(course.title, course.note)}
-      ${course.note2 ? `<p class="hint-box">${icon('info')} ${esc(course.note2)}</p>` : ''}
-      ${course.id === 'romaji' ? `<p class="course-extra">
-        <button class="btn btn-outline" data-go-screen="romaji-table">${icon('grid')} ローマ字ひょうを 見る</button></p>` : ''}
+
+      <!-- コースの すすみぐあいを 1行だけ。ステージを 1つずつ 見なくても
+           「どこまで きたか」が わかります -->
+      ${card(`
+        <p class="lead">${icon(course.icon)} この コースの すすみ</p>
+        <span class="row-bar"><span data-grow="${Math.round(cleared / course.stages.length * 100)}"></span></span>
+        <p class="muted">${cleared} / ${course.stages.length} ステージ ・ ★ ${starSum} / ${course.stages.length * 3}</p>
+        ${course.note2 ? `<p class="muted">${icon('info')} ${esc(course.note2)}</p>` : ''}
+        ${course.id === 'romaji' ? `
+          <button class="btn btn-outline mt" data-go-screen="romaji-table">${icon('grid')} ローマ字ひょうを 見る</button>` : ''}
+      `, `tile-${course.color} card-course`)}
+
       <div class="stage-list">
         ${course.stages.map((s, i) => {
           const p = progress[s.id] || { clears: 0, stars: 0, bestKps: 0, bestAccuracy: 0 };
           const need = Math.max(1, T.Lessons.stageCount(s));
           const lap = Math.max(0, Math.min(need - 1, p.lapItems || 0));
+          // ★3つ ＝ やりきった、とちゅう ＝ いま やって いる。
+          // 色 だけでは 分からない ので、番号の 形と ことばでも 分けます
+          const cls = p.stars >= 3 ? ' is-full' : (lap > 0 ? ' is-doing' : '');
           return `
-          <button class="stage-row" data-go-stage="${esc(course.id)}:${esc(s.id)}">
-            <span class="stage-no">${i + 1}</span>
+          <button class="stage-row${cls}" data-go-stage="${esc(course.id)}:${esc(s.id)}">
+            <span class="stage-no">${p.stars >= 3 ? icon('crown') : (i + 1)}</span>
             <span class="stage-body">
               <span class="stage-title">${esc(s.title)}${s.grade
                 ? `<span class="grade-chip">めやす ${s.grade}年</span>` : ''}</span>
               <span class="stage-note">${esc(s.note)}</span>
               ${lap > 0 ? `<span class="stage-lap">
-                <span class="lap-bar"><span style="width:${Math.round(lap / need * 100)}%"></span></span>
+                <span class="lap-bar"><span data-grow="${Math.round(lap / need * 100)}"></span></span>
                 <span class="stage-lap-text">ひとまわりまで あと ${need - lap}もん</span></span>` : ''}
               ${p.clears > 0 ? `<span class="stage-best">さいこう ${p.bestKps.toFixed(1)} 打/びょう ・ 正かくさ ${Math.round(p.bestAccuracy)}%</span>` : ''}
             </span>
@@ -645,15 +795,15 @@
         <p class="result-word">${esc(praise(r, meta, n))}</p>
         <div class="result-grid">
           ${isShortcut ? `
-            <div><span>できた 課題</span><b>${okCount}</b><small>/ ${r.items.length}</small></div>
-            <div><span>かかった 時間</span><b>${Math.round(r.elapsedMs / 1000)}</b><small>びょう</small></div>
+            <div><span>できた 課題</span><b data-count="${okCount}">0</b><small>/ ${r.items.length}</small></div>
+            <div><span>かかった 時間</span><b data-count="${Math.round(r.elapsedMs / 1000)}">0</b><small>びょう</small></div>
           ` : `
-            ${isChallenge ? `<div><span>スコア</span><b>${r.correctKeys}</b><small>だ</small></div>` : ''}
-            <div><span>はやさ</span><b>${r.kps.toFixed(1)}</b><small>打/びょう</small></div>
-            <div><span>正かくさ</span><b>${Math.round(r.accuracy)}</b><small>%</small></div>
-            ${isChallenge ? '' : `<div><span>正しく 打てた 数</span><b>${r.correctKeys}</b><small>だ</small></div>`}
-            <div><span>ミス</span><b>${r.missKeys}</b><small>かい</small></div>
-            <div><span>れんぞく</span><b>${r.combo || 0}</b><small>だ</small></div>
+            ${isChallenge ? `<div><span>スコア</span><b data-count="${r.correctKeys}">0</b><small>だ</small></div>` : ''}
+            <div><span>はやさ</span><b data-count="${r.kps.toFixed(1)}" data-dec="1">0.0</b><small>打/びょう</small></div>
+            <div><span>正かくさ</span><b data-count="${Math.round(r.accuracy)}">0</b><small>%</small></div>
+            ${isChallenge ? '' : `<div><span>正しく 打てた 数</span><b data-count="${r.correctKeys}">0</b><small>だ</small></div>`}
+            <div><span>ミス</span><b data-count="${r.missKeys}">0</b><small>かい</small></div>
+            <div><span>れんぞく</span><b data-count="${r.combo || 0}">0</b><small>だ</small></div>
           `}
         </div>
         ${compareLine(r, meta, progress)}
@@ -661,14 +811,15 @@
 
       ${lapCard(r, meta)}
 
-      ${r.keystrokes && r.keystrokes.length >= 8 ? card(`
-        <p class="lead">${icon('chart')} どこで 手が とまったか</p>
-        ${timeline(r.keystrokes)}`) : ''}
-
       ${xpCard(awarded)}
       ${badgeCard(awarded)}
       ${nextStepCard(recStep)}
-      ${weakList(r)}
+
+      <!-- ここから下は「もっと しりたい ときだけ」の ところです。
+           けっか画面は つぎへ すすむ ための 画面なので、グラフや にがては
+           たたんで おきます。ひらいて さいしょに 見えるのは、
+           けっか・すすみ・けいけんち・つぎに やる こと の 4つだけ です -->
+      ${detailFold(r)}
 
       <div class="result-actions">
         <button class="btn btn-outline" data-again>${icon('retry')} もう1かい</button>
@@ -704,6 +855,71 @@
       });
     }
     bindGoButtons();
+    celebrate(r, meta, awarded, n, lapped);
+  }
+
+  /**
+   * けっか画面の おいわい。
+   *
+   * ■ いつでも まくのでは ありません
+   * 何を しても ひらひらが 出るなら、それは もう「おめでとう」では なく
+   * ただの かざりです。ここでは **その回に ほんとうに おきた いい こと**が
+   * ある ときだけ 出します。
+   *   ★3つ／新記録／レベルアップ／あたらしい バッジ／ひとまわり できた
+   * それ いがいの 回は、★が ぴょこんと 出るだけ に します。
+   */
+  function celebrate(r, meta, awarded, n, lapped) {
+    if (!T.FX) return;
+
+    // ★は かならず じゅんばんに ぴょこんと 出します（数が わかりやすく なります）
+    const starEls = view.querySelectorAll('.result-stars .star');
+    if (starEls.length) T.FX.popAll(starEls, 140);
+
+    const isBest = !!(meta.newBestKps || meta.isBestScore);
+    const levelUp = !!(awarded && awarded.levelUp);
+    const newBadge = !!(awarded && awarded.badges && awarded.badges.length);
+    const great = n >= 3;
+
+    if (!(isBest || levelUp || newBadge || great || (lapped && meta.firstClear))) return;
+
+    // つよさは「どれだけ うれしいか」に あわせます。
+    // 何でも いちばん 大きく すると、ほんとうの 大あたりが 小さく 見えます
+    const power = (levelUp || isBest) ? 1.15 : .85;
+    const count = (levelUp || isBest) ? 110 : 70;
+
+    // まっている あいだに べつの 画面へ 行った ときは、まきません。
+    // まいて しまうと、つぎの 画面の 上に まえの 画面の おいわいが
+    // ふりつづける ことに なります
+    const later = (ms, fn) => setTimeout(() => {
+      const el = view.querySelector('.card-result');
+      if (el && document.contains(el)) fn(el);
+    }, ms);
+
+    later(260, () => {
+      T.FX.confettiAt(view.querySelector('.card-result'), { count, power });
+      const badgeBox = view.querySelector('.card-badge-new');
+      if (badgeBox) T.FX.ripple(badgeBox);
+    });
+
+    // レベルアップと 新しい バッジは、もういちど 小さく まきます。
+    // 「2つ いい ことが あった」ことが 見た目でも わかります
+    if (levelUp && newBadge) {
+      later(1100, () => T.FX.confettiAt(view.querySelector('.card-badge-new'), { count: 48, power: .7 }));
+    }
+  }
+
+  /**
+   * けっかの「くわしく」。ふだんは たたんで おきます。
+   * グラフと にがては、その回の すぐ あとに 読む ものでは なく、
+   * 見たく なった ときに ひらく ものです。
+   */
+  function detailFold(r) {
+    const chart = r.keystrokes && r.keystrokes.length >= 8
+      ? `<p class="lead">${icon('chart')} どこで 手が とまったか</p>${timeline(r.keystrokes)}`
+      : '';
+    const weak = weakBody(r);
+    if (!chart && !weak) return '';
+    return fold('くわしく 見る', '', `${chart}${chart && weak ? '<hr class="fold-line">' : ''}${weak}`);
   }
 
   /**
@@ -899,7 +1115,7 @@
         : `<p class="muted">この 回で <b>${r.doneItems || 0}もん</b> 打ちました。
            やめても 消えません。つぎは <b>${items + 1}もん目</b>から はじまります。</p>`}
       <div class="lap-bar" role="img" aria-label="ひとまわりまで あと ${left}もん">
-        <span style="width:${Math.round(items / need * 100)}%"></span>
+        <span data-grow="${Math.round(items / need * 100)}"></span>
       </div>
       <p class="lap-note">${left === 0
         ? 'ひとまわり できました。'
@@ -956,7 +1172,7 @@
       <p class="lead">${icon('sparkle')} もらった けいけんち</p>
       ${awarded.levelUp ? `<p class="level-up">${icon('trophy')} レベルアップ！
         <b>Lv.${awarded.after.level}</b> ${esc(awarded.after.rank)} に なりました。</p>` : ''}
-      <p class="xp-total">＋${awarded.gained} <span>けいけんち</span></p>
+      <p class="xp-total">＋<b data-count="${awarded.gained}">0</b> <span>けいけんち</span></p>
       <ul class="xp-list">
         ${awarded.parts.map(p => `<li>${esc(p.label)}<span>＋${p.xp}</span></li>`).join('')}
       </ul>
@@ -994,12 +1210,16 @@
       つぎの ステージ ${icon('next')}</button>`;
   }
 
-  /** にがてだった 指を まとめて 見せます（つぎの めあてに つながります） */
-  function weakList(r) {
+  /**
+   * にがてだった 指を まとめて 見せます（つぎの めあてに つながります）。
+   * カードでは なく **中身だけ** を かえします。けっか画面では
+   * 「くわしく 見る」の 中に 入れる からです。
+   */
+  function weakBody(r) {
     const keys = Object.keys(r.missByFinger || {});
     if (keys.length === 0) return '';
     const top = keys.sort((a, b) => r.missByFinger[b] - r.missByFinger[a]).slice(0, 3);
-    return card(`
+    return `
       <p class="lead">${icon('finger')} つぎに 気を つけると よい ところ</p>
       <ul class="weak-list">
         ${top.map(id => {
@@ -1007,7 +1227,7 @@
           return `<li><span class="finger-dot" style="--finger:${f.color}"></span>
             ${esc(f.label)}<span class="weak-count">${r.missByFinger[id]} かい</span></li>`;
         }).join('')}
-      </ul>`);
+      </ul>`;
     // ここには ボタンを おきません。「つぎは これを やろう」が
     // 出口を 1つに まとめて いるので、2つ ならべると まよいます
   }
@@ -1058,63 +1278,129 @@
   // きろく
   // ------------------------------------------------------------------
 
+  /**
+   * きろくの 4つの ひきだし。
+   *
+   *   きょう      … いま の こと（きょう・れんぞく・この 1しゅうかん）
+   *   にがて      … つぎに 直す ところ（キー・指・ローマ字の きまり）
+   *   たからもの  … あつめた もの（バッジ・★）
+   *   あゆみ      … これまでの のび（さいこう記録・グラフ・ならび）
+   *
+   * 「時間の じく」で 分けて います。きのうの じぶんと くらべたい ときと、
+   * つぎに 何を やるか 決めたい ときでは、見たい ものが ちがうからです。
+   */
+  const RECORD_TABS = [
+    { id: 'today', label: 'きょう', icon: 'clock' },
+    { id: 'weak', label: 'にがて', icon: 'target' },
+    { id: 'collect', label: 'たからもの', icon: 'box' },
+    { id: 'history', label: 'あゆみ', icon: 'map' }
+  ];
+
   function renderRecords() {
-    const history = T.Store.getHistory().slice().reverse();
-    const progress = T.Store.getProgress();
-    const best = T.Store.bestOverall();
-    const today = T.Store.todaySummary();
     const lv = T.Awards.levelOf(T.Store.getAwards().xp);
     const st = T.Store.streak();
-    const miss = T.Store.missSummary();
-    const keyStats = T.Store.keySummary();
-    const weakRules = T.Store.weakRules();
-    const badges = T.Awards.badgeList();
-    const gotBadges = badges.filter(b => b.got);
-    const clearedStages = T.Lessons.COURSES
-      .reduce((sum, c) => sum + c.stages.filter(s => (progress[s.id] || {}).clears > 0).length, 0);
+    const today = T.Store.todaySummary();
 
     view.innerHTML = `
       ${pageTitle('きろく', 'これまでの あゆみ')}
+      ${levelHero(lv, st, today)}
+      ${subtabs(RECORD_TABS, recordTab, 'record-tab', 'きろくの ひきだし')}
+      <div class="section-body" id="rec-section">${recordSection()}</div>`;
 
-      <!-- 「きょうの ようす」は もと ホーム画面の いちばん 上に あった ものです。
-           打つ 画面には 出しません。打ちながら 数字を 見せると、
-           1打ごとに そこへ 目が いって しまいます -->
-      ${card(`
+    bindSubtabs('record-tab', id => {
+      recordTab = id;
+      swapSection($('rec-section'), recordSection(), bindRecordSection);
+    });
+    bindRecordSection($('rec-section'));
+  }
+
+  function recordSection() {
+    if (recordTab === 'weak') return weakSection();
+    if (recordTab === 'collect') return collectSection();
+    if (recordTab === 'history') return historySection();
+    return todaySection();
+  }
+
+  /** ひきだしの 中身を つなぎなおします（ひきだしを 切りかえる たびに よばれます）*/
+  function bindRecordSection(box) {
+    if (!box) return;
+    bindGoButtons(box);
+
+    const heat = $('heat-kb');
+    if (heat) {
+      T.Keyboard.render(heat, { layoutId: T.Store.getSettings().layout, fingerGuide: false, onTap: null });
+      if (heatMode === 'mastery') T.Keyboard.mastery(T.Store.keySummary().byKey);
+      else T.Keyboard.heat(T.Store.missSummary().byKey);
+    }
+    box.querySelectorAll('[data-heat-mode]').forEach(el => {
+      el.addEventListener('click', () => {
+        if (heatMode === el.dataset.heatMode) return;
+        heatMode = el.dataset.heatMode;
+        // 見かたを かえただけ なので、画面ぜんぶでは なく ここだけ 描きなおします
+        swapSection(box, recordSection(), bindRecordSection);
+      });
+    });
+  }
+
+  // -------------------------------------------------- きょう
+
+  function todaySection() {
+    const today = T.Store.todaySummary();
+    const st = T.Store.streak();
+    const lv = T.Awards.levelOf(T.Store.getAwards().xp);
+    const progress = T.Store.getProgress();
+    const clearedStages = T.Lessons.COURSES
+      .reduce((sum, c) => sum + c.stages.filter(s => (progress[s.id] || {}).clears > 0).length, 0);
+
+    // まだ きょう 1回も 打って いない ときは、数字より さきに 入口を 出します
+    const start = today.count === 0
+      ? empty('smile', 'きょうは これからです',
+          st.days > 0 ? `きのうまで ${st.days}日 つづいて います。きょうも 1回 やると のびます。`
+                      : '1もんだけでも きろくに のこります。',
+          `<button class="btn btn-primary" data-tab-go="play">${icon('play')} いま うつ</button>`)
+      : '';
+
+    return `
+      ${start}
+      ${today.count === 0 ? '' : card(`
         <p class="lead">${icon('clock')} きょうの ようす</p>
         <div class="today">
-          <div class="today-item"><span class="today-num">${today.count}</span><span class="today-unit">かい</span><span class="today-label">きょうの れんしゅう</span></div>
-          <div class="today-item"><span class="today-num">${today.keys}</span><span class="today-unit">だ</span><span class="today-label">きょう 打った数</span></div>
-          <div class="today-item"><span class="today-num">${today.minutes}</span><span class="today-unit">ふん</span><span class="today-label">きょうの じかん</span></div>
+          <div class="today-item"><span class="today-num" data-count="${today.count}">0</span><span class="today-unit">かい</span><span class="today-label">れんしゅう</span></div>
+          <div class="today-item"><span class="today-num" data-count="${today.keys}">0</span><span class="today-unit">だ</span><span class="today-label">打った数</span></div>
+          <div class="today-item"><span class="today-num" data-count="${today.minutes}">0</span><span class="today-unit">ふん</span><span class="today-label">じかん</span></div>
         </div>`, 'card-today')}
-
-      ${card(`
-        ${levelBox(lv)}
-        <p class="muted">ためた けいけんち ${lv.total}。ステージは ${clearedStages} / ${T.Lessons.totalStages()} クリア。</p>`)}
 
       ${card(`
         <p class="lead">${icon('fire')} れんしゅうした 日</p>
         ${streakLine(st)}
         ${calendar()}`)}
 
-      ${best && best.kps > 0 ? card(`
-        <p class="lead">${icon('trophy')} さいこう記録</p>
-        <div class="best-row">
-          <div><b>${best.kps.toFixed(1)}</b><span>打/びょう</span></div>
-          <div><b>${Math.round(best.accuracy)}</b><span>% 正かくさ</span></div>
-          <div><b>${best.count}</b><span>かい</span></div>
-        </div>`) : card(`<p class="muted">${best
-          ? 'さいこう記録は、すこし まとまって 打った 回から つきます。もう ちょっと つづけて みよう。'
-          : 'まだ きろくが ありません。下の「うつ」から はじめよう。'}</p>`)}
-
       ${studyCard()}
 
-      ${history.length ? card(`
-        <p class="lead">${icon('chart')} はやさの うつりかわり</p>
-        ${sparkline(history.filter(h => T.Store.countsAsTyping(h) &&
-          (h.totalKeys || 0) >= T.Store.MIN_RECORD_KEYS).slice(0, 20).reverse())}`) : ''}
+      ${card(`
+        <p class="lead">${icon('sparkle')} つみあげ</p>
+        <p class="muted">ためた けいけんち <b>${lv.total}</b>。
+        ステージは <b>${clearedStages} / ${T.Lessons.totalStages()}</b> クリア。</p>
+        <span class="row-bar"><span data-grow="${Math.round(clearedStages / Math.max(1, T.Lessons.totalStages()) * 100)}"></span></span>`)}`;
+  }
 
+  // -------------------------------------------------- にがて
+
+  function weakSection() {
+    const miss = T.Store.missSummary();
+    const keyStats = T.Store.keySummary();
+    const weakRules = T.Store.weakRules();
+    const hasAny = miss.keys.length || keyStats.slow.length || miss.fingers.length || weakRules.length;
+
+    if (!hasAny) {
+      return empty('target', 'にがては まだ 見つかって いません',
+        'すこし れんしゅうすると、まちがえやすい キーや 手が とまる キーが ここに 出ます。',
+        `<button class="btn btn-primary" data-tab-go="play">${icon('play')} れんしゅうする</button>`);
+    }
+
+    return `
       ${(miss.keys.length || keyStats.slow.length) ? card(`
-        <p class="lead">${icon('target')} にがてな キー</p>
+        <p class="lead">${icon('target')} キーボードで 見る</p>
         <div class="seg" role="radiogroup" aria-label="キーボードの 見かた">
           <button class="seg-btn${heatMode === 'miss' ? ' on' : ''}" role="radio"
             aria-checked="${heatMode === 'miss'}" data-heat-mode="miss">まちがえた かず</button>
@@ -1133,8 +1419,10 @@
              <span class="mastery-sample m-soso"></span>もうすこし
              <span class="mastery-sample m-weak"></span>まだまだ
              <span class="mastery-sample m-unknown"></span>まだ わからない</p>`}
-        <button class="btn btn-outline" data-go-weak>${icon('finger')} にがて とっくんを する</button>`) : ''}
+        <button class="btn btn-primary mt" data-go-weak>${icon('finger')} にがて とっくんを する</button>`) : ''}
 
+      <!-- こまかい 中身は たたんで おきます。ひらいて さいしょに 見せたいのは
+           「キーボードの どこが にがてか」の 1つだけ です -->
       ${slowKeyCard(keyStats)}
       ${ruleCard(weakRules)}
 
@@ -1147,55 +1435,98 @@
             return `<li><span class="finger-dot" style="--finger:${f.color}"></span>
               ${esc(f.label)}<span class="weak-count">${Math.round(miss.byFinger[id])} かい</span></li>`;
           }).join('')}
-        </ul>`) : ''}
+        </ul>`) : ''}`;
+  }
 
+  // -------------------------------------------------- たからもの
+
+  /**
+   * あつめた ものだけを あつめた ひきだし。
+   * バッジも ★も「ごほうび」なので、数字の ひきだしとは 分けます。
+   */
+  function collectSection() {
+    const badges = T.Awards.badgeList();
+    const got = badges.filter(b => b.got);
+    const progress = T.Store.getProgress();
+    const starSum = T.Lessons.COURSES.reduce((n, c) =>
+      n + c.stages.reduce((m, s) => m + ((progress[s.id] || {}).stars || 0), 0), 0);
+    const starMax = T.Lessons.totalStages() * 3;
+
+    return `
       ${card(`
         <p class="lead">${icon('medal')} バッジ</p>
-        <p class="muted">${gotBadges.length} / ${badges.length} こ あつめました。</p>
-        <div class="badge-grid">
-          ${(gotBadges.length ? gotBadges.slice(-6).reverse() : badges.slice(0, 3))
-            .map(b => badgeTile(b, !!b.got)).join('')}
-        </div>
+        <span class="collect-bar"><span data-grow="${Math.round(got.length / Math.max(1, badges.length) * 100)}"></span></span>
+        <p class="muted"><b data-count="${got.length}">0</b> / ${badges.length} こ あつめました。</p>
+        ${got.length ? `<div class="badge-grid">
+          ${got.slice(-6).reverse().map(b => badgeTile(b, true)).join('')}
+        </div>` : '<p class="muted">さいしょの バッジは、1回 れんしゅうすると もらえます。</p>'}
         <button class="btn btn-outline mt" data-go-screen="badges">ぜんぶ 見る</button>`)}
+
+      ${card(`
+        <p class="lead">${icon('star')} ステージの ★</p>
+        <span class="collect-bar"><span data-grow="${Math.round(starSum / Math.max(1, starMax) * 100)}"></span></span>
+        <p class="muted"><b data-count="${starSum}">0</b> / ${starMax} こ。コースを えらぶと 中が 見られます。</p>
+        ${T.Lessons.COURSES.map(c => {
+          const sum = c.stages.reduce((m, s) => m + ((progress[s.id] || {}).stars || 0), 0);
+          const max = c.stages.length * 3;
+          return fold(c.short, `★ ${sum} / ${max}`, `
+            ${c.stages.map(s => `<div class="star-line">
+              <span>${esc(s.title)}</span>${stars((progress[s.id] || {}).stars || 0)}
+            </div>`).join('')}
+            <button class="btn btn-outline btn-small mt" data-go-course="${esc(c.id)}">この コースへ ${icon('next')}</button>`);
+        }).join('')}`)}`;
+  }
+
+  // -------------------------------------------------- あゆみ
+
+  function historySection() {
+    const history = T.Store.getHistory().slice().reverse();
+    const best = T.Store.bestOverall();
+
+    if (history.length === 0) {
+      return empty('map', 'あゆみは これから',
+        'れんしゅうすると、はやさの グラフと さいこう記録が ここに たまって いきます。',
+        `<button class="btn btn-primary" data-tab-go="play">${icon('play')} はじめる</button>`);
+    }
+
+    const line = history.filter(h => T.Store.countsAsTyping(h) &&
+      (h.totalKeys || 0) >= T.Store.MIN_RECORD_KEYS).slice(0, 20).reverse();
+
+    return `
+      ${best && best.kps > 0 ? card(`
+        <p class="lead">${icon('trophy')} さいこう記録</p>
+        <div class="best-row">
+          <div><b data-count="${best.kps.toFixed(1)}" data-dec="1">0.0</b><span>打/びょう</span></div>
+          <div><b data-count="${Math.round(best.accuracy)}">0</b><span>% 正かくさ</span></div>
+          <div><b data-count="${best.count}">0</b><span>かい</span></div>
+        </div>`) : card(`<p class="muted">${'さいこう記録は、すこし まとまって 打った 回から つきます。もう ちょっと つづけて みよう。'}</p>`)}
+
+      ${card(`
+        <p class="lead">${icon('chart')} はやさの うつりかわり</p>
+        ${sparkline(line)}`)}
 
       ${challengeCard()}
 
       ${card(`
-        <p class="lead">${icon('star')} ステージの ★</p>
-        <div class="star-grid">
-          ${T.Lessons.COURSES.map(c => `
-            <div class="star-course">
-              <p class="star-course-title">${esc(c.short)}</p>
-              ${c.stages.map(s => `<div class="star-line">
-                <span>${esc(s.title)}</span>${stars((progress[s.id] || {}).stars || 0)}
-              </div>`).join('')}
-            </div>`).join('')}
-        </div>`)}
-
-      ${card(`
         <p class="lead">${icon('clock')} さいきんの れんしゅう</p>
         <ul class="hist-list">
-          ${history.slice(0, 20).map(h => `
-            <li>
-              <span class="hist-date">${esc(formatDate(h.at))}</span>
-              <span class="hist-title">${esc(h.title)}</span>
-              <span class="hist-num">${h.mode === 'shortcut'
-                ? `できた ${Math.round(h.accuracy)}%`
-                : `${(h.kps || 0).toFixed(1)} 打/びょう ・ ${Math.round(h.accuracy)}%`}</span>
-            </li>`).join('') || '<li class="muted">まだ ありません</li>'}
-        </ul>`)}
-    `;
+          ${history.slice(0, 6).map(historyRow).join('')}
+        </ul>
+        ${history.length > 6
+          ? fold('もっと まえの れんしゅう', `${Math.min(history.length, 40) - 6} かい`,
+              `<ul class="hist-list">${history.slice(6, 40).map(historyRow).join('')}</ul>`)
+          : ''}`)}`;
+  }
 
-    const heat = $('heat-kb');
-    if (heat) {
-      T.Keyboard.render(heat, { layoutId: T.Store.getSettings().layout, fingerGuide: false, onTap: null });
-      if (heatMode === 'mastery') T.Keyboard.mastery(keyStats.byKey);
-      else T.Keyboard.heat(miss.byKey);
-    }
-    view.querySelectorAll('[data-heat-mode]').forEach(el => {
-      el.addEventListener('click', () => { heatMode = el.dataset.heatMode; T.Nav.render(); });
-    });
-    bindGoButtons();
+  function historyRow(h) {
+    return `
+      <li>
+        <span class="hist-date">${esc(formatDate(h.at))}</span>
+        <span class="hist-title">${esc(h.title)}</span>
+        <span class="hist-num">${h.mode === 'shortcut'
+          ? `できた ${Math.round(h.accuracy)}%`
+          : `${(h.kps || 0).toFixed(1)} 打/びょう ・ ${Math.round(h.accuracy)}%`}</span>
+      </li>`;
   }
 
   /**
@@ -1307,16 +1638,41 @@
       <p class="muted">この 4週間で <b>${doneDays}日</b> れんしゅうしました。</p>`;
   }
 
+  /**
+   * バッジの 一覧。
+   *
+   * ■ もらった ものと まだの ものを 分けます
+   * まえは 20こ ちかい バッジが 1つの ならびに まざって いました。
+   * じぶんが 何を もって いるのかが ひと目では わかりません。
+   * 上に「もった もの」、下に たたんだ「これから」を おきます。
+   */
   function renderBadges() {
     const badges = T.Awards.badgeList();
     const got = badges.filter(b => b.got);
+    const yet = badges.filter(b => !b.got);
     view.innerHTML = `
       ${pageTitle('バッジ', `${got.length} / ${badges.length} こ あつめました`)}
-      <p class="hint-box">${icon('info')} バッジは れんしゅうを つづけると もらえます。
-      いちど もらった バッジは なくなりません。</p>
-      <div class="badge-grid badge-grid-all">
-        ${badges.map(b => badgeTile(b, !!b.got)).join('')}
-      </div>`;
+
+      ${card(`
+        <p class="lead">${icon('medal')} あつめぐあい</p>
+        <span class="collect-bar"><span data-grow="${Math.round(got.length / Math.max(1, badges.length) * 100)}"></span></span>
+        <p class="muted"><b data-count="${got.length}">0</b> / ${badges.length} こ。
+        いちど もらった バッジは なくなりません。</p>`)}
+
+      ${got.length ? card(`
+        <p class="lead">${icon('trophy')} もって いる バッジ</p>
+        <div class="badge-grid">
+          ${got.slice().reverse().map(b => badgeTile(b, true)).join('')}
+        </div>`) : empty('medal', 'バッジは これから',
+          'さいしょの バッジは、1回 れんしゅうすると もらえます。',
+          `<button class="btn btn-primary" data-tab-go="play">${icon('play')} れんしゅうする</button>`)}
+
+      ${yet.length ? card(`
+        ${fold('これから もらえる バッジ', `${yet.length} こ`, `
+          <div class="badge-grid badge-grid-all">
+            ${yet.map(b => badgeTile(b, false)).join('')}
+          </div>`)}`) : ''}`;
+    bindGoButtons();
   }
 
   function formatDate(iso) {
@@ -1379,23 +1735,55 @@
   // せってい
   // ------------------------------------------------------------------
 
+  /**
+   * せっていの 4つの ひきだし。
+   *
+   * まえは せってい画面も カード9まいの たてならびでした。「文字を 大きく」を
+   * さがす だけで 画面を 3つぶん スクロールする ことに なります。
+   * 「ヒント／みため／キーボード／データ」の 4つに 分けます。
+   * どれも **先生や 子どもが かえたいと 思った ことば**で 名づけて います。
+   */
+  const SETTINGS_TABS = [
+    { id: 'hint', label: 'ヒント', icon: 'hand' },
+    { id: 'look', label: 'みため', icon: 'palette' },
+    { id: 'kb', label: 'キーボード', icon: 'keyboard' },
+    { id: 'data', label: 'データ', icon: 'save' }
+  ];
+
   function renderSettings() {
+    view.innerHTML = `
+      ${pageTitle('せってい', 'じぶんに あわせて かえられます')}
+      ${subtabs(SETTINGS_TABS, settingsTab, 'settings-tab', 'せっていの ひきだし')}
+      <div class="section-body" id="set-section">${settingsSection()}</div>`;
+
+    bindSubtabs('settings-tab', id => {
+      settingsTab = id;
+      swapSection($('set-section'), settingsSection(), bindSettingsSection);
+    });
+    bindSettingsSection($('set-section'));
+  }
+
+  function settingsSection() {
+    if (settingsTab === 'look') return lookSettings();
+    if (settingsTab === 'kb') return keyboardSettings();
+    if (settingsTab === 'data') return dataSettings();
+    return hintSettings();
+  }
+
+  function bindSettingsSection(box) {
+    if (!box) return;
+    const guide = $('guide-kb');
+    if (guide) T.Keyboard.render(guide, { layoutId: T.Store.getSettings().layout, fingerGuide: true, onTap: null });
+    bindSettings(box);
+    bindGoButtons(box);
+  }
+
+  /** ヒントの つよさ・手の 絵・キャラクター */
+  function hintSettings() {
     const s = T.Store.getSettings();
     const job = T.Buddy.normalizeJob(s.buddyJob);
     const jobUnit = (T.Buddy.jobs().filter(j => j.id === job)[0] || {}).unit || 'しごと';
-    view.innerHTML = `
-      ${pageTitle('せってい', 'じぶんに あわせて かえられます')}
-
-      ${card(`
-        <p class="lead">${icon('keyboard')} キーボードの ならび</p>
-        <div class="seg" role="radiogroup" aria-label="キーボードの ならび">
-          ${Object.keys(T.Layout.LAYOUTS).map(id => `
-            <button class="seg-btn${s.layout === id ? ' on' : ''}" role="radio"
-              aria-checked="${s.layout === id}" data-set="layout" data-value="${id}">
-              ${esc(T.Layout.LAYOUTS[id].label)}</button>`).join('')}
-        </div>
-        <p class="muted">キーボードの 右上に「¥」や「かな」が あれば 日本語配列（JIS）です。</p>`)}
-
+    return `
       ${card(`
         <p class="lead">${icon('hand')} ヒントの つよさ</p>
         <p class="muted">なれてきたら すこしずつ へらすと、手もとを 見ないで
@@ -1437,18 +1825,42 @@
         <p class="muted">お題を 1つ 打ちきる ごとに、${esc(jobUnit)}が 1つ ふえます。
         ひとまわり できると ぜんぶ おさめて、また 空から はじまります。</p>
         <p class="muted">手の 絵は、ヒントの つよさを「ばしょだけ」まで 下げると
-        いっしょに 消えます（指の 色分けと ひとくみ だからです）。</p>`)}
+        いっしょに 消えます（指の 色分けと ひとくみ だからです）。</p>`)}`;
+  }
 
+  /** 色・文字の 大きさ・おと。「見え方を かえたい」で 来る ところです */
+  function lookSettings() {
+    const s = T.Store.getSettings();
+    return `
       ${card(`
-        <p class="lead">${icon('gear')} 見え方・おと</p>
-        ${toggle('sound', '打ったときの おと', s.sound)}
-        ${toggle('bigText', '文字を 大きくする', s.bigText)}
-        ${toggle('retry', 'まちがえた お題を ひとまわりの さいごに もう1かい', s.retry)}
-        <div class="seg mt" role="radiogroup" aria-label="画面の 色">
+        <p class="lead">${icon('palette')} 画面の 色</p>
+        <div class="seg" role="radiogroup" aria-label="画面の 色">
           ${[['auto', 'じどう'], ['light', 'あかるい'], ['dark', 'くらい']].map(([v, label]) => `
             <button class="seg-btn${s.theme === v ? ' on' : ''}" role="radio"
               aria-checked="${s.theme === v}" data-set="theme" data-value="${v}">${label}</button>`).join('')}
-        </div>`)}
+        </div>
+        <p class="muted">「じどう」は Chromebook の せっていに あわせます。</p>`)}
+
+      ${card(`
+        <p class="lead">${icon('gear')} 文字と おと</p>
+        ${toggle('bigText', '文字を 大きくする', s.bigText)}
+        ${toggle('sound', '打ったときの おと', s.sound)}
+        ${toggle('retry', 'まちがえた お題を ひとまわりの さいごに もう1かい', s.retry)}`)}`;
+  }
+
+  /** キーボードの ならびと、ゆびの ばしょ・ローマ字ひょう */
+  function keyboardSettings() {
+    const s = T.Store.getSettings();
+    return `
+      ${card(`
+        <p class="lead">${icon('keyboard')} キーボードの ならび</p>
+        <div class="seg" role="radiogroup" aria-label="キーボードの ならび">
+          ${Object.keys(T.Layout.LAYOUTS).map(id => `
+            <button class="seg-btn${s.layout === id ? ' on' : ''}" role="radio"
+              aria-checked="${s.layout === id}" data-set="layout" data-value="${id}">
+              ${esc(T.Layout.LAYOUTS[id].label)}</button>`).join('')}
+        </div>
+        <p class="muted">キーボードの 右上に「¥」や「かな」が あれば 日本語配列（JIS）です。</p>`)}
 
       ${card(`
         <p class="lead">${icon('hand')} ゆびの ばしょ</p>
@@ -1465,7 +1877,29 @@
       ${card(`
         <p class="lead">${icon('grid')} ローマ字ひょう</p>
         <p class="muted">「し」は si でも shi でも 正かいです。ならった うちかたを たしかめられます。</p>
-        <button class="btn btn-outline" data-go-screen="romaji-table">ローマ字ひょうを 見る</button>`)}
+        <button class="btn btn-outline" data-go-screen="romaji-table">ローマ字ひょうを 見る</button>`)}`;
+  }
+
+  /** きろく・プライバシー・もちだし・アプリの ばんごう */
+  function dataSettings() {
+    return `
+      ${card(`
+        <p class="lead">${icon('send')} きろくを もちだす</p>
+        <p class="muted">きろくを ファイルに して、べつの 端末に うつせます。
+        学年が かわって Chromebook が 入れかわる ときに つかいます。</p>
+        <button class="btn btn-outline" data-go-screen="backup">書き出し・読みこみ</button>`)}
+
+      ${card(`
+        <p class="lead">${icon('info')} アプリとして つかう</p>
+        <p class="muted">ホーム画面に 入れると、ブラウザの バーが 消えて 画面が 広くなります。
+        インターネットに つながって いなくても れんしゅうできます。</p>
+        <button class="btn btn-outline" id="install-btn" hidden>ホーム画面に 入れる</button>
+        ${fold('入れかたを 見る', '', `
+          <ul class="howto">
+            <li><b>Chrome</b>: アドレスバーの 右の インストール、または メニュー →「アプリをインストール」</li>
+            <li><b>Safari（iPad・iPhone）</b>: 共有ボタン →「ホーム画面に追加」</li>
+          </ul>`)}
+        <p class="version">Typa ${esc(APP_VERSION)}</p>`)}
 
       ${card(`
         <p class="lead">${icon('lock')} きろくと プライバシー</p>
@@ -1479,29 +1913,7 @@
         <div class="reset-confirm" id="reset-confirm" hidden>
           <button class="btn btn-danger-solid" id="reset-yes">けす</button>
           <button class="btn btn-ghost" id="reset-no">やめる</button>
-        </div>`)}
-
-      ${card(`
-        <p class="lead">${icon('send')} きろくを もちだす</p>
-        <p class="muted">きろくを ファイルに して、べつの 端末に うつせます。
-        学年が かわって Chromebook が 入れかわる ときに つかいます。</p>
-        <button class="btn btn-outline" data-go-screen="backup">書き出し・読みこみ</button>`)}
-
-      ${card(`
-        <p class="lead">${icon('info')} アプリとして つかう</p>
-        <p class="muted">ホーム画面に 入れると、ブラウザの バーが 消えて 画面が 広くなります。
-        インターネットに つながって いなくても れんしゅうできます。</p>
-        <button class="btn btn-outline" id="install-btn" hidden>ホーム画面に 入れる</button>
-        <ul class="howto">
-          <li><b>Chrome</b>: アドレスバーの 右の インストール、または メニュー →「アプリをインストール」</li>
-          <li><b>Safari（iPad・iPhone）</b>: 共有ボタン →「ホーム画面に追加」</li>
-        </ul>
-        <p class="version">Typa ${esc(APP_VERSION)}</p>`)}
-    `;
-
-    T.Keyboard.render($('guide-kb'), { layoutId: s.layout, fingerGuide: true, onTap: null });
-    bindSettings();
-    bindGoButtons();
+        </div>`)}`;
   }
 
   // ------------------------------------------------------------------
@@ -1659,14 +2071,21 @@
     </label>`;
   }
 
-  function bindSettings() {
-    view.querySelectorAll('[data-toggle]').forEach(el => {
+  /**
+   * せっていの スイッチを つなぎます。
+   * @param {Element} [scope] ひきだしを 入れかえた ときは その 中だけを つなぎます
+   *   （画面ぜんぶを もう一度 つなぐと、入れかえて いない ボタンに
+   *     同じ しごとが 2回 つく ことに なります）
+   */
+  function bindSettings(scope) {
+    const box = scope || view;
+    box.querySelectorAll('[data-toggle]').forEach(el => {
       el.addEventListener('change', () => {
         T.Store.setSetting(el.dataset.toggle, el.checked);
         applySettings();
       });
     });
-    view.querySelectorAll('[data-set]').forEach(el => {
+    box.querySelectorAll('[data-set]').forEach(el => {
       el.addEventListener('click', () => {
         T.Store.setSetting(el.dataset.set, el.dataset.value);
         applySettings();
@@ -1674,7 +2093,7 @@
       });
     });
     // ヒントの つよさ。えらぶと 下の スイッチも いっしょに 書きかわります
-    view.querySelectorAll('[data-assist]').forEach(el => {
+    box.querySelectorAll('[data-assist]').forEach(el => {
       el.addEventListener('click', () => {
         const v = el.dataset.assist;
         T.Store.setAssist(v === 'auto' ? 'auto' : Number(v));
@@ -1725,29 +2144,36 @@
   // 画面の きりかえ
   // ------------------------------------------------------------------
 
-  function bindGoButtons() {
-    view.querySelectorAll('[data-go-course]').forEach(el => {
+  /**
+   * 行き先の ボタンを つなぎます。
+   * @param {Element} [scope] ひきだしの 中だけを 描きなおした ときは、
+   *   その ひきだしを わたします。画面ぜんぶを もう一度 つなぐと、
+   *   描きなおして いない ボタンが 2回 うごいて しまいます。
+   */
+  function bindGoButtons(scope) {
+    const box = scope || view;
+    box.querySelectorAll('[data-go-course]').forEach(el => {
       el.addEventListener('click', () => T.Nav.go('course', { courseId: el.dataset.goCourse }));
     });
-    view.querySelectorAll('[data-go-stage]').forEach(el => {
+    box.querySelectorAll('[data-go-stage]').forEach(el => {
       el.addEventListener('click', () => {
         const [courseId, stageId] = el.dataset.goStage.split(':');
         T.Nav.go('play', { courseId, stageId, source: 'course' });
       });
     });
-    view.querySelectorAll('[data-go-screen]').forEach(el => {
+    box.querySelectorAll('[data-go-screen]').forEach(el => {
       el.addEventListener('click', () => T.Nav.go(el.dataset.goScreen, {}));
     });
-    view.querySelectorAll('[data-go-challenge]').forEach(el => {
+    box.querySelectorAll('[data-go-challenge]').forEach(el => {
       el.addEventListener('click', () => T.Nav.go('play', {
         special: 'challenge', pool: challengePick.pool, seconds: challengePick.seconds
       }));
     });
-    view.querySelectorAll('[data-go-weak]').forEach(el => {
+    box.querySelectorAll('[data-go-weak]').forEach(el => {
       el.addEventListener('click', () => T.Nav.go('play', { special: 'weak' }));
     });
     // タブそのものへ。行き先が タブなら、その タブの いちばん 上に そろえます
-    view.querySelectorAll('[data-tab-go]').forEach(el => {
+    box.querySelectorAll('[data-tab-go]').forEach(el => {
       el.addEventListener('click', () => T.Nav.selectTab(el.dataset.tabGo));
     });
   }
@@ -1777,6 +2203,15 @@
     document.body.dataset.screen = cur ? cur.screen : '';
     view.scrollTop = 0;
     global.scrollTo(0, 0);
+
+    // 画面を 出す ときの うごき。**打つ 画面には つけません。**
+    // 打ちながら 画面が うごくのは いちばん さけたい こと です
+    // （play.js が じぶんで 中身を 組み立てるので、ここでは さわりません）。
+    if (T.FX) {
+      // まえの 画面の おいわいが とび つづけて いたら、ここで かたづけます
+      T.FX.clearLayer();
+      if (cur && cur.screen !== 'play') T.FX.enter(view);
+    }
   }
 
   // ------------------------------------------------------------------

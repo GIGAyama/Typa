@@ -21,8 +21,22 @@
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
 
 <link rel="stylesheet" href="./css/style.css">
+<!-- 見た目の たのしさと 階層（ヒーロー・ひきだし・アニメーション）。
+     style.css の あとに よみます -->
+<link rel="stylesheet" href="./css/fx.css">
 </head>
 <body data-screen="play">
+
+<!-- レベルの わっかに つかう グラデーション。
+     SVG の url(#…) は ページ全体から 引けるので、ここに 1つだけ おきます -->
+<svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+  <defs>
+    <linearGradient id="fx-ring-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="var(--primary)"/>
+      <stop offset="100%" stop-color="var(--c-teal)"/>
+    </linearGradient>
+  </defs>
+</svg>
 
 <!-- 画面の はしから スワイプした ときに 出る しるし（「もどる」の 手ごたえ） -->
 <div id="edge-hint" class="edge-hint" aria-hidden="true"><span class="edge-arrow"></span></div>
@@ -68,7 +82,11 @@
 
 <div id="toast" class="toast-area" aria-live="polite"></div>
 
+<!-- おいわいの ひらひらを 出す ところ。さわれません（打つ じゃまを しません） -->
+<div id="fx-layer" class="fx-layer" aria-hidden="true"></div>
+
 <script src="./js/icons.js"></script>
+<script src="./js/fx.js"></script>
 <script src="./js/layout.js"></script>
 <script src="./js/romaji.js"></script>
 <script src="./js/lessons.js"></script>
