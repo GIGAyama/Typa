@@ -19,6 +19,19 @@
  * だから この ファイルには「クリア」という 考えかたが ありません。
  * finish() は「いま までの ぶんを まとめて 返す」だけ です。
  *
+ * ■ ★3つの ときだけ、その ばで 知らせます
+ * ★は ずっと けっか画面（＝「やめる」を おした あと）でしか 見えませんでした。
+ * すると **いちばん うまく 打てた しゅんかんに 何も おきません**。
+ * ノーミスで ひとまわり できても、画面は 何ごとも なかった ように つぎの
+ * しゅうに 入り、子どもは やめるまで それを 知りません。
+ * そこで ひとまわりの ★が 3つの ときだけ、おいわいの しるしを
+ * 金色に かえて「★3つ！」と 出します。
+ *
+ * **それでも 練習は 止めません。** 出すのは 2びょうほどの みじかい しるし
+ * だけで、つぎの ステージに すすむ かどうかは これまで どおり
+ * けっか画面で 子どもが 決めます。ここで 手を 止めさせて しまうと、
+ * 上の「はじまりも おわりも 決めない」が こわれます。
+ *
  * ■ 打ちまちがえても 先へは すすみません
  * まちがえた ままで すすむと、まちがった 指づかいの まま 速くなります。
  * 正しい キーを 押すまで まつ かわりに、「どの指で 押すか」を
@@ -55,6 +68,10 @@
   const SKIP_AFTER = 4;        // 同じ お題で これだけ まちがえたら「とばす」を 出します
   const COMBO_STEP = 10;       // れんぞくが これの ばいすうに なると ほめます
   const RETRY_MAX = 5;         // さいごに もう1回 出す お題の 数の かぎり
+  const LAP_FLASH_MS = 1600;   // ひとまわりの おしらせを 出して おく 時間
+  // ★3つの ときは すこし 長く 出します。読む ことばが 1つ ふえる ぶんです。
+  // これ以上 のばすと、つぎの お題を 打って いる あいだ ずっと 出た ままに なります
+  const FULL_FLASH_MS = 2400;
 
   /**
    * これだけ 画面を はなれて いたら、きろくを そこで 1つ 区切ります。
@@ -73,6 +90,12 @@
     // ひとまわり … lapNeed もん 打つと 1しゅう。lapPos は 前の れんしゅうから
     // つづいて いる ぶんも 入って います（0 から はじまるとは かぎりません）
     lapNeed: 1, lapPos: 0, lapStart: 0, doneItems: 0, laps: 0,
+    // れんしゅう中に 見せた ★の いちばん 大きい もの。けっか画面と
+    // ステージ一覧が それより 下に ならない ように、finish() で わたします
+    lapStarsSeen: 0,
+    // この ステージは もう ★3つを とって いるか（おしらせの ことばを かえます）
+    hadFullStars: false,
+    lapFlashTimer: 0,
     // そのさきの「だん」を ねらって いる ときの はやさの めやす（0 = 出さない）
     goalKps: 0,
     matcher: null,
@@ -232,6 +255,10 @@
     state.lapPos = state.lapStart;
     state.doneItems = 0;
     state.laps = 0;
+    state.lapStarsSeen = 0;
+    // もう ★3つの ステージで「はじめての ★3つ！」と 言うと うそに なります
+    state.hadFullStars = ((T.Store.getProgress()[p.stage.id] || {}).stars || 0) >= 3;
+    if (state.lapFlashTimer) { clearTimeout(state.lapFlashTimer); state.lapFlashTimer = 0; }
     state.queue = firstQueue(state.pool, state.source, state.endless, state.lapPos);
     state.index = 0;
     state.results = [];
@@ -1045,19 +1072,71 @@
     state.lapPos = 0;
     state.queue = shuffle(state.pool.slice());   // 2しゅう目からは じゅんばんを かえます
     renderProgress();
-    celebrateLap();
+
+    const stars = lapStarsNow();
+    if (stars > state.lapStarsSeen) state.lapStarsSeen = stars;
+    celebrateLap(stars);
   }
 
-  /** ひとまわりの おいわい。1びょうほどで 消え、打つのを じゃましません */
-  function celebrateLap() {
+  /**
+   * いま できあがった ひとまわりに つく ★（0〜3）。
+   *
+   * 数えかたは store.js に まかせます。ここで 出しなおすと、
+   * **前の れんしゅうの つづきぶん**が 入らず、れんしゅう中に 見せた ★と
+   * けっか画面・ステージ一覧の ★が 食いちがいます。子どもから 見れば
+   * 「★3つを とったのに 消えた」です。
+   *
+   * ★の つかない ステージ（にがて とっくん）と 時間ぎめ（チャレンジ）は
+   * ひとまわりを 数えないので、いつも 0 です。
+   */
+  function lapStarsNow() {
+    if (state.stage.noStars || state.limitMs) return 0;
+    const total = state.correctKeys + state.missKeys;
+    // 打鍵が 1つも ない（ぜんぶ とばした）ときは お題の 数で 見ます。
+    // store.applyResult と 同じ 分けかたです
+    const delta = total > 0
+      ? { correct: state.correctKeys, total: total }
+      : {
+        correct: state.results.filter(it => it.ok && !it.retry).length,
+        total: state.doneItems, byItem: true
+      };
+    return T.Store.lapStarsPreview(state.stage.id, delta);
+  }
+
+  /**
+   * ひとまわりの おいわい。2びょうほどで 消え、打つのを じゃましません。
+   *
+   * ★3つの ときだけ、しるしを 金色に かえて その ばで 知らせます。
+   * ★が 見えるのが けっか画面だけ だと、いちばん うまく 打てた しゅんかんに
+   * 何も おきないためです。**ここでも 練習は 止めません。**
+   *
+   * @param {number} stars この ひとまわりに ついた ★（0〜3）
+   */
+  function celebrateLap(stars) {
+    const full = stars >= 3;
+    // 2回目からは「はじめての」と 言いません（うそに なります）
+    const first = full && !state.hadFullStars;
+    if (full) state.hadFullStars = true;
+
     const flash = $('play-lap-flash');
     if (flash) {
-      flash.textContent = `ひとまわり できた！（${state.laps}しゅう目）`;
+      const lap = `（${state.laps}しゅう目）`;
+      // アイコンだけでは 意味が つたわらないので、かならず ことばを そえます
+      flash.innerHTML = full
+        ? `<span class="stars">${`<span class="star on">${T.icon('star')}</span>`.repeat(3)}</span>`
+          + `${first ? 'はじめての ★3つ！' : '★3つ！'}${lap}`
+        : `ひとまわり できた！${lap}`;
+      flash.classList.toggle('is-full', full);
       flash.hidden = false;
       flash.classList.remove('is-on');
       void flash.getBoundingClientRect();
       flash.classList.add('is-on');
-      setTimeout(() => { flash.hidden = true; flash.classList.remove('is-on'); }, 1600);
+      if (state.lapFlashTimer) clearTimeout(state.lapFlashTimer);
+      state.lapFlashTimer = setTimeout(() => {
+        state.lapFlashTimer = 0;
+        flash.hidden = true;
+        flash.classList.remove('is-on');
+      }, full ? FULL_FLASH_MS : LAP_FLASH_MS);
 
       // ひらひらを **しるしの ところから** すこしだけ まきます。
       //
@@ -1066,7 +1145,8 @@
       // おいわいを 出します。でも 打つのは まだ つづいて います。
       // お題の 文字の 上に かぶせると、つぎの お題が 読めなく なります。
       // しるしと 同じ 右上から、少ない かずだけ まいて、すぐ 消します。
-      if (T.FX) T.FX.confettiAt(flash, { count: 26, power: .55 });
+      // ★3つの ときだけ すこし 多く しますが、まく ばしょは かえません
+      if (T.FX) T.FX.confettiAt(flash, full ? { count: 54, power: .8 } : { count: 26, power: .55 });
     }
     if (state.showBuddy) {
       T.Buddy.cheer();
@@ -1075,7 +1155,7 @@
       // buddy.js が 何も しません）。よろこびの うごきが 終わってから 入れかえます
       T.Buddy.reroll();
     }
-    chime();
+    if (full) chimeFull(); else chime();
   }
 
   /**
@@ -1169,6 +1249,9 @@
       lapNeed: state.lapNeed,
       lapPos: state.lapPos,
       laps: state.laps,
+      // れんしゅう中に「★3つ！」と 見せた ぶん。見せた ★より
+      // けっか画面が 下に ならない ように、store に わたします
+      lapStarsSeen: state.lapStarsSeen,
       count: state.doneItems,
       done: state.index,
       retried: state.retryTotal
@@ -1257,6 +1340,17 @@
   function chime() {
     [0, 90, 180].forEach((delay, i) => {
       setTimeout(() => tone([784, 988, 1319][i], 180, 0.045), delay);
+    });
+  }
+
+  /**
+   * ★3つの ひとまわり。ふつうの おいわいの 上に もう1つ 高い 音を のせます。
+   * 音を 大きくは しません（教室で 30台が いっせいに 鳴らします）。
+   * 「いつもと ちがう」ことが つたわれば じゅうぶんです
+   */
+  function chimeFull() {
+    [784, 988, 1319, 1568].forEach((freq, i) => {
+      setTimeout(() => tone(freq, i === 3 ? 300 : 180, 0.045), i * 90);
     });
   }
 

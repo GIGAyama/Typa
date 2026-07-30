@@ -15,7 +15,7 @@
  * ★が 出ない・ずっと 同じ お題ばかり 出る・かんたんに ★3が つく、
  * どれも しばらく つかった あとに、授業の まん中で 分かります。
  *
- * ここで 見るのは つぎの 9つです。
+ * ここで 見るのは つぎの 10こです。
  *   1. とちゅうで やめても 打った ぶんが のこるか
  *   2. わけて やっても、1回で やっても おなじに なるか
  *   3. ひとまわりの ★が「正かくさ」で 決まるか
@@ -25,6 +25,7 @@
  *   7. 打鍵を 数えない ステージ（ショートカット）にも ★が つくか
  *   8. けっか画面に 出す ★と、ステージに ついた ★が 同じか
  *   9. そのさきの「だん」が、ヒントと はやさの **両方** で 決まるか
+ *  10. れんしゅう中に 見せる ★と、あとで つく ★が 同じか
  */
 'use strict';
 
@@ -441,6 +442,72 @@ eq(Store.hintStrengthOf({ level: 'blind' }), 4, 'めかくしは 4');
 eq(Store.nextRank(0).rank, 1, 'だんなしの つぎは 1だん');
 eq(Store.nextRank(2).kps, 4, '2だんの つぎ（3だん）は 4.0 打/びょう');
 eq(Store.nextRank(3), null, '3だんの さきは ない');
+
+// ------------------------------------------------------------------
+// 14. れんしゅう中に 見せる ★（「★3つ！」の おしらせ）
+// ------------------------------------------------------------------
+//
+// ひとまわり できた しゅんかんに、れんしゅう画面が その ばで ★を 出します
+// （js/play.js の celebrateLap）。ここで 見せた ★が あとの けっか画面や
+// ステージ一覧と ちがうと、子どもから 見れば「★3つを とったのに 消えた」です。
+// 2つが かならず 合う ことを ここで つき合わせます。
+
+// (1) 前の れんしゅうの つづきぶんも 入れて 数える
+reset();
+play('hp-1', { items: 5, need: 10, correct: 46, total: 50 });   // きのう … ミス 4かい
+eq(Store.lapStarsPreview('hp-1', { correct: 50, total: 50 }), 2,
+  'きょう ノーミスでも、きのうの ミスを 入れた 正かくさ（96%）で 見る');
+r = play('hp-1', { items: 5, need: 10, correct: 50, total: 50 });
+eq(r.lapStars, 2, 'ほんとうに ついた ★と 同じ');
+eq(Store.getProgress()['hp-1'].stars, 2, 'ステージに ついた ★とも 同じ');
+
+// (2) はじめての ステージ（つづきぶんなし）
+reset();
+eq(Store.lapStarsPreview('hp-1', { correct: 32, total: 32 }), 3, 'ノーミスなら ★3つ');
+eq(Store.lapStarsPreview('hp-1', { correct: 31, total: 32 }), 3, '32打で ミス 1かいまでは ★3つ');
+eq(Store.lapStarsPreview('hp-1', { correct: 30, total: 32 }), 2, '32打で ミス 2かいなら ★2つ');
+eq(Store.lapStarsPreview('hp-1', { correct: 0, total: 0 }), 0, '1打も 打って いなければ ★0');
+eq(Store.lapStarsPreview('nope', { correct: 10, total: 10 }), 3, '知らない ステージでも 落ちない');
+
+// 打鍵を 数えない ステージ（ショートカット）は お題の 数で 見ます
+reset();
+eq(Store.lapStarsPreview('sc-1', { correct: 4, total: 4, byItem: true }), 3,
+  'ショートカットは できた 課題の 数で 見る');
+eq(Store.lapStarsPreview('sc-1', { correct: 3, total: 4, byItem: true }), 0,
+  '4つで 1つ とばしたら（75%）★は つかない … 打鍵むけの 下ささえは つかわない');
+
+// (3) 見せた ★は あとから 下がりません
+//
+// 1回で 何しゅうも まわると、どの しゅうも 同じ 正かくさで 見ます。
+// 1しゅう目を ノーミスで まわって「★3つ！」と 見せた あと 2しゅう目で
+// くずれると、合計の 正かくさが さがって けっか画面が ★2つに なります。
+reset();
+eq(Store.lapStarsPreview('hp-1', { correct: 100, total: 100 }), 3,
+  '1しゅう目の おわりに「★3つ」と 見せた');
+r = Store.applyResult('hp-1', {
+  doneItems: 16, lapNeed: 8, correctKeys: 170, totalKeys: 200,
+  kps: 2, accuracy: 85, lapStarsSeen: 3, finishedAt: new Date().toISOString()
+});
+eq(r.laps, 2, '2しゅう まわった');
+eq(r.lapStars, 3, 'あとで くずれても、見せた ★3つは 下がらない');
+eq(Store.getProgress()['hp-1'].stars, 3, 'ステージにも ★3つが つく');
+
+// 見せて いなければ これまでどおり（合計の 正かくさ 85% → ★1）
+reset();
+r = Store.applyResult('hp-1', {
+  doneItems: 16, lapNeed: 8, correctKeys: 170, totalKeys: 200,
+  kps: 2, accuracy: 85, finishedAt: new Date().toISOString()
+});
+eq(r.lapStars, 1, 'lapStarsSeen が なければ これまでどおり 合計の 正かくさで 見る');
+
+// ひとまわり して いない 回に ★は つきません（見せた ★でも 作れません）
+reset();
+r = Store.applyResult('hp-1', {
+  doneItems: 3, lapNeed: 8, correctKeys: 30, totalKeys: 30,
+  kps: 2, accuracy: 100, lapStarsSeen: 3, finishedAt: new Date().toISOString()
+});
+eq(r.laps, 0, 'ひとまわり して いない');
+eq(Store.getProgress()['hp-1'].stars, 0, 'ひとまわり しない かぎり ★は つかない');
 
 // ------------------------------------------------------------------
 

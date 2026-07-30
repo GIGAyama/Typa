@@ -295,6 +295,35 @@
     return laps;
   }
 
+  /**
+   * 「いま ひとまわり できたと したら ★は いくつか」。**保存は しません。**
+   *
+   * れんしゅう画面が、ひとまわり できた しゅんかんに「★3つ！」と 知らせる
+   * ために つかいます（js/play.js の celebrateLap）。
+   *
+   * ■ どうして その ばで 出しなおさないのか
+   * ★は **前の れんしゅうの つづきぶんも 入れた 正かくさ**で つきます
+   * （lapAdvance）。その回 だけの 正かくさから 出しなおすと、月よう すこし
+   * つまずいて 水よう ひとまわりした 子に「れんしゅう中は ★3つ、ステージ
+   * 一覧は ★2つ」が おきます。子どもから 見れば「★3つを とったのに 消えた」
+   * です。ここは lapAdvance と **まったく 同じ 数えかた**を します。
+   *
+   * @param {string} stageId
+   * @param {Object} delta { correct, total, byItem } その回に 打った ぶん。
+   *   byItem は「打鍵では なく お題の 数で 数えて いる」しるしです
+   * @returns {number} ★（0〜3）
+   */
+  function lapStarsPreview(stageId, delta) {
+    const p = getProgress()[stageId] || {};
+    const n = v => Math.max(0, Math.round(v || 0));
+    const correct = n(p.lapCorrect) + n((delta || {}).correct);
+    const total = n(p.lapTotal) + n((delta || {}).total);
+    const accuracy = total > 0 ? (correct / total) * 100 : 0;
+    return (delta || {}).byItem
+      ? starsOf({ accuracy })
+      : starsOf({ accuracy, correctKeys: correct, totalKeys: total });
+  }
+
   // ------------------------------------------------------------------
   // ふくしゅう（間を あけて もう1回）
   // ------------------------------------------------------------------
@@ -365,6 +394,8 @@
    *
    * @param {string} stageId
    * @param {Object} result { doneItems, correctItems, lapNeed, correctKeys, totalKeys, kps, accuracy, finishedAt }
+   *   lapStarsSeen … れんしゅう中に「★N」と 見せた ぶん（0〜3）。
+   *   見せた ★より 下げない ための 下ささえです（下の しくみを 見てください）
    * @returns {{best, laps, lapStars, lapAccuracy, lapItems, lapNeed, firstClear,
    *            newBestKps, newStars, prevBestKps}}
    *   laps は この 回で できあがった ひとまわりの 数（0 の ことも あります）。
@@ -407,7 +438,16 @@
 
     let lapStars = null;
     if (laps.length > 0) {
-      const best = laps.reduce((a, b) => Math.max(a, b), 0);
+      // れんしゅう中に「★3つ！」と 見せた ぶんは、**あとから 下がりません**。
+      //
+      // 1回で 何しゅうも まわると、どの しゅうも 同じ 正かくさで 見ます
+      // （lapAdvance）。すると 1しゅう目を ノーミスで まわって「★3つ」と
+      // 見せた あと、2しゅう目で くずれると 合計の 正かくさが さがり、
+      // けっか画面が ★2つに なって しまいます。子どもから 見れば
+      // 「さっき ★3つと 出たのに 消えた」です。あの とき ★3つだったのは
+      // 本当なので、見せた ★を 下ささえに します
+      const seen = Math.max(0, Math.min(3, Math.round(result.lapStarsSeen || 0)));
+      const best = Math.max(laps.reduce((a, b) => Math.max(a, b), 0), seen);
       lapStars = best;
       cur.clears = before.clears + laps.length;
       cur.stars = Math.max(before.stars, best);
@@ -798,7 +838,8 @@
   global.Typa.Store = {
     KEYS, HISTORY_MAX, DEFAULT_SETTINGS, getSettings, setSetting,
     ASSIST_LEVELS, ASSIST_LABELS, resolveAssist, setAssist, autoAssist,
-    getProgress, applyResult, starsOf, STAR_RULES, lapAdvance, lapState, MIN_RECORD_KEYS,
+    getProgress, applyResult, starsOf, STAR_RULES, lapAdvance, lapState, lapStarsPreview,
+    MIN_RECORD_KEYS,
     SPEED_RANKS, HINT_STEPS, hintStrengthOf, rankOf, nextRank,
     REVIEW_DAYS, scheduleReview, dueStages,
     HISTORY_DETAIL_MAX: DETAIL_MAX,

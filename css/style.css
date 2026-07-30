@@ -708,6 +708,24 @@ body[data-screen="play"] .play > *:not(.play-lower) {
   100% { opacity: 0; }
 }
 
+/* ★3つで ひとまわり できた とき。
+   いちばん うまく 打てた しゅんかん なので、みどりの まるを 金色に かえて
+   ★を そえます。**ばしょも 大きさも 同じ まま**です。ここを 大きく すると
+   お題の 文字に かぶさり、つぎの お題が 読めなく なります。
+   出て いる 時間だけ すこし のばします（js/play.js の FULL_FLASH_MS）*/
+.lap-flash.is-full { background: var(--accent); color: var(--on-accent); }
+.lap-flash .stars { vertical-align: -3px; margin-right: 6px; }
+.lap-flash .stars .star .ico { width: 16px; height: 16px; }
+.lap-flash .stars .star.on { color: var(--on-accent); }
+.lap-flash.is-full.is-on { animation: lap-in-full 2.4s ease both; }
+@keyframes lap-in-full {
+  0% { opacity: 0; transform: translateY(-8px) scale(.9); }
+  8% { opacity: 1; transform: translateY(0) scale(1.08); }
+  18% { transform: translateY(0) scale(1); }
+  84% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 /* ---------------------------------------------- 手の イラスト・キャラクター */
 
 /* キーボードと 手の 絵は ひとくみ。かならず **上下**に かさねます。
@@ -1507,6 +1525,14 @@ body.root-bump .view { animation: bump .3s ease; }
     animation-iteration-count: 1 !important;
     transition-duration: .001ms !important;
   }
+
+  /* うごきを 飛ばすのは「最後の すがたを すぐ 出す」ためで、
+     **おしらせを 消す ためでは ありません**。
+     ひとまわりの しるしは 最後の すがたが「消えた ところ」なので、
+     上の 決まりだけでは ★3つの おしらせごと 見えなく なります。
+     ここは アニメーションを つかわず、そのまま 出して
+     js/play.js の 時間で 消します */
+  .lap-flash.is-on, .lap-flash.is-full.is-on { animation: none; opacity: 1; }
 }
 
 /* たてに ゆとりの ある 画面では 練習の お題を もっと 大きく */
