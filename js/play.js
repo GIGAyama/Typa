@@ -1036,6 +1036,15 @@
       void flash.getBoundingClientRect();
       flash.classList.add('is-on');
       setTimeout(() => { flash.hidden = true; flash.classList.remove('is-on'); }, 1600);
+
+      // ひらひらを **しるしの ところから** すこしだけ まきます。
+      //
+      // ■ どうして まん中では ないのか
+      // ひとまわりは いちばん うれしい しゅんかん なので、目に 見える
+      // おいわいを 出します。でも 打つのは まだ つづいて います。
+      // お題の 文字の 上に かぶせると、つぎの お題が 読めなく なります。
+      // しるしと 同じ 右上から、少ない かずだけ まいて、すぐ 消します。
+      if (T.FX) T.FX.confettiAt(flash, { count: 26, power: .55 });
     }
     if (state.showBuddy) T.Buddy.cheer();
     chime();
