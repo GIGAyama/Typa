@@ -38,7 +38,7 @@
    * アプリの ばんごう。**ここ 1か所だけ**に 書きます。
    * せってい画面の 表示にも、学習ログの appVersion にも これを つかいます。
    */
-  const APP_VERSION = '4.0.0';
+  const APP_VERSION = '4.0.1';
 
   let view = null;
   let installPrompt = null;
@@ -718,6 +718,8 @@
     } else if (!stage.noStars) {
       const applied = T.Store.applyResult(stage.id, {
         doneItems: result.doneItems != null ? result.doneItems : result.done,
+        // ショートカットは 打鍵を 数えないので、できた 課題の 数で ★を つけます
+        correctItems: (result.items || []).filter(it => it && it.ok && !it.retry).length,
         lapNeed: result.lapNeed || result.count || 1,
         correctKeys: result.correctKeys,
         totalKeys: result.totalKeys,
@@ -728,6 +730,8 @@
       meta.newStars = applied.newStars;
       meta.prevBestKps = applied.prevBestKps;
       meta.laps = applied.laps;
+      meta.lapStars = applied.lapStars;
+      meta.lapAccuracy = applied.lapAccuracy;
       meta.lapItems = applied.lapItems;
       meta.lapNeed = applied.lapNeed;
     }
@@ -746,8 +750,9 @@
       elapsedMs: Math.round(result.elapsedMs),
       combo: result.combo || 0,
       // ★は「ひとまわり できた 回」だけに つけます。3もん 打って やめた 回に
-      // ★3が ならぶと、きろくの 一覧が 何も あらわさなく なります
-      stars: stage.noStars || !meta.laps ? 0 : T.Store.starsOf(result),
+      // ★3が ならぶと、きろくの 一覧が 何も あらわさなく なります。
+      // 数は ステージに ついた ★（ひとまわり ぜんぶで 見た もの）と そろえます
+      stars: stage.noStars || !meta.laps ? 0 : (meta.lapStars || 0),
       missByKey: result.missByKey,
       missByFinger: result.missByFinger,
       // おぼえぐあいの もと。ここに 名前を 書いた ものだけが のこります。
@@ -762,7 +767,7 @@
     // 同じ ドメインの ほかの 学習アプリと 同じ キーに ならべて のこします。
     // ここから 外へ おくる しくみは ありません（送信は べつの ページの しごと）。
     // 保存に しくじっても null が 返るだけで、れんしゅうは 止まりません
-    if (T.Study) T.Study.save(result, { appVersion: APP_VERSION });
+    if (T.Study) T.Study.save(result, { appVersion: APP_VERSION, lapStars: meta.lapStars });
 
     const awarded = T.Awards.applyResult(result, meta);
     return { meta, awarded };
@@ -783,7 +788,11 @@
     const isChallenge = r.stage.mode === 'challenge';
     const noStars = !!r.stage.noStars;
     const lapped = (meta.laps || 0) > 0;      // この回で ひとまわり できたか
-    const n = T.Store.starsOf(r);
+    // ★は **ステージに ついた もの と 同じ もの** を 出します。ここで その回の
+    // 正かくさから 出しなおすと、前の つづきから ひとまわりした 子には
+    // 「けっか画面は ★3、ステージ一覧は ★2」が 起きて、
+    // ★3が いつまでも とれない ように 見えます
+    const n = lapped && meta.lapStars != null ? meta.lapStars : T.Store.starsOf(r);
     const progress = T.Store.getProgress()[r.stage.id] || {};
     const okCount = r.items.filter(i => i.ok).length;
     const isBest = !!(meta.newBestKps || meta.isBestScore);
@@ -1063,7 +1072,7 @@
     const level = typeof s.assist === 'number' ? s.assist : (s.keyboard === false ? 3 : 0);
     const stars = (T.Store.getProgress()[r.stage.id] || {}).stars || 0;
     if (!r.stage.noStars && stars >= 3 && level < 3 && s.assist !== 'auto' &&
-        (r.accuracy || 0) >= 98 && r.stage.mode !== 'shortcut') {
+        T.Store.starsOf(r) >= 3 && r.stage.mode !== 'shortcut') {
       return {
         why: 'ばっちり 打てて います。つぎは ヒントを へらして、手もとを 見ないで やってみよう。',
         sub: r.course.short, title: 'めかくしで やってみる',
@@ -1129,7 +1138,26 @@
       </div>
       <p class="lap-note">${left === 0
         ? 'ひとまわり できました。'
-        : `ひとまわりまで あと <b>${left}もん</b>（ぜんぶで ${need}もん）`}</p>`, 'card-lap');
+        : `ひとまわりまで あと <b>${left}もん</b>（ぜんぶで ${need}もん）`}</p>
+      ${lapAccuracyNote(r, meta)}`, 'card-lap');
+  }
+
+  /**
+   * ★は「その回」では なく「ひとまわり ぜんぶ」の 正かくさで つきます。
+   * とちゅうから つづけた 子は、上に 出て いる その回の 正かくさと
+   * ★が あわない ように 見えます。**そこを だまって いると、
+   * ★が 気まぐれに 見えます**。ちがう ときだけ、1行で つたえます。
+   */
+  function lapAccuracyNote(r, meta) {
+    const lap = meta.lapAccuracy;
+    if (typeof lap !== 'number' || r.stage.mode === 'shortcut') return '';
+    if (Math.abs(lap - (r.accuracy || 0)) < 1) return '';
+    const shown = Math.round(lap);
+    return meta.laps > 0
+      ? `<p class="lap-note muted">★は この ひとまわり ぜんぶ（前の つづきも 入れて）の
+         正かくさ <b>${shown}%</b> で つきました。</p>`
+      : `<p class="lap-note muted">いまの ひとまわりは、ここまで あわせて
+         正かくさ <b>${shown}%</b> です。</p>`;
   }
 
   function praise(r, meta, n) {

@@ -15,12 +15,15 @@
  * ★が 出ない・ずっと 同じ お題ばかり 出る・かんたんに ★3が つく、
  * どれも しばらく つかった あとに、授業の まん中で 分かります。
  *
- * ここで 見るのは つぎの 5つです。
+ * ここで 見るのは つぎの 8つです。
  *   1. とちゅうで やめても 打った ぶんが のこるか
  *   2. わけて やっても、1回で やっても おなじに なるか
  *   3. ひとまわりの ★が「正かくさ」で 決まるか
  *   4. みじかすぎる 回が さいこう記録に ならないか
  *   5. ずっと 打ちつづけて 何しゅうも まわった ときに こわれないか
+ *   6. みじかい ステージでも ★3に 手が とどくか
+ *   7. 打鍵を 数えない ステージ（ショートカット）にも ★が つくか
+ *   8. けっか画面に 出す ★と、ステージに ついた ★が 同じか
  */
 'use strict';
 
@@ -231,6 +234,126 @@ eq(Store.bestOverall().count, 2, 'れんしゅうした 回数は 2かい');
 // ショートカットは 打鍵を 数えないので、はやさの 記録には 入りません
 Store.addHistory({ at: day, correctKeys: 0, totalKeys: 0, kps: 0, accuracy: 100, mode: 'shortcut' });
 eq(Store.bestOverall().count, 2, 'ショートカットは はやさの 記録に 入れない');
+
+// ------------------------------------------------------------------
+// 10. みじかい ステージでも ★3に 手が とどく
+// ------------------------------------------------------------------
+//
+// ★は ひとまわり ぜんぶを 通して 見ます。ところが ひとまわりの ながさは
+// ステージで まるで ちがいます。わりざん だけで 98% を もとめると、
+// 32打の ステージでは **1文字でも まちがえたら ★3は なし**（＝100%）に
+// なって いました。ホームポジション ①から ずっと 出られなく なります。
+
+reset();
+// ホームポジション ①（8もん・32打）で ミス 1かい
+play('hp-1', { items: 8, need: 8, correct: 31, total: 32 });
+eq(Store.getProgress()['hp-1'].stars, 3, '32打の ステージは ミス 1かいまで ★3');
+
+reset();
+play('hp-1', { items: 8, need: 8, correct: 30, total: 32 });
+eq(Store.getProgress()['hp-1'].stars, 2, '32打で ミス 2かいなら ★2');
+
+reset();
+play('hp-1', { items: 8, need: 8, correct: 29, total: 32 });
+eq(Store.getProgress()['hp-1'].stars, 1, '32打で ミス 3かいなら ★1');
+
+// いちばん みじかい「あ行」（9もん・13打）でも 同じ です
+reset();
+play('rm-a', { items: 9, need: 9, correct: 12, total: 13 });
+eq(Store.getProgress()['rm-a'].stars, 3, '13打の ステージも ミス 1かいまで ★3');
+
+reset();
+play('rm-a', { items: 9, need: 9, correct: 11, total: 13 });
+eq(Store.getProgress()['rm-a'].stars, 2, '13打で ミス 2かいなら ★2');
+
+reset();
+play('rm-a', { items: 9, need: 9, correct: 10, total: 13 });
+eq(Store.getProgress()['rm-a'].stars, 1, '13打で ミス 3かいなら ★1');
+
+reset();
+play('rm-a', { items: 9, need: 9, correct: 9, total: 13 });
+eq(Store.getProgress()['rm-a'].stars, 0, '13打で ミス 4かいなら ★0');
+
+// ながい ステージは これまでどおり わりざんの ままです（ゆるく しません）
+reset();
+play('st-4', { items: 3, need: 3, correct: 203, total: 208 });
+eq(Store.getProgress()['st-4'].stars, 2, '208打で ミス 5かいは これまでどおり ★2');
+
+reset();
+play('st-4', { items: 3, need: 3, correct: 204, total: 208 });
+eq(Store.getProgress()['st-4'].stars, 3, '208打で ミス 4かいなら ★3');
+
+// starsOf を じかに 呼んだ ときも 同じ 線です
+eq(Store.starsOf({ accuracy: 96.9, correctKeys: 31, totalKeys: 32 }), 3, 'starsOf も ミス 1かいを ★3に する');
+eq(Store.starsOf({ accuracy: 96.9 }), 2, '打鍵数が わからない ときは 正かくさ だけで 見る');
+eq(Store.starsOf({ accuracy: 0, correctKeys: 0, totalKeys: 0 }), 0, '1打も 打って いない 回は ★0');
+
+// ------------------------------------------------------------------
+// 11. 打鍵を 数えない ステージ（ショートカット）にも ★が つく
+// ------------------------------------------------------------------
+//
+// ショートカットは correctKeys / totalKeys が 0 です。そのまま 足すと
+// ひとまわりの 正かくさが ずっと 0% に なり、ぜんぶの 課題が できても
+// ★が 1つも つきませんでした（けっか画面には ★3が 出るので、
+// 「★3が とれない」が いちばん 分かりにくい 形で 起きます）。
+
+reset();
+let sc = Store.applyResult('sc-1', {
+  doneItems: 4, correctItems: 4, lapNeed: 4,
+  correctKeys: 0, totalKeys: 0, kps: 0, accuracy: 100, finishedAt: new Date().toISOString()
+});
+eq(sc.laps, 1, 'ショートカットも ひとまわり する');
+eq(sc.lapStars, 3, 'ぜんぶ できた ショートカットは ★3');
+eq(Store.getProgress()['sc-1'].stars, 3, 'ステージにも ★3が つく');
+
+// とばした 課題は 正かいに しません
+reset();
+sc = Store.applyResult('sc-1', {
+  doneItems: 4, correctItems: 3, lapNeed: 4,
+  correctKeys: 0, totalKeys: 0, kps: 0, accuracy: 75, finishedAt: new Date().toISOString()
+});
+ok(sc.lapStars < 3, '1つ とばしたら ★3には ならない');
+
+// わけて やっても 同じ です（2つ やって やめ、あとで のこり 2つ）
+reset();
+Store.applyResult('sc-2', {
+  doneItems: 2, correctItems: 2, lapNeed: 4,
+  correctKeys: 0, totalKeys: 0, kps: 0, accuracy: 100, finishedAt: new Date().toISOString()
+});
+eq(Store.getProgress()['sc-2'].stars, 0, 'とちゅうでは まだ ★は つかない');
+sc = Store.applyResult('sc-2', {
+  doneItems: 2, correctItems: 2, lapNeed: 4,
+  correctKeys: 0, totalKeys: 0, kps: 0, accuracy: 100, finishedAt: new Date().toISOString()
+});
+eq(Store.getProgress()['sc-2'].stars, 3, 'わけて やっても ★3に なる');
+
+// correctItems を わたさない 古い 呼びかたでも 正かくさから 数えます
+reset();
+sc = Store.applyResult('sc-3', {
+  doneItems: 5, lapNeed: 5,
+  correctKeys: 0, totalKeys: 0, kps: 0, accuracy: 100, finishedAt: new Date().toISOString()
+});
+eq(sc.lapStars, 3, 'correctItems が なくても 正かくさから 数える');
+
+// ------------------------------------------------------------------
+// 12. けっか画面の ★と、ステージに ついた ★は 同じ
+// ------------------------------------------------------------------
+//
+// ★は「その回」では なく「ひとまわり ぜんぶ」で 決まります。
+// けっか画面が その回の 正かくさから ★を 出しなおすと、
+// **画面は ★3、ステージ一覧は ★2** が 起きます。
+// 子どもから 見ると「★3を とったのに 消えた」です。
+
+reset();
+play('hp-1', { items: 4, need: 8, correct: 14, total: 16 });   // 月よう … ミス 2かい
+r = play('hp-1', { items: 4, need: 8, correct: 16, total: 16 }); // 火よう … ミス なし
+
+eq(r.laps, 1, '2日 あわせて ひとまわり');
+eq(r.lapStars, 2, 'けっか画面の ★は ひとまわり ぜんぶ（32打で ミス 2かい）で 見る');
+eq(Store.getProgress()['hp-1'].stars, 2, 'ステージに ついた ★と 同じ');
+ok(Math.abs(r.lapAccuracy - 93.75) < 0.01, 'けっか画面に 出す ひとまわりの 正かくさ');
+eq(Store.starsOf({ accuracy: 100, correctKeys: 16, totalKeys: 16 }), 3,
+  'その回 だけを 見ると ★3 … ここが くいちがって いました');
 
 // ------------------------------------------------------------------
 
