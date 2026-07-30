@@ -883,6 +883,9 @@
         // だん（そのさき）は「ヒントを 消した じょうたいで 出した はやさ」で
         // 上がります。その回に ほんとうに 見えて いた ものを わたします
         hintStrength: result.hintStrength,
+        // れんしゅう中に「★3つ！」と 見せた ぶん。見せた ★より 下げません
+        // （store.js の applyResult を 見てください）
+        lapStarsSeen: result.lapStarsSeen,
         kps: result.kps, accuracy: result.accuracy, finishedAt: result.finishedAt
       });
       meta.firstClear = applied.firstClear;
