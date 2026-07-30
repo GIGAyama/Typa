@@ -69,7 +69,10 @@
 
   /** ならびの 中身（バッジ・タイル・行）にも ずらしを かけます */
   const INNER_LISTS = [
-    '.menu-list', '.course-list', '.stage-list', '.badge-grid',
+    // .menu-grid / .menu-col は「よこに ならべる」ための 入れもの です。
+    // 入れものだけを 出すと 中の カードが いっしょに 出て しまうので、
+    // その 中の ものにも ずらしを かけます
+    '.menu-grid', '.menu-col', '.menu-list', '.course-list', '.stage-list', '.badge-grid',
     '.pool-grid', '.today', '.result-grid', '.tile-row', '.subtabs'
   ];
 

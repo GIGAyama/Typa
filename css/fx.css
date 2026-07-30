@@ -242,6 +242,13 @@ html[data-theme="dark"] .hero::after { background: linear-gradient(100deg, trans
 .fold > summary::after { margin-left: 10px; }
 .fold-body { padding: 4px 14px 14px; animation: fx-slide .26s var(--fx-ease) both; }
 
+/* たたんだ 見出しが いくつも ならぶ ところ（コースごとの ★ など）。
+   ひろい 画面では 2れつに して、たての ながさを はんぶんに します */
+@media (min-width: 700px) {
+  .fold-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: start; }
+  .fold-cols .fold, .fold-cols .fold + .fold { margin-top: 0; }
+}
+
 /* ---------------------------------------------------------------- ならんだ 数字
 
    「きょうの ようす」などの 3つの 数字。数字が そだつ うごき（fx.js）と
@@ -408,6 +415,9 @@ html[data-theme="dark"] .badge-tile.got::before { background: linear-gradient(10
 
 /* コースの さいしょに 出す「すすみ」カード。左の へりを コースの 色に します */
 .card-course { border-left: 8px solid var(--tile, var(--primary)); }
+/* 「6 / 11 ステージ ・ ★ 12 / 33」は 見出しの 右に そえます。
+   1行に まとめると、その ぶんが ステージの ならびに まわります */
+.course-sum { margin-left: auto; font-size: .82rem; font-weight: 400; color: var(--muted); white-space: nowrap; }
 .card-course .lead .ico { color: var(--tile, var(--primary)); }
 .card-course .row-bar { margin: 8px 0 4px; height: 10px; border-radius: 5px; }
 
@@ -429,6 +439,44 @@ html[data-theme="dark"] .course-row.is-full .grade-chip { color: #ffd166; }
   .hero-lv-num { font-size: 2.05rem; }
   .subtab { padding: 6px 12px; font-size: .84rem; }
   .subtab .ico { display: none; }
+}
+
+/* ---------------------------------------------------------------- 1画面に おさめる
+
+   ノートPC・Chromebook の たては 600〜950px しか ありません。
+   えらぶ・きろく・せっていを **スクロールしないで 見わたせる** ように、
+   ヒーローと ひきだしの すきまを つめます。
+   ここに 書くのは、この 3つが この ファイルの もち物 だからです
+   （style.css で 書いても、あとから 読む この ファイルに 上書きされます）。
+
+   文字の 大きさは できるだけ かえません。読みにくく なるのは
+   スクロールより こまる ことです。 */
+
+@media (max-height: 900px) {
+  .hero { padding: 12px 16px; margin-bottom: 10px; gap: 14px; }
+  .hero-ring { width: 92px; height: 92px; }
+  .hero-lv-num { font-size: 1.95rem; }
+  .hero-rank { font-size: 1.2rem; }
+  .hero-xp { margin: 0 0 6px; }
+  .hero-chip { padding: 2px 12px; }
+  .subtabs { margin-bottom: 10px; padding: 4px; }
+  /* 中身が ない ひきだしの おしらせ。まん中の 空きを つめます */
+  .empty { padding: 14px 14px; }
+  .empty .btn { margin-top: 10px; }
+  .fold > summary { min-height: 44px; padding: 6px 12px; }
+  .fold-body { padding: 2px 12px 10px; }
+  .fold { margin-top: 8px; }
+}
+
+/* もう ひとまわり みじかい 画面（ブラウザの わくを のぞいた Chromebook）*/
+@media (max-height: 700px) {
+  .hero { padding: 10px 14px; }
+  .hero-ring { width: 84px; height: 84px; }
+  .hero-lv-num { font-size: 1.8rem; }
+  .empty { padding: 10px 12px; }
+  .empty .ico { width: 38px; height: 38px; }
+  .empty .btn { margin-top: 8px; }
+  .fold > summary { min-height: 42px; }
 }
 
 /* たてが みじかい 端末では、かざりの うごきを へらして 中身を ひろげます */

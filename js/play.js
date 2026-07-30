@@ -162,7 +162,8 @@
         </div>
 
         <div class="ime-warn" id="ime-warn" hidden>
-          ${T.icon('info')} <span>かな入力に なって いるみたい。<b>英数キー</b>（スペースの 左）を おしてから 打ってね。</span>
+          ${T.icon('info')} <span>かな入力に なって いるみたい。<b>かな英数キー</b>（1の 左）か
+            <b>英数キー</b>（スペースの 左）を おしてから 打ってね。</span>
         </div>
 
         <p class="play-ready" id="play-ready">${T.icon('play')} さいしょの 1打で スタートします。10びょうでも きろくは のこります。</p>
@@ -1046,7 +1047,13 @@
       // しるしと 同じ 右上から、少ない かずだけ まいて、すぐ 消します。
       if (T.FX) T.FX.confettiAt(flash, { count: 26, power: .55 });
     }
-    if (state.showBuddy) T.Buddy.cheer();
+    if (state.showBuddy) {
+      T.Buddy.cheer();
+      // ひとまわり ＝ ドリル 1つぶん。おわる ごとに つぎの キャラクターを
+      // くじで 引きなおします（せっていで しごとを えらんで いる ときは
+      // buddy.js が 何も しません）。よろこびの うごきが 終わってから 入れかえます
+      T.Buddy.reroll();
+    }
     chime();
   }
 
