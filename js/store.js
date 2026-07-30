@@ -238,6 +238,7 @@
    *   [stageId]: {
    *     clears,        ひとまわり できた 回数
    *     bestKps, bestAccuracy, stars, lastAt, box, due,
+   *     rank,          そのさきの「だん」（0〜3。ぜんぶ ★3の あとの はしご）
    *     lapItems,      いまの ひとまわりで すでに 打った お題の 数
    *     lapCorrect,    いまの ひとまわりで 正しく 打てた 数（★の もと）
    *     lapTotal       いまの ひとまわりで 打った 合計
@@ -376,7 +377,10 @@
     const all = getProgress();
     const cur = all[stageId] ||
       { clears: 0, bestKps: 0, bestAccuracy: 0, stars: 0, lastAt: null, lapItems: 0, lapCorrect: 0, lapTotal: 0 };
-    const before = { bestKps: cur.bestKps || 0, stars: cur.stars || 0, clears: cur.clears || 0 };
+    const before = {
+      bestKps: cur.bestKps || 0, stars: cur.stars || 0,
+      clears: cur.clears || 0, rank: cur.rank || 0
+    };
     const lapNeed = Math.max(1, Math.round(result.lapNeed || 1));
 
     // ショートカットは 打鍵を 数えません（totalKeys が 0）。そのまま 足すと
@@ -420,6 +424,16 @@
       cur.bestKps = Math.max(before.bestKps, result.kps || 0);
       cur.bestAccuracy = Math.max(cur.bestAccuracy || 0, result.accuracy || 0);
     }
+
+    // だん（そのさき）。★3を たもった ひとまわりの ときだけ 見ます。
+    // はやさは その回の もの なので、さいこう記録と 同じく
+    // **20打いじょう 打った 回**でしか 上がりません（3打の まぐれを
+    // 「3だん」に しない ため。みじかい ステージは 2しゅう すれば とどきます）
+    const lapRank = (laps.length > 0 && enough)
+      ? rankOf({ stars: lapStars, kps: result.kps, hintStrength: result.hintStrength })
+      : 0;
+    if (lapRank > 0) cur.rank = Math.max(before.rank, lapRank);
+
     cur.lastAt = result.finishedAt;
     all[stageId] = cur;
     write(KEYS.progress, all);
@@ -433,6 +447,8 @@
       firstClear: before.clears === 0 && laps.length > 0,
       newBestKps: enough && before.clears > 0 && (result.kps || 0) > before.bestKps + 0.05,
       newStars: Math.max(0, (cur.stars || 0) - before.stars),
+      lapRank,
+      newRank: Math.max(0, (cur.rank || 0) - before.rank),
       prevBestKps: before.bestKps
     };
   }
@@ -499,6 +515,79 @@
       if (miss >= 0 && miss <= rule.allow) return rule.stars;
     }
     return 0;
+  }
+
+  // ------------------------------------------------------------------
+  // そのさき（ぜんぶ ★3に なった あと）
+  // ------------------------------------------------------------------
+  //
+  // ★は「正かくさ」で つきます。ぜんぶの ステージが ★3に なった 子は
+  // **どの キーを どの 指で 打つかを もう 知って いる** ので、
+  // ★では それ いじょう 伸びが 見えません。のこって いるのは 2つ です。
+  //
+  //   ・キーボードを 見ないで 打つ（タッチタイピング）
+  //   ・はやく 打つ
+  //
+  // この 2つを **1本の はしご**に します。それが「だん」です。
+  //
+  //   1だん … ヒント「ゆびの 色だけ」いじょう ＋ 2.0 打/びょう
+  //   2だん … ヒント「ばしょだけ」いじょう   ＋ 3.0 打/びょう
+  //   3だん … ヒント「なにも 出ない」いじょう ＋ 4.0 打/びょう
+  //
+  // ■ なぜ はやさ だけで 決めないか
+  // はやさ だけの はしごに すると「画面の キーボードを 見たまま はやい 子」が
+  // いちばん 上に 立ちます。それは この アプリが 目ざして いる ところでは
+  // ありません。だんは **ヒントを 1つ 消した じょうたいで 出した はやさ**
+  // でしか 上がりません。
+  //
+  // ■ なぜ ★3が いる か
+  // だんは ひとまわりの ★が 3つの ときだけ 上がります。
+  // これが ないと「まちがえても はやく 打つほど よい」に なって しまい、
+  // ★を 正かくさで 決めて いる 意味が なくなります。
+  // 正かくさが 先、はやさは その 上、という 順ばんは かえません。
+  //
+  // ★と 同じで、だんも 下がりません。
+
+  /**
+   * ヒントの つよさ（0〜4）。**せっていの 数字では なく、その回に
+   * ほんとうに 見えて いた もの**から 数えます。スイッチを 手で さわった
+   * 子（assist が 'custom'）にも 同じ ものさしを あてる ためです。
+   */
+  const HINT_STEPS = ['ぜんぶ 見える', 'ゆびの 色だけ', 'ばしょだけ', 'なにも 出ない', 'めかくし'];
+
+  function hintStrengthOf(view) {
+    if (!view) return 0;
+    if (view.level === 'blind' || view.fingerWords === false) return 4;
+    if (!view.keyboard) return 3;
+    if (!view.fingerGuide && !view.keyLabels) return 2;
+    if (!view.romajiHint) return 1;
+    return 0;
+  }
+
+  const SPEED_RANKS = [
+    { rank: 1, kps: 2.0, hint: 1 },
+    { rank: 2, kps: 3.0, hint: 2 },
+    { rank: 3, kps: 4.0, hint: 3 }
+  ];
+
+  /** つぎに ねらう だん（もう 3だんなら null） */
+  function nextRank(rank) {
+    return SPEED_RANKS.filter(r => r.rank === Math.max(0, Math.round(rank || 0)) + 1)[0] || null;
+  }
+
+  /**
+   * この 回で とどいた だん（0〜3）。
+   * @param {Object} r { stars, kps, hintStrength }
+   */
+  function rankOf(r) {
+    if ((r.stars || 0) < 3) return 0;
+    const kps = r.kps || 0;
+    const hint = Math.max(0, Math.round(r.hintStrength || 0));
+    let got = 0;
+    SPEED_RANKS.forEach(step => {
+      if (kps >= step.kps && hint >= step.hint) got = Math.max(got, step.rank);
+    });
+    return got;
   }
 
   // ------------------------------------------------------------------
@@ -710,6 +799,7 @@
     KEYS, HISTORY_MAX, DEFAULT_SETTINGS, getSettings, setSetting,
     ASSIST_LEVELS, ASSIST_LABELS, resolveAssist, setAssist, autoAssist,
     getProgress, applyResult, starsOf, STAR_RULES, lapAdvance, lapState, MIN_RECORD_KEYS,
+    SPEED_RANKS, HINT_STEPS, hintStrengthOf, rankOf, nextRank,
     REVIEW_DAYS, scheduleReview, dueStages,
     HISTORY_DETAIL_MAX: DETAIL_MAX,
     getHistory, addHistory, todaySummary, bestOverall, countsAsTyping,

@@ -15,7 +15,7 @@
  * ★が 出ない・ずっと 同じ お題ばかり 出る・かんたんに ★3が つく、
  * どれも しばらく つかった あとに、授業の まん中で 分かります。
  *
- * ここで 見るのは つぎの 8つです。
+ * ここで 見るのは つぎの 9つです。
  *   1. とちゅうで やめても 打った ぶんが のこるか
  *   2. わけて やっても、1回で やっても おなじに なるか
  *   3. ひとまわりの ★が「正かくさ」で 決まるか
@@ -24,6 +24,7 @@
  *   6. みじかい ステージでも ★3に 手が とどくか
  *   7. 打鍵を 数えない ステージ（ショートカット）にも ★が つくか
  *   8. けっか画面に 出す ★と、ステージに ついた ★が 同じか
+ *   9. そのさきの「だん」が、ヒントと はやさの **両方** で 決まるか
  */
 'use strict';
 
@@ -354,6 +355,92 @@ eq(Store.getProgress()['hp-1'].stars, 2, 'ステージに ついた ★と 同�
 ok(Math.abs(r.lapAccuracy - 93.75) < 0.01, 'けっか画面に 出す ひとまわりの 正かくさ');
 eq(Store.starsOf({ accuracy: 100, correctKeys: 16, totalKeys: 16 }), 3,
   'その回 だけを 見ると ★3 … ここが くいちがって いました');
+
+// ------------------------------------------------------------------
+// 13. そのさき（だん）… ぜんぶ ★3の あとの はしご
+// ------------------------------------------------------------------
+//
+// だんは「ヒントを 消した じょうけん」と「はやさ」の 両方で 決まります。
+// かたほうだけ では 上がりません。画面の キーボードを 見たまま 速い 子が
+// いちばん 上に 立つ はしごに して しまうと、この アプリの めあてと
+// 逆の ことを おしえる ことに なります。
+
+/** だんを ねらう 1回ぶん（ぜんぶ 正かい・20打いじょう） */
+function playRank(stageId, opt) {
+  return Store.applyResult(stageId, {
+    doneItems: opt.items, lapNeed: opt.need,
+    correctKeys: opt.keys, totalKeys: opt.keys + (opt.miss || 0),
+    kps: opt.kps, hintStrength: opt.hint,
+    accuracy: (opt.keys / (opt.keys + (opt.miss || 0))) * 100,
+    finishedAt: new Date().toISOString()
+  });
+}
+
+reset();
+let rk = playRank('hp-1', { items: 8, need: 8, keys: 40, kps: 4.5, hint: 0 });
+eq(rk.lapRank, 0, 'ヒントを ぜんぶ 出した まま なら、いくら はやくても だんは つかない');
+eq(Store.getProgress()['hp-1'].rank || 0, 0, 'ステージにも だんは つかない');
+
+reset();
+rk = playRank('hp-1', { items: 8, need: 8, keys: 40, kps: 1.2, hint: 3 });
+eq(rk.lapRank, 0, 'ヒントを 消しても おそければ だんは つかない');
+
+reset();
+rk = playRank('hp-1', { items: 8, need: 8, keys: 40, kps: 2.4, hint: 1 });
+eq(rk.lapRank, 1, 'ゆびの色だけ ＋ 2.0打/びょう で 1だん');
+
+reset();
+rk = playRank('hp-1', { items: 8, need: 8, keys: 40, kps: 3.4, hint: 2 });
+eq(rk.lapRank, 2, 'ばしょだけ ＋ 3.0打/びょう で 2だん');
+
+reset();
+rk = playRank('hp-1', { items: 8, need: 8, keys: 40, kps: 4.4, hint: 3 });
+eq(rk.lapRank, 3, 'なにも出ない ＋ 4.0打/びょう で 3だん');
+
+// はやさが 2だん ぶん あっても、ヒントが 1だんの ままなら 1だん
+reset();
+rk = playRank('hp-1', { items: 8, need: 8, keys: 40, kps: 9, hint: 1 });
+eq(rk.lapRank, 1, 'はやさだけ さきに 行っても、ヒントの ぶんまでしか 上がらない');
+
+// ★3で ない ひとまわりでは だんは 上がりません（正かくさが さき）
+reset();
+rk = playRank('hp-1', { items: 8, need: 8, keys: 38, miss: 2, kps: 5, hint: 3 });
+eq(rk.lapStars, 2, 'ミス 2かいの ひとまわりは ★2');
+eq(rk.lapRank, 0, '★3で ない ひとまわりでは だんは 上がらない');
+
+// だんも 下がりません
+reset();
+playRank('hp-1', { items: 8, need: 8, keys: 40, kps: 4.4, hint: 3 });
+playRank('hp-1', { items: 8, need: 8, keys: 40, kps: 1.0, hint: 0 });
+eq(Store.getProgress()['hp-1'].rank, 3, 'だんは あとから 下がらない');
+
+// みじかい 回（20打みまん）は だんに しません。3打の まぐれを
+// 「3だん」に しない ため（さいこう記録と 同じ 線です）
+reset();
+rk = playRank('rm-a', { items: 9, need: 9, keys: 13, kps: 9, hint: 3 });
+eq(rk.lapStars, 3, 'みじかくても ★は つく');
+eq(rk.lapRank, 0, `${Store.MIN_RECORD_KEYS}打 みまんの 回は だんに しない`);
+// 2しゅう まわれば とどきます
+reset();
+rk = playRank('rm-a', { items: 18, need: 9, keys: 26, kps: 4.4, hint: 3 });
+eq(rk.lapRank, 3, 'みじかい ステージも 2しゅう すれば だんに とどく');
+
+// ヒントの つよさは「その回に ほんとうに 見えて いた もの」から 数えます。
+// せっていが 'custom'（スイッチを 手で さわった）でも 同じ ものさしです
+eq(Store.hintStrengthOf({ keyboard: true, fingerGuide: true, keyLabels: true, romajiHint: true }), 0,
+  'ぜんぶ 見えて いれば 0');
+eq(Store.hintStrengthOf({ keyboard: true, fingerGuide: true, keyLabels: true, romajiHint: false }), 1,
+  'ローマ字の ヒントだけ 消せば 1');
+eq(Store.hintStrengthOf({ keyboard: true, fingerGuide: false, keyLabels: false, romajiHint: false }), 2,
+  'キーの 文字も 指の 色も 消せば 2');
+eq(Store.hintStrengthOf({ keyboard: false, fingerGuide: false, keyLabels: false, romajiHint: false }), 3,
+  'キーボードを 出さなければ 3');
+eq(Store.hintStrengthOf({ level: 'blind' }), 4, 'めかくしは 4');
+
+// つぎに ねらう だん
+eq(Store.nextRank(0).rank, 1, 'だんなしの つぎは 1だん');
+eq(Store.nextRank(2).kps, 4, '2だんの つぎ（3だん）は 4.0 打/びょう');
+eq(Store.nextRank(3), null, '3だんの さきは ない');
 
 // ------------------------------------------------------------------
 

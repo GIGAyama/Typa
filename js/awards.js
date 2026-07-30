@@ -102,6 +102,8 @@
     if (m.firstClear) add('はじめての クリア', 60);
     if (m.newBestKps || m.isBestScore) add('さいこう記録', 30);
     if (m.newStars) add('★が ふえた', m.newStars * 25);
+    // だんは ★を ぜんぶ そろえた あとの はしごなので、★と 同じだけ つけます
+    if (m.newRank) add('だんが 上がった', m.newRank * 25);
 
     return { total: parts.reduce((sum, p) => sum + p.xp, 0), parts };
   }
@@ -156,6 +158,14 @@
       test: c => c.courseCleared.shortcut },
     { id: 'star-master', icon: 'star', title: 'オール ★3', note: 'ぜんぶの ステージで ★3つ',
       test: c => c.allStars },
+    // ★の つぎの はしご。ヒントを 消した ままで はやさの めやすに とどくと
+    // 「だん」が 上がります（store.js の SPEED_RANKS）
+    { id: 'rank-first', icon: 'bolt', title: 'そのさきへ', note: 'はじめて だんを とった',
+      test: c => c.topRank >= 1 },
+    { id: 'rank-3', icon: 'bolt', title: '3だん', note: 'ステージを 1つ 3だんに した',
+      test: c => c.topRank >= 3 },
+    { id: 'rank-master', icon: 'trophy', title: 'オール 3だん', note: 'ぜんぶの ステージで 3だん',
+      test: c => c.allRanks },
 
     { id: 'weak-5', icon: 'finger', title: 'にがて つぶし', note: 'にがて とっくんを 5かい やった',
       test: c => c.awards.weak >= 5 },
@@ -176,6 +186,11 @@
     const courseCleared = {};
     let allStars = true;
     let anyStage = false;
+    // だんは 打鍵を 数える ステージだけの はしごです。ショートカットは
+    // はやさを はかれない ので、ここに 入れると ぜったいに そろいません
+    let allRanks = true;
+    let anyRanked = false;
+    let topRank = 0;
     T.Lessons.COURSES.forEach(course => {
       let cleared = true;
       course.stages.forEach(stage => {
@@ -183,6 +198,11 @@
         const p = progress[stage.id] || {};
         if (!(p.clears > 0)) cleared = false;
         if ((p.stars || 0) < 3) allStars = false;
+        if (!stage.noStars && stage.mode !== 'shortcut') {
+          anyRanked = true;
+          topRank = Math.max(topRank, p.rank || 0);
+          if ((p.rank || 0) < 3) allRanks = false;
+        }
       });
       courseCleared[course.id] = cleared;
     });
@@ -197,6 +217,8 @@
       bestKps: best ? best.kps : 0,
       courseCleared,
       allStars: anyStage && allStars,
+      topRank,
+      allRanks: anyRanked && allRanks,
       challengeBest
     };
   }

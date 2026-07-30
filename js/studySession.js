@@ -332,6 +332,9 @@
       eligibleForBest: keys >= (T.Store ? T.Store.MIN_RECORD_KEYS : 20)
     };
     if (result.hintLevel) ext.hintLevel = result.hintLevel;
+    // そのさきの「だん」。ヒントを 消した ままの はやさで 上がるので、
+    // hintLevel と ならべて 見ると「見ないで 打てて いるか」が 分かります
+    if (c.rank != null) ext.rank = int(c.rank);
     if (isChallenge && stage.pool) ext.pool = stage.pool;
     if (retryItems > 0) {
       ext.retry = {
