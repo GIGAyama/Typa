@@ -38,7 +38,7 @@
    * アプリの ばんごう。**ここ 1か所だけ**に 書きます。
    * せってい画面の 表示にも、学習ログの appVersion にも これを つかいます。
    */
-  const APP_VERSION = '4.0.0';
+  const APP_VERSION = '4.1.0';
 
   let view = null;
   let installPrompt = null;
@@ -242,26 +242,44 @@
   function renderMenu() {
     const progress = T.Store.getProgress();
     const next = findNextStage(progress);
+    const phase = phaseOf(progress);
     const weak = T.Store.weakTargets();
     const due = T.Store.dueStages(2);
     const clearedStages = T.Lessons.COURSES
       .reduce((sum, c) => sum + c.stages.filter(s => (progress[s.id] || {}).clears > 0).length, 0);
+
+    // 見出しと 1行の 説明は、**いま 何が めあてか**で かえます。
+    // 同じ「いま やって いる ところ」でも、ふくしゅうの 日が きて いる ときと
+    // そのさき（ぜんぶ ★3）の ときでは、やる ことが まるで ちがいます
+    const HEADS = {
+      review: { head: 'きょうの ふくしゅう',
+        note: 'まえに できた ところです。わすれる 前に もう1かい。' },
+      resume: { head: 'つづきから', note: '' },
+      new: { head: 'いま やって いる ところ',
+        note: 'えらばなくても、下の「うつ」か スペースキーで ここから はじまります。' },
+      beyond: { head: 'そのさき', note: '' }
+    };
+    const head = HEADS[next ? next.reason : 'new'] || HEADS.new;
+    const beyondNote = next && next.reason === 'beyond'
+      ? beyondLine(progress[next.stage.id] || {})
+      : '';
 
     // 「つづきから」と「そろそろ ふくしゅう」を ひとまとめに します。
     // ひろい 画面では この かたまりと 行き先の ならびを **よこに** ならべ、
     // たての ながさを はんぶんに します（style.css の .menu-grid）
     const lead = `
       ${next ? card(`
-        <p class="lead">${icon('play')} ${next.resume ? 'つづきから' : 'いま やって いる ところ'}</p>
+        <p class="lead">${icon(next.reason === 'beyond' ? 'bolt' : 'play')} ${head.head}</p>
         <button class="btn btn-primary btn-big" data-go-stage="${esc(next.course.id)}:${esc(next.stage.id)}">
           <span class="btn-sub">${esc(next.course.short)}</span>
           <span class="btn-main">${esc(next.stage.title)}</span>
           ${icon('next')}
         </button>
-        <p class="muted start-note">${next.resume
+        <p class="muted start-note">${next.reason === 'resume'
           ? `あと ${next.left}もん 打つと ひとまわりです。`
-          : 'えらばなくても、下の「うつ」か スペースキーで ここから はじまります。'}</p>`, 'card-next') : ''}
-      ${reviewCard(due)}`.trim();
+          : (beyondNote || head.note)}</p>`, 'card-next') : ''}
+      ${reviewCard(next && next.reason === 'review' ? due.slice(1) : due)}
+      ${phase.name === 'beyond' ? beyondCard(progress) : ''}`.trim();
 
     view.innerHTML = `
       ${pageTitle('えらぶ', 'べつの ことを やりたい ときは ここから。スペースキーで すぐ 打てます')}
@@ -316,6 +334,43 @@
     bindGoButtons();
   }
 
+  /** そのさきで、いま ねらって いる だんの じょうけんを 1行に します */
+  function beyondLine(p) {
+    const next = T.Store.nextRank((p || {}).rank || 0);
+    if (!next) return 'この ステージは 3だん。ほかの ステージで だんを あげよう。';
+    return `${next.rank}だんは「${T.Store.HINT_STEPS[next.hint]}」で `
+         + `${next.kps.toFixed(1)} 打/びょう。ひとまわりを ★3つで。`;
+  }
+
+  /**
+   * そのさき（ぜんぶ ★3の あと）の すすみ。
+   *
+   * ★は もう ぜんぶ 3つ なので、★の 数を ならべても 何も 分かりません。
+   * ここからは **だん**（見ないで・はやく）が すすみぐあいです。
+   */
+  function beyondCard(progress) {
+    const list = allStages().filter(x => !x.stage.noStars && x.stage.mode !== 'shortcut');
+    const total = list.length;
+    const sum = [0, 0, 0, 0];
+    list.forEach(x => { sum[Math.max(0, Math.min(3, (progress[x.stage.id] || {}).rank || 0))]++; });
+    const done = total - sum[0];
+
+    return card(`
+      <p class="lead">${icon('bolt')} そのさき ― はやく、見ないで 打つ</p>
+      <p class="muted">★は ぜんぶ 3つに なりました。ここからは
+      <b>キーボードを 見ないで</b>、<b>はやく</b> 打てるように していきます。
+      ヒントを 1つ 消した ままで はやさの めやすに とどくと「だん」が 上がります。</p>
+      <span class="row-bar"><span data-grow="${Math.round(done / Math.max(1, total) * 100)}"></span></span>
+      <p class="rank-sum">${[1, 2, 3].map(n =>
+        `<span class="rank-chip">${n}だん <b>${sum[n]}</b></span>`).join('')}
+        <span class="rank-chip muted">まだ <b>${sum[0]}</b></span>
+        <span class="muted">／ ぜんぶで ${total} ステージ</span></p>
+      <ul class="rank-goals">
+        ${T.Store.SPEED_RANKS.map(s =>
+          `<li><b>${s.rank}だん</b> … ${esc(T.Store.HINT_STEPS[s.hint])} ＋ ${s.kps.toFixed(1)} 打/びょう</li>`).join('')}
+      </ul>`, 'card-beyond');
+  }
+
   /**
    * きょう ふくしゅうすると よい ステージ。
    *
@@ -361,43 +416,123 @@
     return 'ずっと まえ';
   }
 
+  /** ぜんぶの ステージを 1本の ならびに します（コースの じゅんばんの まま） */
+  function allStages() {
+    const out = [];
+    T.Lessons.COURSES.forEach(course => {
+      course.stages.forEach(stage => out.push({ course, stage }));
+    });
+    return out;
+  }
+
   /**
-   * ホームの 大きい ボタンが 行く さき。
+   * いまの 時期。アプリの めあては、この 3つで はっきり かわります。
    *
-   * ■ 「とちゅうの ステージ」を いちばん 先に します
-   * まえに 3もんだけ 打って やめた ステージが あるなら、そこへ もどるのが
-   * いちばん すじが とおって います。ならびの さいしょから やり直させると、
-   * 「とちゅうまで やった」ことが なかった ことに なって しまいます。
+   *   'learn'  … まだ ★3で ない ステージが ある … めあては **正かくさ**
+   *   'beyond' … ぜんぶ ★3       … めあては **はやさと、見ないで 打つこと**
    *
-   * @returns {{course, stage, resume: boolean, left: number}}
+   * ふくしゅうは 時期では ありません。どちらの 時期にも わりこみます。
+   */
+  function phaseOf(progress) {
+    const all = allStages();
+    const done = all.filter(x => ((progress[x.stage.id] || {}).stars || 0) >= 3);
+    return {
+      name: done.length === all.length && all.length > 0 ? 'beyond' : 'learn',
+      starred: done.length,
+      total: all.length
+    };
+  }
+
+  /**
+   * ホームの 大きい ボタン（と スペースキー）が 行く さき。
+   *
+   * ■ じゅんばん
+   *   1. きょうの ふくしゅう … **日づけで きまる もの が いちばん 先**
+   *   2. とちゅうの ステージ … 打ったぶんの つづき
+   *   3. まだ ★3で ない いちばん さいしょの ステージ
+   *   4. ぜんぶ ★3 … そのさき（いちばん だんの ひくい ステージ）
+   *
+   * ふくしゅうを 先に するのは、**ふくしゅうだけが「きょう やらないと
+   * 効きめが おちる」もの** だからです。とちゅうの ひとまわりは あした
+   * つづきを 打っても まったく 同じ 結果に なります（打ったぶんは
+   * 消えません）。時間の きまって いる ほうを 先に 出します。
+   *
+   * @returns {{course, stage, resume, left, reason, goalKps, rank}}
+   *   reason … 'review' / 'resume' / 'new' / 'beyond'
    */
   function findNextStage(progress) {
-    let resume = null;
-    T.Lessons.COURSES.forEach(course => {
-      course.stages.forEach(stage => {
-        const p = progress[stage.id];
-        if (!p || !(p.lapItems > 0)) return;
-        // 同じ ぐらい とちゅうの ものが あれば、さいきん さわった ほうへ
-        if (!resume || String(p.lastAt || '') > String(resume.p.lastAt || '')) {
-          resume = { course, stage, p };
-        }
-      });
-    });
-    if (resume) {
-      const need = Math.max(1, T.Lessons.stageCount(resume.stage));
-      return {
-        course: resume.course, stage: resume.stage, resume: true,
-        left: Math.max(1, need - Math.min(need - 1, resume.p.lapItems))
-      };
-    }
-    for (const course of T.Lessons.COURSES) {
-      for (const stage of course.stages) {
-        const p = progress[stage.id];
-        if (!p || p.stars < 3) return { course, stage, resume: false, left: 0 };
+    const stageInfo = id => {
+      const found = T.Lessons.findStageById(id);
+      return found || null;
+    };
+    const leftOf = stage => {
+      const need = Math.max(1, T.Lessons.stageCount(stage));
+      const p = progress[stage.id] || {};
+      return Math.max(1, need - Math.min(need - 1, p.lapItems || 0));
+    };
+
+    // 1. きょうの ふくしゅう（日が すぎて いる ものから）
+    const due = T.Store.dueStages(1);
+    if (due.length) {
+      const f = stageInfo(due[0].stageId);
+      if (f) {
+        const p = progress[f.stage.id] || {};
+        return {
+          course: f.course, stage: f.stage, reason: 'review',
+          resume: (p.lapItems || 0) > 0, left: leftOf(f.stage),
+          goalKps: goalKpsOf(p), rank: p.rank || 0
+        };
       }
     }
-    const course = T.Lessons.COURSES[0];
-    return { course, stage: course.stages[0], resume: false, left: 0 };
+
+    // 2. とちゅうの ステージ（同じ ぐらいなら さいきん さわった ほう）
+    let resume = null;
+    allStages().forEach(({ course, stage }) => {
+      const p = progress[stage.id];
+      if (!p || !(p.lapItems > 0)) return;
+      if (!resume || String(p.lastAt || '') > String(resume.p.lastAt || '')) {
+        resume = { course, stage, p };
+      }
+    });
+    if (resume) {
+      return {
+        course: resume.course, stage: resume.stage, reason: 'resume',
+        resume: true, left: leftOf(resume.stage),
+        goalKps: goalKpsOf(resume.p), rank: resume.p.rank || 0
+      };
+    }
+
+    // 3. まだ ★3で ない いちばん さいしょの ステージ
+    const list = allStages();
+    for (const { course, stage } of list) {
+      const p = progress[stage.id];
+      if (!p || (p.stars || 0) < 3) {
+        return { course, stage, reason: 'new', resume: false, left: 0, goalKps: 0, rank: 0 };
+      }
+    }
+
+    // 4. そのさき … いちばん だんの ひくい ステージ。同じなら
+    //    ながく さわって いない ほうへ（ぜんぶを ひとまわり させます）
+    const beyond = list
+      .filter(x => !x.stage.noStars && x.stage.mode !== 'shortcut')
+      .slice()
+      .sort((a, b) => {
+        const pa = progress[a.stage.id] || {}, pb = progress[b.stage.id] || {};
+        const ra = pa.rank || 0, rb = pb.rank || 0;
+        if (ra !== rb) return ra - rb;
+        return String(pa.lastAt || '') < String(pb.lastAt || '') ? -1 : 1;
+      })[0] || list[0];
+    const bp = progress[beyond.stage.id] || {};
+    return {
+      course: beyond.course, stage: beyond.stage, reason: 'beyond',
+      resume: false, left: 0, goalKps: goalKpsOf(bp), rank: bp.rank || 0
+    };
+  }
+
+  /** つぎの だんの はやさの めやす（もう 3だんなら 0 ＝ 出しません） */
+  function goalKpsOf(p) {
+    const next = T.Store.nextRank((p || {}).rank || 0);
+    return next ? next.kps : 0;
   }
 
   // ------------------------------------------------------------------
@@ -487,6 +622,7 @@
                 <span class="stage-lap-text">ひとまわりまで あと ${need - lap}もん</span></span>` : ''}
               ${p.clears > 0 ? `<span class="stage-best">さいこう ${p.bestKps.toFixed(1)} 打/びょう ・ 正かくさ ${Math.round(p.bestAccuracy)}%</span>` : ''}
             </span>
+            ${(p.rank || 0) > 0 ? `<span class="stage-rank">${icon('bolt')}${p.rank}だん</span>` : ''}
             ${stars(p.stars)}
             <span class="row-arrow">${icon('next')}</span>
           </button>`;
@@ -593,11 +729,22 @@
     }
     if (!found) { T.Nav.selectTab('menu'); return; }
 
+    // はやさの めやすは **そのさき（ぜんぶ ★3）に なってから** だけ 出します。
+    // まだ ★を あつめて いる 子に 速さの 目標を 見せると、
+    // 正かくさより 速さを おいかけます。この アプリの 順ばんは その 逆です
+    const progressNow = T.Store.getProgress();
+    const goalKps = (!special && phaseOf(progressNow).name === 'beyond' && !found.stage.noStars
+      && found.stage.mode !== 'shortcut')
+      ? goalKpsOf(progressNow[found.stage.id]) : 0;
+
     const opt = {
       course: found.course, stage: found.stage,
       source: params.source || 'course', special, mount: view,
+      goalKps,
       // その回 だけの おためし。せっていは 書きかえません
       blind: !!params.blind,
+      // その回 だけ ヒントを 下げる（そのさきの「だん」を ねらう とき）
+      assistLevel: typeof params.assistLevel === 'number' ? params.assistLevel : undefined,
       // 画面の「やめる」ボタン。「もどる」と まったく 同じ 動きに します
       onStop: () => T.Nav.back('stop'),
       // ステージ名を おしたら、その コースの ステージ一覧へ。
@@ -636,7 +783,8 @@
       courseId: found.course.id,
       stageId: found.stage.id,
       source: params.source || 'course',
-      blind: !!params.blind
+      blind: !!params.blind,
+      assistLevel: params.assistLevel
     };
   }
 
@@ -718,9 +866,14 @@
     } else if (!stage.noStars) {
       const applied = T.Store.applyResult(stage.id, {
         doneItems: result.doneItems != null ? result.doneItems : result.done,
+        // ショートカットは 打鍵を 数えないので、できた 課題の 数で ★を つけます
+        correctItems: (result.items || []).filter(it => it && it.ok && !it.retry).length,
         lapNeed: result.lapNeed || result.count || 1,
         correctKeys: result.correctKeys,
         totalKeys: result.totalKeys,
+        // だん（そのさき）は「ヒントを 消した じょうたいで 出した はやさ」で
+        // 上がります。その回に ほんとうに 見えて いた ものを わたします
+        hintStrength: result.hintStrength,
         kps: result.kps, accuracy: result.accuracy, finishedAt: result.finishedAt
       });
       meta.firstClear = applied.firstClear;
@@ -728,8 +881,13 @@
       meta.newStars = applied.newStars;
       meta.prevBestKps = applied.prevBestKps;
       meta.laps = applied.laps;
+      meta.lapStars = applied.lapStars;
+      meta.lapAccuracy = applied.lapAccuracy;
       meta.lapItems = applied.lapItems;
       meta.lapNeed = applied.lapNeed;
+      meta.lapRank = applied.lapRank;
+      meta.newRank = applied.newRank;
+      meta.rank = applied.best.rank || 0;
     }
 
     T.Store.addHistory({
@@ -746,8 +904,9 @@
       elapsedMs: Math.round(result.elapsedMs),
       combo: result.combo || 0,
       // ★は「ひとまわり できた 回」だけに つけます。3もん 打って やめた 回に
-      // ★3が ならぶと、きろくの 一覧が 何も あらわさなく なります
-      stars: stage.noStars || !meta.laps ? 0 : T.Store.starsOf(result),
+      // ★3が ならぶと、きろくの 一覧が 何も あらわさなく なります。
+      // 数は ステージに ついた ★（ひとまわり ぜんぶで 見た もの）と そろえます
+      stars: stage.noStars || !meta.laps ? 0 : (meta.lapStars || 0),
       missByKey: result.missByKey,
       missByFinger: result.missByFinger,
       // おぼえぐあいの もと。ここに 名前を 書いた ものだけが のこります。
@@ -762,7 +921,11 @@
     // 同じ ドメインの ほかの 学習アプリと 同じ キーに ならべて のこします。
     // ここから 外へ おくる しくみは ありません（送信は べつの ページの しごと）。
     // 保存に しくじっても null が 返るだけで、れんしゅうは 止まりません
-    if (T.Study) T.Study.save(result, { appVersion: APP_VERSION });
+    if (T.Study) {
+      T.Study.save(result, {
+        appVersion: APP_VERSION, lapStars: meta.lapStars, rank: meta.rank
+      });
+    }
 
     const awarded = T.Awards.applyResult(result, meta);
     return { meta, awarded };
@@ -783,7 +946,11 @@
     const isChallenge = r.stage.mode === 'challenge';
     const noStars = !!r.stage.noStars;
     const lapped = (meta.laps || 0) > 0;      // この回で ひとまわり できたか
-    const n = T.Store.starsOf(r);
+    // ★は **ステージに ついた もの と 同じ もの** を 出します。ここで その回の
+    // 正かくさから 出しなおすと、前の つづきから ひとまわりした 子には
+    // 「けっか画面は ★3、ステージ一覧は ★2」が 起きて、
+    // ★3が いつまでも とれない ように 見えます
+    const n = lapped && meta.lapStars != null ? meta.lapStars : T.Store.starsOf(r);
     const progress = T.Store.getProgress()[r.stage.id] || {};
     const okCount = r.items.filter(i => i.ok).length;
     const isBest = !!(meta.newBestKps || meta.isBestScore);
@@ -820,6 +987,7 @@
       `, 'card-result')}
 
       ${lapCard(r, meta)}
+      ${rankCard(r, meta)}
 
       ${xpCard(awarded)}
       ${badgeCard(awarded)}
@@ -1058,12 +1226,21 @@
       }
     }
 
-    // 4. よく できて いて、まだ ヒントが 強い とき … 手もとを 見ない 練習へ
+    const progress = T.Store.getProgress();
+    const stars = (progress[r.stage.id] || {}).stars || 0;
+    const typing = !r.stage.noStars && r.stage.mode !== 'shortcut' && r.stage.mode !== 'challenge';
+
+    // 4. そのさき … ★3を ぜんぶ とった 子には、つぎの「だん」を 出します。
+    //    ここから さきは「正かくさ」では なく「見ないで・はやく」が めあてです
+    if (typing && phaseOf(progress).name === 'beyond') {
+      const beyond = beyondStep(r, progress);
+      if (beyond) return beyond;
+    }
+
+    // 5. よく できて いて、まだ ヒントが 強い とき … 手もとを 見ない 練習へ
     const s = T.Store.getSettings();
     const level = typeof s.assist === 'number' ? s.assist : (s.keyboard === false ? 3 : 0);
-    const stars = (T.Store.getProgress()[r.stage.id] || {}).stars || 0;
-    if (!r.stage.noStars && stars >= 3 && level < 3 && s.assist !== 'auto' &&
-        (r.accuracy || 0) >= 98 && r.stage.mode !== 'shortcut') {
+    if (typing && stars >= 3 && level < 3 && s.assist !== 'auto' && T.Store.starsOf(r) >= 3) {
       return {
         why: 'ばっちり 打てて います。つぎは ヒントを へらして、手もとを 見ないで やってみよう。',
         sub: r.course.short, title: 'めかくしで やってみる',
@@ -1071,7 +1248,7 @@
       };
     }
 
-    // 5. つぎの ステージ
+    // 6. つぎの ステージ
     const course = T.Lessons.findCourse(r.course.id);
     if (course && !r.stage.noStars) {
       const i = course.stages.findIndex(st => st.id === r.stage.id);
@@ -1083,15 +1260,87 @@
           params: { courseId: course.id, stageId: next.id, source: 'course' }
         };
       }
-      if (next || i >= 0) {
+      // コースの さいごの ステージ。まだ ★3で ないなら もう1かい、
+      // ★3なら「もう1かい ★3を めざして」は うそに なるので 言いません
+      if (i >= 0 && stars < 3) {
         return {
           why: '★3つを めざして、もう1かい ゆっくり ていねいに。',
           sub: r.course.short, title: r.stage.title,
           params: againParams(r)
         };
       }
+      if (i >= 0) {
+        const first = firstStageWithout3(progress);
+        if (first) {
+          return {
+            why: 'この コースは ここまでです。まだ ★3つに なって いない ところへ。',
+            sub: first.course.short, title: first.stage.title,
+            params: { courseId: first.course.id, stageId: first.stage.id, source: 'course' }
+          };
+        }
+      }
     }
     return null;
+  }
+
+  /** まだ ★3で ない いちばん さいしょの ステージ（なければ null） */
+  function firstStageWithout3(progress) {
+    return allStages().filter(x => ((progress[x.stage.id] || {}).stars || 0) < 3)[0] || null;
+  }
+
+  /**
+   * そのさき（ぜんぶ ★3）の「つぎは これを やろう」。
+   *
+   * ここでの めあては 2つ だけ です。
+   *   ・ヒントを 1つ 消す（見ないで 打つ）
+   *   ・はやさの めやすに とどく
+   *
+   * 足りない ほうを **1つだけ** 出します。両方 いっぺんに 言うと、
+   * どちらから 手を つければ よいか 分からなく なります。
+   * ヒントを 先に するのは、**見ないで 打てるように なると はやさは
+   * あとから ついて くる** のに、その 逆は おきないためです。
+   */
+  function beyondStep(r, progress) {
+    const p = progress[r.stage.id] || {};
+    const next = T.Store.nextRank(p.rank || 0);
+    if (!next) {
+      // この ステージは 3だん。まだ だんの ひくい ステージへ
+      const low = findNextStage(progress);
+      if (low && low.stage.id !== r.stage.id) {
+        return {
+          why: 'この ステージは 3だん。つぎの ステージで だんを あげよう。',
+          sub: low.course.short, title: low.stage.title,
+          params: { courseId: low.course.id, stageId: low.stage.id, source: 'course' }
+        };
+      }
+      return {
+        why: 'ぜんぶの ステージが 3だん。つぎは 時間ぎめの チャレンジで ためそう。',
+        sub: 'チャレンジ', title: '60びょう ／ 文',
+        params: { special: 'challenge', pool: 'sentence', seconds: 60 }
+      };
+    }
+
+    const hintNow = Math.max(0, Math.round(r.hintStrength || 0));
+    if (hintNow < next.hint) {
+      return {
+        why: `${next.rank}だんは「${T.Store.HINT_STEPS[next.hint]}」で 打てたら です。`
+           + ' この回 だけ ヒントを へらして やってみよう。',
+        sub: r.course.short, title: `${T.Store.HINT_STEPS[next.hint]}で やってみる`,
+        params: {
+          courseId: r.course.id, stageId: r.stage.id, source: 'review',
+          assistLevel: next.hint
+        }
+      };
+    }
+    return {
+      why: `${T.Store.HINT_STEPS[next.hint]}で 打てて います。`
+         + ` あとは はやさ ${next.kps.toFixed(1)} 打/びょう で ${next.rank}だんです。`,
+      sub: r.course.short, title: 'もう1かい、リズムよく',
+      params: {
+        courseId: r.course.id, stageId: r.stage.id, source: 'review',
+        assistLevel: next.hint
+      }
+    };
   }
 
   /** 「もう1かい」で 同じ ことを やりなおす ための パラメータ */
@@ -1129,7 +1378,82 @@
       </div>
       <p class="lap-note">${left === 0
         ? 'ひとまわり できました。'
-        : `ひとまわりまで あと <b>${left}もん</b>（ぜんぶで ${need}もん）`}</p>`, 'card-lap');
+        : `ひとまわりまで あと <b>${left}もん</b>（ぜんぶで ${need}もん）`}</p>
+      ${lapAccuracyNote(r, meta)}`, 'card-lap');
+  }
+
+  /**
+   * ★は「その回」では なく「ひとまわり ぜんぶ」の 正かくさで つきます。
+   * とちゅうから つづけた 子は、上に 出て いる その回の 正かくさと
+   * ★が あわない ように 見えます。**そこを だまって いると、
+   * ★が 気まぐれに 見えます**。ちがう ときだけ、1行で つたえます。
+   */
+  function lapAccuracyNote(r, meta) {
+    const lap = meta.lapAccuracy;
+    if (typeof lap !== 'number' || r.stage.mode === 'shortcut') return '';
+    if (Math.abs(lap - (r.accuracy || 0)) < 1) return '';
+    const shown = Math.round(lap);
+    return meta.laps > 0
+      ? `<p class="lap-note muted">★は この ひとまわり ぜんぶ（前の つづきも 入れて）の
+         正かくさ <b>${shown}%</b> で つきました。</p>`
+      : `<p class="lap-note muted">いまの ひとまわりは、ここまで あわせて
+         正かくさ <b>${shown}%</b> です。</p>`;
+  }
+
+  /**
+   * そのさきの「だん」。★3を ぜんぶ とった 子だけが 見る カードです。
+   *
+   * ■ なぜ ★の つぎが いる か
+   * ★は 正かくさで つきます。ぜんぶ ★3に なった 子は、どの キーを
+   * どの 指で 打つかを **もう 知って います**。そこで ★を ながめ つづけても
+   * 何も おきません。のこって いるのは「見ないで 打つ」と「はやく 打つ」の
+   * 2つ だけ なので、それを 1本の はしごに して ここに 出します。
+   *
+   * ■ はやさ だけの はしごに しない
+   * だんは かならず **ヒントを 1つ 消した じょうたい**で とった はやさで
+   * 決まります。画面の キーボードを 見たまま 速い 子が いちばん 上に
+   * 立つ はしごには しません。
+   */
+  function rankCard(r, meta) {
+    if (r.stage.noStars || r.stage.mode === 'challenge' || r.stage.mode === 'shortcut') return '';
+    const progress = T.Store.getProgress();
+    const p = progress[r.stage.id] || {};
+    if ((p.stars || 0) < 3) return '';           // まずは ★3が さき
+    // **ぜんぶ ★3に なるまでは 出しません。** 1つ ★3に した だけの 子に
+    // はやさの はしごを 見せると、まだ ★を あつめて いる ほかの ステージでも
+    // 正かくさより 速さを おいかけるように なります
+    if (phaseOf(progress).name !== 'beyond') return '';
+
+    const rank = p.rank || 0;
+    const next = T.Store.nextRank(rank);
+    const got = meta.newRank > 0;
+    const hintNow = T.Store.HINT_STEPS[Math.max(0, Math.round(r.hintStrength || 0))] || '';
+
+    // つぎの だんに とどかなかった とき、**足りなかったのは どちらか**を
+    // はっきり 出します。「もうすこし」だけでは つぎに 何を すれば よいか
+    // 分かりません
+    let todo = '';
+    if (next) {
+      const fastEnough = (r.kps || 0) >= next.kps;
+      const quietEnough = (r.hintStrength || 0) >= next.hint;
+      const parts = [];
+      if (!quietEnough) parts.push(`ヒントを <b>${esc(T.Store.HINT_STEPS[next.hint])}</b> まで へらす`);
+      if (!fastEnough) parts.push(`はやさ <b>${next.kps.toFixed(1)} 打/びょう</b>`);
+      if ((meta.lapStars || 0) < 3 && meta.laps > 0) parts.push('ひとまわりを <b>★3つ</b> で');
+      todo = parts.length
+        ? `<p class="rank-todo">${rank + 1}だんまで あと … ${parts.join(' ／ ')}</p>`
+        : '<p class="rank-todo">つぎの ひとまわりで とどきます。</p>';
+    }
+
+    return card(`
+      <p class="lead">${icon('bolt')} ${esc(r.stage.title)}の だん</p>
+      ${got
+        ? `<p class="rank-up">${icon('trophy')} <b>${rank}だん</b> に なりました！</p>`
+        : ''}
+      <p class="rank-now">${rank > 0 ? `いま <b>${rank}だん</b>` : 'まだ <b>だんなし</b>'}
+        <span class="muted">／ この回は「${esc(hintNow)}」で ${(r.kps || 0).toFixed(1)} 打/びょう</span></p>
+      ${next ? todo : '<p class="rank-todo">3だん。この ステージは ここまでです。ほかの ステージへ どうぞ。</p>'}`,
+    'card-rank');
   }
 
   function praise(r, meta, n) {

@@ -175,12 +175,18 @@
           bestKps: num(p.bestKps),
           bestAccuracy: num(p.bestAccuracy),
           stars: Math.max(0, Math.min(3, num(p.stars))),
+          // そのさきの「だん」。★と 同じく 0〜3 に おさえます
+          rank: Math.max(0, Math.min(3, num(p.rank))),
           lastAt: typeof p.lastAt === 'string' ? p.lastAt : null,
           // ひとまわりの とちゅう。ここを 落とすと、うつした とたんに
           // 「あと 3もんで ひとまわり」が 0 に もどって しまいます
           lapItems: num(p.lapItems),
           lapCorrect: num(p.lapCorrect),
-          lapTotal: num(p.lapTotal)
+          lapTotal: num(p.lapTotal),
+          // ふくしゅうの はこと 日づけ。ここを 落とすと、うつした 端末で
+          // 30日 かけて のばした 間かくが 1日に もどります
+          box: Math.max(0, Math.min(T.Store.REVIEW_DAYS.length, num(p.box))),
+          due: typeof p.due === 'string' ? p.due : null
         };
       });
       clean[K.progress] = out;

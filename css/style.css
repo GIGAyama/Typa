@@ -384,6 +384,13 @@ body[data-screen="play"] .play > *:not(.play-lower) {
 .meter b { font-size: 1.15rem; }
 .meter-unit { font-size: .74rem; color: var(--muted); }
 
+/* そのさき（だん）を ねらって いる ときだけ 出る はやさの めやす。
+   とどいた しゅんかんに 色が つきます — 打ちながら 分かる ように */
+.meter-goal { font-size: .74rem; color: var(--muted); }
+.meter-goal::before { content: '／ '; }
+.meter.is-reached { border-color: var(--ok); background: var(--ok-soft); }
+.meter.is-reached .meter-goal { color: var(--ok); font-weight: 700; }
+
 .ime-warn {
   display: flex; align-items: center; gap: 8px;
   background: var(--ng-soft); color: var(--ng); border-radius: var(--radius-s);
@@ -783,6 +790,26 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
 }
 .lap-note { margin: 6px 0 0; font-size: .86rem; color: var(--muted); }
 .card-lap .lap-bar { margin-top: 4px; }
+
+/* ------------------------------------------------------------------
+   そのさき（だん）― ぜんぶ ★3に なった あとの はしご
+   ------------------------------------------------------------------ */
+.rank-now { margin: 4px 0 0; font-size: .95rem; }
+.rank-todo { margin: 6px 0 0; font-size: .88rem; color: var(--muted); }
+.rank-up {
+  margin: 0 0 6px; font-weight: 700; color: var(--ok);
+  display: flex; align-items: center; gap: 6px;
+}
+.rank-sum { margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; font-size: .88rem; }
+.rank-chip { display: inline-flex; gap: 4px; align-items: baseline; }
+.rank-goals { margin: 10px 0 0; padding-left: 1.1em; font-size: .86rem; color: var(--muted); }
+.rank-goals li { margin-top: 2px; }
+.stage-rank {
+  flex: none; display: inline-flex; align-items: center; gap: 2px;
+  font-size: .78rem; font-weight: 700; color: var(--c-amber);
+  white-space: nowrap;
+}
+.stage-rank .ico { width: 16px; height: 16px; }
 
 /* ステージ一覧の 中の すすみ。ならびを くずさない よう ひかえめに します */
 .stage-lap { display: block; margin-top: 6px; }

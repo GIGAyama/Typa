@@ -73,6 +73,8 @@
     // ひとまわり … lapNeed もん 打つと 1しゅう。lapPos は 前の れんしゅうから
     // つづいて いる ぶんも 入って います（0 から はじまるとは かぎりません）
     lapNeed: 1, lapPos: 0, lapStart: 0, doneItems: 0, laps: 0,
+    // そのさきの「だん」を ねらって いる ときの はやさの めやす（0 = 出さない）
+    goalKps: 0,
     matcher: null,
     startedAt: null, clockStartedAt: null, startTime: 0, lastKeyTime: 0,
     idleMs: 0, pausedAt: 0, pausedMs: 0, leftAt: 0,
@@ -148,7 +150,7 @@
               <div class="play-finger" id="play-finger" aria-live="polite"></div>
 
               <div class="play-meter">
-                <div class="meter"><span class="meter-label">はやさ</span><b id="m-kps">0.0</b><span class="meter-unit">打/びょう</span></div>
+                <div class="meter" id="m-kps-box"><span class="meter-label">はやさ</span><b id="m-kps">0.0</b><span class="meter-unit">打/びょう</span><span class="meter-goal" id="m-kps-goal" hidden></span></div>
                 <div class="meter"><span class="meter-label">正かくさ</span><b id="m-acc">100</b><span class="meter-unit">%</span></div>
                 <div class="meter"><span class="meter-label">ミス</span><b id="m-miss">0</b><span class="meter-unit">かい</span></div>
                 <div class="meter meter-combo" id="m-combo-box"><span class="meter-label">れんぞく</span><b id="m-combo">0</b><span class="meter-unit">だ</span></div>
@@ -274,7 +276,12 @@
     // ヒントの つよさは ここで 1回だけ 決めます。あとは state.view だけを
     // 見るので、せっていの スイッチと 言うことが 食いちがう ことが ありません。
     // 1回の 中で 見え方が かわると 子どもが まようので、とちゅうでは かえません
-    state.view = T.Store.resolveAssist(settings, {
+    // 「ヒントを 1つ へらして やってみる」… **その回 だけ** の おためしで、
+    // せっていは 書きかえません（README「自動では 下げません」）
+    const viewSettings = typeof p.assistLevel === 'number'
+      ? Object.assign({}, settings, { assist: p.assistLevel })
+      : settings;
+    state.view = T.Store.resolveAssist(viewSettings, {
       stageMastery: T.Mastery.stageMastery(T.Store.keySummary().byKey, p.stage),
       everThreeStars: ((T.Store.getProgress()[p.stage.id] || {}).stars || 0) >= 3,
       blind: !!p.blind || !!p.stage.blind
@@ -299,6 +306,16 @@
     else { const visual = document.querySelector('.play-visual'); if (visual) visual.hidden = true; }
     if (state.showBuddy) T.Buddy.render($('play-buddy'), { job: settings.buddyJob });
     else { const side = $('play-side'); if (side) side.hidden = true; }
+
+    // そのさき（だん）を ねらって いる ときだけ、はやさの めやすを
+    // メーターの 下に 出します。ふだんは 出しません — まだ ★を あつめて
+    // いる 子に 速さの 目標を 見せると、正かくさより 速さを おいかけます
+    state.goalKps = p.goalKps || 0;
+    const goalEl = $('m-kps-goal');
+    if (goalEl && state.goalKps > 0) {
+      goalEl.textContent = `めやす ${state.goalKps.toFixed(1)}`;
+      goalEl.hidden = false;
+    }
 
     $('play-skip-btn').addEventListener('click', skipItem);
     $('play-stop-btn').addEventListener('click', () => { if (state.onStop) state.onStop(); });
@@ -592,6 +609,10 @@
   function renderMeters() {
     const stats = liveStats();
     $('m-kps').textContent = stats.kps.toFixed(1);
+    if (state.goalKps > 0) {
+      const box = $('m-kps-box');
+      if (box) box.classList.toggle('is-reached', stats.kps >= state.goalKps);
+    }
     $('m-acc').textContent = String(Math.round(stats.accuracy));
     $('m-miss').textContent = String(state.missKeys);
     $('m-combo').textContent = String(state.combo);
@@ -1133,6 +1154,9 @@
       // ヒントの つよさ。強い ヒントの まま 高い 正答率なのか、
       // ヒントを 消しても たもてて いるのかで、身に ついた ぐあいが ちがいます
       hintLevel: hintLevelName(state.view),
+      // だん（そのさき）は「ヒントを どれだけ 消した じょうたいで 出した
+      // はやさか」で 決まります。名前では くらべられないので 数でも 返します
+      hintStrength: T.Store.hintStrengthOf(state.view),
       lat: state.lat,
       conf: state.conf,
       rule: state.rule,

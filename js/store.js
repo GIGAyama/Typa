@@ -238,6 +238,7 @@
    *   [stageId]: {
    *     clears,        ひとまわり できた 回数
    *     bestKps, bestAccuracy, stars, lastAt, box, due,
+   *     rank,          そのさきの「だん」（0〜3。ぜんぶ ★3の あとの はしご）
    *     lapItems,      いまの ひとまわりで すでに 打った お題の 数
    *     lapCorrect,    いまの ひとまわりで 正しく 打てた 数（★の もと）
    *     lapTotal       いまの ひとまわりで 打った 合計
@@ -262,7 +263,9 @@
    * （node から そのまま 呼べるように するためです。tools/check-progress.js）。
    *
    * @param {Object} cur   progress の 1つぶん。中身を 書きかえます
-   * @param {Object} delta { items, correct, total } この 回で 足す ぶん
+   * @param {Object} delta { items, correct, total, byItem } この 回で 足す ぶん。
+   *   byItem は「correct / total が 打鍵では なく **お題の 数**」の しるしです
+   *   （ショートカットは 打鍵を 数えません）
    * @param {number} lapNeed ステージの お題の 数（ひとまわりの ながさ）
    * @returns {number[]} この 回で できあがった ひとまわりの ★（0〜3）の 一覧
    */
@@ -277,10 +280,14 @@
     // その ときは **どの しゅうも 同じ 正かくさ** で 見ます。
     // しゅうごとに 0 に もどすと、2しゅう目が いつも ★0 に なって しまいます。
     const acc = cur.lapTotal > 0 ? (cur.lapCorrect / cur.lapTotal) * 100 : 0;
+    // お題の 数で 数えて いる ときは、打鍵むけの 下ささえを わたしません
+    const lapResult = delta.byItem
+      ? { accuracy: acc }
+      : { accuracy: acc, correctKeys: cur.lapCorrect, totalKeys: cur.lapTotal };
     const laps = [];
     let guard = 0;
     while (cur.lapItems >= need && guard++ < 200) {
-      laps.push(starsOf({ accuracy: acc }));
+      laps.push(starsOf(lapResult));
       cur.lapItems -= need;
     }
     // ひとまわり できたら、正かくさは そこから 数えなおします
@@ -357,24 +364,51 @@
    * ひとまわりの すすみに たまり、つぎの れんしゅうに つながります。
    *
    * @param {string} stageId
-   * @param {Object} result { doneItems, lapNeed, correctKeys, totalKeys, kps, accuracy, finishedAt }
-   * @returns {{best, laps, lapItems, lapNeed, firstClear, newBestKps, newStars, prevBestKps}}
+   * @param {Object} result { doneItems, correctItems, lapNeed, correctKeys, totalKeys, kps, accuracy, finishedAt }
+   * @returns {{best, laps, lapStars, lapAccuracy, lapItems, lapNeed, firstClear,
+   *            newBestKps, newStars, prevBestKps}}
    *   laps は この 回で できあがった ひとまわりの 数（0 の ことも あります）。
+   *   lapStars は その ひとまわりに ついた ★で、**けっか画面は これを 出します**
+   *   （その回 だけの 正かくさから 出しなおすと、前の つづきの ぶんが
+   *   入らず、画面の ★と ステージ一覧の ★が くいちがいます）。
    *   さいこう記録を こえたかどうかは、けっか画面の「新記録！」に つかいます。
    */
   function applyResult(stageId, result) {
     const all = getProgress();
     const cur = all[stageId] ||
       { clears: 0, bestKps: 0, bestAccuracy: 0, stars: 0, lastAt: null, lapItems: 0, lapCorrect: 0, lapTotal: 0 };
-    const before = { bestKps: cur.bestKps || 0, stars: cur.stars || 0, clears: cur.clears || 0 };
+    const before = {
+      bestKps: cur.bestKps || 0, stars: cur.stars || 0,
+      clears: cur.clears || 0, rank: cur.rank || 0
+    };
     const lapNeed = Math.max(1, Math.round(result.lapNeed || 1));
 
-    const laps = lapAdvance(cur, {
-      items: result.doneItems, correct: result.correctKeys, total: result.totalKeys
-    }, lapNeed);
+    // ショートカットは 打鍵を 数えません（totalKeys が 0）。そのまま 足すと
+    // ひとまわりの 正かくさが ずっと 0% の ままに なり、どんなに うまく
+    // できても ★が 1つも つきません。打鍵が ない ときは **できた 課題の 数**で
+    // 数えます
+    const doneItems = Math.max(0, Math.round(result.doneItems || 0));
+    const byItem = !((result.totalKeys || 0) > 0);
+    const correctItems = result.correctItems != null
+      ? Math.max(0, Math.min(doneItems, Math.round(result.correctItems)))
+      : Math.round(doneItems * Math.max(0, Math.min(100, result.accuracy || 0)) / 100);
 
+    const delta = byItem
+      ? { items: doneItems, correct: correctItems, total: doneItems, byItem: true }
+      : { items: doneItems, correct: result.correctKeys, total: result.totalKeys };
+
+    // ★を つけた ときの 正かくさ。ひとまわり できると lapCorrect / lapTotal は
+    // 0 に もどるので、けっか画面に 出す ぶんは 先に 出して おきます
+    const sumCorrect = Math.max(0, Math.round(cur.lapCorrect || 0)) + Math.max(0, Math.round(delta.correct || 0));
+    const sumTotal = Math.max(0, Math.round(cur.lapTotal || 0)) + Math.max(0, Math.round(delta.total || 0));
+    const lapAccuracy = sumTotal > 0 ? (sumCorrect / sumTotal) * 100 : 0;
+
+    const laps = lapAdvance(cur, delta, lapNeed);
+
+    let lapStars = null;
     if (laps.length > 0) {
       const best = laps.reduce((a, b) => Math.max(a, b), 0);
+      lapStars = best;
       cur.clears = before.clears + laps.length;
       cur.stars = Math.max(before.stars, best);
       scheduleReview(cur, best);
@@ -390,17 +424,31 @@
       cur.bestKps = Math.max(before.bestKps, result.kps || 0);
       cur.bestAccuracy = Math.max(cur.bestAccuracy || 0, result.accuracy || 0);
     }
+
+    // だん（そのさき）。★3を たもった ひとまわりの ときだけ 見ます。
+    // はやさは その回の もの なので、さいこう記録と 同じく
+    // **20打いじょう 打った 回**でしか 上がりません（3打の まぐれを
+    // 「3だん」に しない ため。みじかい ステージは 2しゅう すれば とどきます）
+    const lapRank = (laps.length > 0 && enough)
+      ? rankOf({ stars: lapStars, kps: result.kps, hintStrength: result.hintStrength })
+      : 0;
+    if (lapRank > 0) cur.rank = Math.max(before.rank, lapRank);
+
     cur.lastAt = result.finishedAt;
     all[stageId] = cur;
     write(KEYS.progress, all);
     return {
       best: cur,
       laps: laps.length,
+      lapStars,
+      lapAccuracy,
       lapItems: cur.lapItems,
       lapNeed,
       firstClear: before.clears === 0 && laps.length > 0,
       newBestKps: enough && before.clears > 0 && (result.kps || 0) > before.bestKps + 0.05,
       newStars: Math.max(0, (cur.stars || 0) - before.stars),
+      lapRank,
+      newRank: Math.max(0, (cur.rank || 0) - before.rank),
       prevBestKps: before.bestKps
     };
   }
@@ -417,12 +465,129 @@
     return { items, need, ratio: items / need };
   }
 
-  /** ★の 数（0〜3）。まちがいが 少ないほど 高くなります */
+  /**
+   * ★の きめかた。`accuracy` は 正かくさ（%）、`allow` は
+   * 「みじかい ひとまわりでも、これだけの ミスは ゆるす」数です。
+   *
+   * ■ わりざん だけでは、みじかい ステージほど きびしく なります
+   * ★は ひとまわり ぜんぶを 通して 見ます。ところが ひとまわりの ながさは
+   * ステージで まるで ちがい、「ホームポジション ①」は 32打、
+   * 「あ行」に いたっては 13打 しか ありません。
+   *
+   *   13打で 98% … 12.7打 まで しか まちがえられない → **ミス 0 かい**
+   *   32打で 98% … 31.3打 まで              → **ミス 0 かい**
+   *   208打で 98%（ながい 文）…              → ミス 4かい まで
+   *
+   * つまり わりざん だけで 見ると、**いちばん さいしょの、いちばん やさしい
+   * ステージが いちばん きびしい**（1文字でも まちがえたら ★3は なし）
+   * ことに なって いました。しかも ★3を とるまで つぎの ステージに
+   * すすまない ので、ホームポジション ①から ずっと 出られません。
+   *
+   * 「98%」は もともと「ほとんど ミスなし」を あらわす ための 線です。
+   * 32打の 2% は 0.64打 なので、切りすてて 0 に するのでは なく
+   * **1かいまでは ゆるす** ほうが、ことばの 意味に あって います。
+   * ながい ステージでは わりざんの ほうが 大きく なるので、
+   * この 下ささえが きいて くるのは みじかい ステージだけ です。
+   */
+  const STAR_RULES = [
+    { stars: 3, accuracy: 98, allow: 1 },
+    { stars: 2, accuracy: 92, allow: 2 },
+    { stars: 1, accuracy: 80, allow: 3 }
+  ];
+
+  /**
+   * ★の 数（0〜3）。まちがいが 少ないほど 高くなります。
+   *
+   * @param {Object} result { accuracy, correctKeys, totalKeys }
+   *   `totalKeys` が あれば「ミス 何かい まで」の 下ささえも つかいます。
+   *   ショートカットの ように 打鍵を 数えない ものは 正かくさ だけで 見ます
+   *   （課題 4つで「1つ とばしても ★3」に なっては 意味が ありません）。
+   */
   function starsOf(result) {
-    if (result.accuracy >= 98) return 3;
-    if (result.accuracy >= 92) return 2;
-    if (result.accuracy >= 80) return 1;
+    const acc = result.accuracy || 0;
+    const total = Math.max(0, Math.round(result.totalKeys || 0));
+    const correct = Math.max(0, Math.min(total, Math.round(result.correctKeys || 0)));
+    // 打鍵で 数えて いない ときは -1（下ささえを つかいません）
+    const miss = total > 0 ? total - correct : -1;
+    for (let i = 0; i < STAR_RULES.length; i++) {
+      const rule = STAR_RULES[i];
+      if (acc >= rule.accuracy) return rule.stars;
+      if (miss >= 0 && miss <= rule.allow) return rule.stars;
+    }
     return 0;
+  }
+
+  // ------------------------------------------------------------------
+  // そのさき（ぜんぶ ★3に なった あと）
+  // ------------------------------------------------------------------
+  //
+  // ★は「正かくさ」で つきます。ぜんぶの ステージが ★3に なった 子は
+  // **どの キーを どの 指で 打つかを もう 知って いる** ので、
+  // ★では それ いじょう 伸びが 見えません。のこって いるのは 2つ です。
+  //
+  //   ・キーボードを 見ないで 打つ（タッチタイピング）
+  //   ・はやく 打つ
+  //
+  // この 2つを **1本の はしご**に します。それが「だん」です。
+  //
+  //   1だん … ヒント「ゆびの 色だけ」いじょう ＋ 2.0 打/びょう
+  //   2だん … ヒント「ばしょだけ」いじょう   ＋ 3.0 打/びょう
+  //   3だん … ヒント「なにも 出ない」いじょう ＋ 4.0 打/びょう
+  //
+  // ■ なぜ はやさ だけで 決めないか
+  // はやさ だけの はしごに すると「画面の キーボードを 見たまま はやい 子」が
+  // いちばん 上に 立ちます。それは この アプリが 目ざして いる ところでは
+  // ありません。だんは **ヒントを 1つ 消した じょうたいで 出した はやさ**
+  // でしか 上がりません。
+  //
+  // ■ なぜ ★3が いる か
+  // だんは ひとまわりの ★が 3つの ときだけ 上がります。
+  // これが ないと「まちがえても はやく 打つほど よい」に なって しまい、
+  // ★を 正かくさで 決めて いる 意味が なくなります。
+  // 正かくさが 先、はやさは その 上、という 順ばんは かえません。
+  //
+  // ★と 同じで、だんも 下がりません。
+
+  /**
+   * ヒントの つよさ（0〜4）。**せっていの 数字では なく、その回に
+   * ほんとうに 見えて いた もの**から 数えます。スイッチを 手で さわった
+   * 子（assist が 'custom'）にも 同じ ものさしを あてる ためです。
+   */
+  const HINT_STEPS = ['ぜんぶ 見える', 'ゆびの 色だけ', 'ばしょだけ', 'なにも 出ない', 'めかくし'];
+
+  function hintStrengthOf(view) {
+    if (!view) return 0;
+    if (view.level === 'blind' || view.fingerWords === false) return 4;
+    if (!view.keyboard) return 3;
+    if (!view.fingerGuide && !view.keyLabels) return 2;
+    if (!view.romajiHint) return 1;
+    return 0;
+  }
+
+  const SPEED_RANKS = [
+    { rank: 1, kps: 2.0, hint: 1 },
+    { rank: 2, kps: 3.0, hint: 2 },
+    { rank: 3, kps: 4.0, hint: 3 }
+  ];
+
+  /** つぎに ねらう だん（もう 3だんなら null） */
+  function nextRank(rank) {
+    return SPEED_RANKS.filter(r => r.rank === Math.max(0, Math.round(rank || 0)) + 1)[0] || null;
+  }
+
+  /**
+   * この 回で とどいた だん（0〜3）。
+   * @param {Object} r { stars, kps, hintStrength }
+   */
+  function rankOf(r) {
+    if ((r.stars || 0) < 3) return 0;
+    const kps = r.kps || 0;
+    const hint = Math.max(0, Math.round(r.hintStrength || 0));
+    let got = 0;
+    SPEED_RANKS.forEach(step => {
+      if (kps >= step.kps && hint >= step.hint) got = Math.max(got, step.rank);
+    });
+    return got;
   }
 
   // ------------------------------------------------------------------
@@ -633,7 +798,8 @@
   global.Typa.Store = {
     KEYS, HISTORY_MAX, DEFAULT_SETTINGS, getSettings, setSetting,
     ASSIST_LEVELS, ASSIST_LABELS, resolveAssist, setAssist, autoAssist,
-    getProgress, applyResult, starsOf, lapAdvance, lapState, MIN_RECORD_KEYS,
+    getProgress, applyResult, starsOf, STAR_RULES, lapAdvance, lapState, MIN_RECORD_KEYS,
+    SPEED_RANKS, HINT_STEPS, hintStrengthOf, rankOf, nextRank,
     REVIEW_DAYS, scheduleReview, dueStages,
     HISTORY_DETAIL_MAX: DETAIL_MAX,
     getHistory, addHistory, todaySummary, bestOverall, countsAsTyping,

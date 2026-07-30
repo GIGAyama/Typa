@@ -301,7 +301,11 @@
     const totalKeys = int(result.totalKeys);
     const keys = totalKeys || correctKeys;
     const laps = int(result.laps);
-    const stars = (stage.noStars || !laps || !T.Store) ? 0 : T.Store.starsOf(result);
+    // ★は ステージに ついた もの（ひとまわり ぜんぶで 見た もの）を そのまま。
+    // ここで その回の 正かくさから 出しなおすと、先生の 集計と アプリの 画面が
+    // ちがう ★を さす ことに なります
+    const stars = (stage.noStars || !laps) ? 0
+      : (c.lapStars != null ? int(c.lapStars) : (T.Store ? T.Store.starsOf(result) : 0));
     const retryItems = (result.items || []).filter(it => it && it.retry).length;
 
     const ext = {
@@ -328,6 +332,9 @@
       eligibleForBest: keys >= (T.Store ? T.Store.MIN_RECORD_KEYS : 20)
     };
     if (result.hintLevel) ext.hintLevel = result.hintLevel;
+    // そのさきの「だん」。ヒントを 消した ままの はやさで 上がるので、
+    // hintLevel と ならべて 見ると「見ないで 打てて いるか」が 分かります
+    if (c.rank != null) ext.rank = int(c.rank);
     if (isChallenge && stage.pool) ext.pool = stage.pool;
     if (retryItems > 0) {
       ext.retry = {

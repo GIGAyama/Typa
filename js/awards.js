@@ -84,13 +84,15 @@
       add('さいごまで やった', 20);
     }
 
-    const acc = r.accuracy || 0;
     // 正かくさの ボーナスは、ある ていど 打った 回だけ です。
-    // 3打で 100% の 回に 40 を つけると、すぐ やめる ほうが とくに なります
+    // 3打で 100% の 回に 40 を つけると、すぐ やめる ほうが とくに なります。
+    // 線の ひきかたは ★と 同じ ものを つかいます（20打で 1ミスの 回が
+    // 「ほとんど ミスなし」に ならないのは、子どもには わかりません）
     if (r.totalKeys >= T.Store.MIN_RECORD_KEYS) {
-      if (acc >= 98) add('ほとんど ミスなし', 40);
-      else if (acc >= 92) add('正かくに 打てた', 20);
-      else if (acc >= 80) add('がんばった', 10);
+      const n = T.Store.starsOf(r);
+      if (n >= 3) add('ほとんど ミスなし', 40);
+      else if (n === 2) add('正かくに 打てた', 20);
+      else if (n === 1) add('がんばった', 10);
     }
     // ショートカットは 打鍵を 数えないので、できた 課題の 数で 見ます
     if (r.stage && r.stage.mode === 'shortcut') {
@@ -100,6 +102,8 @@
     if (m.firstClear) add('はじめての クリア', 60);
     if (m.newBestKps || m.isBestScore) add('さいこう記録', 30);
     if (m.newStars) add('★が ふえた', m.newStars * 25);
+    // だんは ★を ぜんぶ そろえた あとの はしごなので、★と 同じだけ つけます
+    if (m.newRank) add('だんが 上がった', m.newRank * 25);
 
     return { total: parts.reduce((sum, p) => sum + p.xp, 0), parts };
   }
@@ -154,6 +158,14 @@
       test: c => c.courseCleared.shortcut },
     { id: 'star-master', icon: 'star', title: 'オール ★3', note: 'ぜんぶの ステージで ★3つ',
       test: c => c.allStars },
+    // ★の つぎの はしご。ヒントを 消した ままで はやさの めやすに とどくと
+    // 「だん」が 上がります（store.js の SPEED_RANKS）
+    { id: 'rank-first', icon: 'bolt', title: 'そのさきへ', note: 'はじめて だんを とった',
+      test: c => c.topRank >= 1 },
+    { id: 'rank-3', icon: 'bolt', title: '3だん', note: 'ステージを 1つ 3だんに した',
+      test: c => c.topRank >= 3 },
+    { id: 'rank-master', icon: 'trophy', title: 'オール 3だん', note: 'ぜんぶの ステージで 3だん',
+      test: c => c.allRanks },
 
     { id: 'weak-5', icon: 'finger', title: 'にがて つぶし', note: 'にがて とっくんを 5かい やった',
       test: c => c.awards.weak >= 5 },
@@ -174,6 +186,11 @@
     const courseCleared = {};
     let allStars = true;
     let anyStage = false;
+    // だんは 打鍵を 数える ステージだけの はしごです。ショートカットは
+    // はやさを はかれない ので、ここに 入れると ぜったいに そろいません
+    let allRanks = true;
+    let anyRanked = false;
+    let topRank = 0;
     T.Lessons.COURSES.forEach(course => {
       let cleared = true;
       course.stages.forEach(stage => {
@@ -181,6 +198,11 @@
         const p = progress[stage.id] || {};
         if (!(p.clears > 0)) cleared = false;
         if ((p.stars || 0) < 3) allStars = false;
+        if (!stage.noStars && stage.mode !== 'shortcut') {
+          anyRanked = true;
+          topRank = Math.max(topRank, p.rank || 0);
+          if ((p.rank || 0) < 3) allRanks = false;
+        }
       });
       courseCleared[course.id] = cleared;
     });
@@ -195,6 +217,8 @@
       bestKps: best ? best.kps : 0,
       courseCleared,
       allStars: anyStage && allStars,
+      topRank,
+      allRanks: anyRanked && allRanks,
       challengeBest
     };
   }
