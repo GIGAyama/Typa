@@ -247,9 +247,10 @@
     const clearedStages = T.Lessons.COURSES
       .reduce((sum, c) => sum + c.stages.filter(s => (progress[s.id] || {}).clears > 0).length, 0);
 
-    view.innerHTML = `
-      ${pageTitle('えらぶ', 'べつの ことを やりたい ときは ここから')}
-
+    // 「つづきから」と「そろそろ ふくしゅう」を ひとまとめに します。
+    // ひろい 画面では この かたまりと 行き先の ならびを **よこに** ならべ、
+    // たての ながさを はんぶんに します（style.css の .menu-grid）
+    const lead = `
       ${next ? card(`
         <p class="lead">${icon('play')} ${next.resume ? 'つづきから' : 'いま やって いる ところ'}</p>
         <button class="btn btn-primary btn-big" data-go-stage="${esc(next.course.id)}:${esc(next.stage.id)}">
@@ -259,11 +260,16 @@
         </button>
         <p class="muted start-note">${next.resume
           ? `あと ${next.left}もん 打つと ひとまわりです。`
-          : 'えらばなくても、下の「うつ」を おせば ここから はじまります。'}</p>`, 'card-next') : ''}
+          : 'えらばなくても、下の「うつ」か スペースキーで ここから はじまります。'}</p>`, 'card-next') : ''}
+      ${reviewCard(due)}`.trim();
 
-      ${reviewCard(due)}
+    view.innerHTML = `
+      ${pageTitle('えらぶ', 'べつの ことを やりたい ときは ここから。スペースキーで すぐ 打てます')}
 
-      <div class="menu-list">
+      <div class="menu-grid">
+        ${lead ? `<div class="menu-col">${lead}</div>` : ''}
+
+        <div class="menu-list">
         <button class="menu-row tile-blue" data-go-screen="courses">
           <span class="row-icon">${icon('keyboard')}</span>
           <span class="row-body">
@@ -304,6 +310,7 @@
           </span>
           <span class="row-arrow">${icon('next')}</span>
         </button>
+      </div>
       </div>
     `;
     bindGoButtons();
@@ -452,12 +459,12 @@
       <!-- コースの すすみぐあいを 1行だけ。ステージを 1つずつ 見なくても
            「どこまで きたか」が わかります -->
       ${card(`
-        <p class="lead">${icon(course.icon)} この コースの すすみ</p>
+        <p class="lead">${icon(course.icon)} この コースの すすみ
+          <span class="course-sum">${cleared} / ${course.stages.length} ステージ ・ ★ ${starSum} / ${course.stages.length * 3}</span></p>
         <span class="row-bar"><span data-grow="${Math.round(cleared / course.stages.length * 100)}"></span></span>
-        <p class="muted">${cleared} / ${course.stages.length} ステージ ・ ★ ${starSum} / ${course.stages.length * 3}</p>
         ${course.note2 ? `<p class="muted">${icon('info')} ${esc(course.note2)}</p>` : ''}
         ${course.id === 'romaji' ? `
-          <button class="btn btn-outline mt" data-go-screen="romaji-table">${icon('grid')} ローマ字ひょうを 見る</button>` : ''}
+          <button class="btn btn-outline btn-small mt" data-go-screen="romaji-table">${icon('grid')} ローマ字ひょうを 見る</button>` : ''}
       `, `tile-${course.color} card-course`)}
 
       <div class="stage-list">
@@ -502,6 +509,8 @@
       <p class="hint-box">${icon('info')} 正しく 打てた 数が スコアです。
       まちがえると すすまないので、あわてず ていねいに 打つほうが たくさん 打てます。</p>
 
+      <!-- ひろい 画面では 3まいの カードを よこに ならべます（style.css の .card-cols）-->
+      <div class="card-cols">
       ${card(`
         <p class="lead">${icon('timer')} じかん</p>
         <div class="seg" role="radiogroup" aria-label="じかん">
@@ -536,6 +545,7 @@
           <span class="btn-main">はじめる</span>
           ${icon('play')}
         </button>`)}
+      </div>
     `;
 
     view.querySelectorAll('[data-pick]').forEach(el => {
@@ -1410,7 +1420,10 @@
         <p class="muted mt">${heatMode === 'miss'
           ? '色が こい キーほど まちがえて います。手もとの キーボードと 見くらべてみよう。'
           : '色が こい キーほど、まだ 手が おぼえて いません。まちがえなくても、さがして いれば こく なります。'}</p>
-        <div class="kb-guide" id="heat-kb"></div>
+        <div class="kb-guide"><div id="heat-kb"></div></div>
+        <!-- 色の 見本と ボタンは 1行に ならべます。図の 下に 2段 つむと、
+             その ぶんだけ キーボードが 画面の 外へ 出て いきます -->
+        <div class="heat-foot">
         ${heatMode === 'miss'
           ? `<p class="heat-legend"><span class="heat-sample lv1"></span>すこし
              <span class="heat-sample lv2"></span>ふつう
@@ -1419,7 +1432,11 @@
              <span class="mastery-sample m-soso"></span>もうすこし
              <span class="mastery-sample m-weak"></span>まだまだ
              <span class="mastery-sample m-unknown"></span>まだ わからない</p>`}
-        <button class="btn btn-primary mt" data-go-weak>${icon('finger')} にがて とっくんを する</button>`) : ''}
+        <button class="btn btn-primary" data-go-weak>${icon('finger')} にがて とっくんを する</button>
+        </div>`,
+        // キーボードの 図は よこに ひろい ので、ひろい 画面でも 2れつに 分けず
+        // 1れつぶん ぜんぶを つかいます（style.css の .card-wide）
+        'card-wide') : ''}
 
       <!-- こまかい 中身は たたんで おきます。ひらいて さいしょに 見せたいのは
            「キーボードの どこが にがてか」の 1つだけ です -->
@@ -1466,6 +1483,9 @@
         <p class="lead">${icon('star')} ステージの ★</p>
         <span class="collect-bar"><span data-grow="${Math.round(starSum / Math.max(1, starMax) * 100)}"></span></span>
         <p class="muted"><b data-count="${starSum}">0</b> / ${starMax} こ。コースを えらぶと 中が 見られます。</p>
+        <!-- コースごとの ★は「たたんだ 見出し」が 5つ ならぶだけ なので、
+             ひろい 画面では 2れつに して たての ながさを はんぶんに します -->
+        <div class="fold-cols">
         ${T.Lessons.COURSES.map(c => {
           const sum = c.stages.reduce((m, s) => m + ((progress[s.id] || {}).stars || 0), 0);
           const max = c.stages.length * 3;
@@ -1474,7 +1494,8 @@
               <span>${esc(s.title)}</span>${stars((progress[s.id] || {}).stars || 0)}
             </div>`).join('')}
             <button class="btn btn-outline btn-small mt" data-go-course="${esc(c.id)}">この コースへ ${icon('next')}</button>`);
-        }).join('')}`)}`;
+        }).join('')}
+        </div>`)}`;
   }
 
   // -------------------------------------------------- あゆみ
@@ -1782,7 +1803,7 @@
   function hintSettings() {
     const s = T.Store.getSettings();
     const job = T.Buddy.normalizeJob(s.buddyJob);
-    const jobUnit = (T.Buddy.jobs().filter(j => j.id === job)[0] || {}).unit || 'しごと';
+    const jobUnit = (T.Buddy.jobs().filter(j => j.id === job)[0] || {}).unit || 'できた もの';
     return `
       ${card(`
         <p class="lead">${icon('hand')} ヒントの つよさ</p>
@@ -1812,20 +1833,25 @@
       ${card(`
         <p class="lead">${icon('hand')} 手の イラストと キャラクター</p>
         <p class="muted">手の 絵は「どの 指を のばすか」を つたえます。
-        キャラクターは 打つと うごきます。気が 散る ときは 消せます。</p>
+        キャラクターは 打つと うごきます。気が 散る ときは 消せます
+        （ヒントを「ばしょだけ」まで 下げると 手の 絵も 消えます）。</p>
         ${toggle('hands', '手の イラストを 出す', s.hands)}
         ${toggle('buddy', 'キャラクターを 出す', s.buddy)}
         <p class="muted mt">だれと いっしょに はたらく？</p>
         <div class="seg" role="radiogroup" aria-label="キャラクター">
+          <button class="seg-btn${job === T.Buddy.RANDOM ? ' on' : ''}" role="radio"
+            aria-checked="${job === T.Buddy.RANDOM}" data-set="buddyJob" data-value="${esc(T.Buddy.RANDOM)}"
+            ${s.buddy === false ? 'disabled' : ''}>おまかせ</button>
           ${T.Buddy.jobs().map(j => `
             <button class="seg-btn${job === j.id ? ' on' : ''}" role="radio"
               aria-checked="${job === j.id}" data-set="buddyJob" data-value="${esc(j.id)}"
               ${s.buddy === false ? 'disabled' : ''}>${esc(j.label)}</button>`).join('')}
         </div>
-        <p class="muted">お題を 1つ 打ちきる ごとに、${esc(jobUnit)}が 1つ ふえます。
-        ひとまわり できると ぜんぶ おさめて、また 空から はじまります。</p>
-        <p class="muted">手の 絵は、ヒントの つよさを「ばしょだけ」まで 下げると
-        いっしょに 消えます（指の 色分けと ひとくみ だからです）。</p>`)}`;
+        <p class="muted">${job === T.Buddy.RANDOM
+          ? `「おまかせ」は くじ引きです（${esc(T.Buddy.jobs().map(j => j.label).join('・'))}）。`
+          : 'いつも 同じ キャラクターに なります。'}
+        お題を 1つ 打ちきる ごとに ${esc(jobUnit)}が 1つ ふえ、ひとまわり できると
+        ぜんぶ おさめて${job === T.Buddy.RANDOM ? '、つぎは だれが 来るか もう一度 くじを 引きます' : '、また 空から はじまります'}。</p>`)}`;
   }
 
   /** 色・文字の 大きさ・おと。「見え方を かえたい」で 来る ところです */
@@ -1860,24 +1886,34 @@
               aria-checked="${s.layout === id}" data-set="layout" data-value="${id}">
               ${esc(T.Layout.LAYOUTS[id].label)}</button>`).join('')}
         </div>
-        <p class="muted">キーボードの 右上に「¥」や「かな」が あれば 日本語配列（JIS）です。</p>`)}
+        <p class="muted">キーボードの 右上に「¥」や「かな」が あれば 日本語配列（JIS）です。
+        「1」の 左に <b>かな英数キー</b>が あり、「1」は Q の ななめ 左上に なります。</p>
+        <p class="muted">${icon('keyboard')} どの 画面でも <b>スペースキー</b>を おすと、
+        すぐ 打つ 画面に もどれます。</p>`)}
 
+      ${card(`
+        <p class="lead">${icon('grid')} ローマ字ひょう</p>
+        <p class="muted">「し」は si でも shi でも 正かいです。ならった うちかたを たしかめられます。</p>
+        <button class="btn btn-outline" data-go-screen="romaji-table">ローマ字ひょうを 見る</button>`)}
+
+      <!-- キーボードの 図は よこに ひろい ので、いちばん 下に おきます。
+           ひろい 画面では 上の 2まいが よこに ならび、この 図が その 下に
+           はば いっぱいで 出ます（style.css の .card-wide）-->
       ${card(`
         <p class="lead">${icon('hand')} ゆびの ばしょ</p>
         <p class="muted">ホームポジションは、左手を <b>F</b>、右手を <b>J</b> に おく ばしょです。
         この 2つの キーには でっぱりが あるので、見なくても さわると わかります。</p>
-        <div id="guide-kb" class="kb-guide"></div>
+        <!-- キーボードを 描く ところは 中の 入れものに します。
+             keyboard.js は わたされた 要素の class を 入れかえるので、
+             外がわに 1つ わくを のこして おくと、せまい 画面でも
+             **その わくの 中だけ**で よこに うごかせます -->
+        <div class="kb-guide"><div id="guide-kb"></div></div>
         <ul class="finger-legend">
           ${Object.keys(T.Layout.FINGERS).map(id => {
             const f = T.Layout.FINGERS[id];
             return `<li><span class="finger-dot" style="--finger:${f.color}"></span>${esc(f.label)}</li>`;
           }).join('')}
-        </ul>`)}
-
-      ${card(`
-        <p class="lead">${icon('grid')} ローマ字ひょう</p>
-        <p class="muted">「し」は si でも shi でも 正かいです。ならった うちかたを たしかめられます。</p>
-        <button class="btn btn-outline" data-go-screen="romaji-table">ローマ字ひょうを 見る</button>`)}`;
+        </ul>`, 'card-wide')}`;
   }
 
   /** きろく・プライバシー・もちだし・アプリの ばんごう */
@@ -2178,6 +2214,39 @@
     });
   }
 
+  /**
+   * どの 画面からでも **スペースキー**で 打つ 画面へ 行けるように します。
+   *
+   * ■ なぜ スペースキーなのか
+   * このアプリの ねらいは「ひらいてから 打ちはじめるまでを みじかく する」こと です。
+   * えらぶ・きろく・せっていを 見て いた 子が「じゃあ 打とう」と 思った とき、
+   * 下のバーの ちいさな ボタンを ねらう 必要が ある のは 遠まわり です。
+   * いちばん 大きくて、手を うごかさずに 押せる キーを その 入口に します。
+   *
+   * ■ 打ちけす ばしょ
+   *   ・打つ 画面（play）… play.js が じぶんで スペースを うけとります
+   *   ・文字を 書く ところ（もちだしの テキストなど）… 文字入力を じゃましません
+   *   ・チェックボックス（せっていの スイッチ）… スペースで 入れかえる キーです
+   *   ・たたむ 見出し（summary）… スペースで ひらく キーです
+   * ボタンは のこします。ボタンは エンターでも 押せるので、
+   * キーボードだけで つかう 子の 行き先を うばいません。
+   */
+  const NO_SPACE_KEY = 'input, textarea, select, summary, [contenteditable=""], [contenteditable="true"]';
+
+  function bindPlayShortcut() {
+    document.addEventListener('keydown', e => {
+      if (e.key !== ' ' && e.code !== 'Space') return;
+      if (e.ctrlKey || e.altKey || e.metaKey || e.isComposing) return;
+      if (e.defaultPrevented) return;
+      const cur = T.Nav.current();
+      if (cur && cur.screen === 'play') return;
+      const el = e.target;
+      if (el && el.closest && el.closest(NO_SPACE_KEY)) return;
+      e.preventDefault();
+      T.Nav.selectTab('play');
+    });
+  }
+
   function toast(message) {
     const area = $('toast');
     const box = document.createElement('div');
@@ -2223,6 +2292,7 @@
     applySettings();
 
     $('nav-back').addEventListener('click', () => T.Nav.back('bar'));
+    bindPlayShortcut();
     T.Nav.TABS.forEach(tab => {
       const el = document.querySelector(`[data-tab="${tab.id}"]`);
       if (el) el.addEventListener('click', () => T.Nav.selectTab(tab.id));

@@ -702,6 +702,13 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
   margin: 8px 0 12px; color: var(--muted); font-size: .82rem;
 }
+/* 色の 見本と「にがて とっくん」の ボタンを 1行に。
+   図の 下に 2段 つむと、その ぶん キーボードが 画面の 外に 出ます */
+.heat-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+}
+.heat-foot .heat-legend { margin: 0; }
 .heat-sample {
   width: 18px; height: 18px; border-radius: 4px; display: inline-block;
   border: 1px solid var(--line); margin-left: 8px;
@@ -710,8 +717,14 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1b2740
 .heat-sample.lv2 { background: color-mix(in srgb, var(--ng) 50%, var(--surface)); }
 .heat-sample.lv3 { background: color-mix(in srgb, var(--ng) 80%, var(--surface)); }
 
-.kb-guide { margin: 10px 0; }
-.kb-guide .kb { min-width: 480px; }
+/* きろく・せっていに 出す キーボードの 図。中の .kb は keyboard.js が
+   組みます（class を 入れかえる ので、外がわの この わくを のこします）。
+   はいらない ときは この わくの 中だけで よこに うごきます */
+.kb-guide { margin: 10px 0; overflow-x: auto; }
+/* 図の キーは、打つ 画面の キーボードほど 大きく なくても 見て わかります。
+   ここを 大きく すると、その ぶん カードが たてに のびて
+   1画面に おさまらなく なります（打つ 画面の 大きさは play.js が 決めます）*/
+.kb-guide .kb { min-width: 480px; font-size: clamp(9px, min(1.1vw, 1.6vh), 15px); }
 
 .finger-legend {
   list-style: none; padding: 0; margin: 10px 0 0;
@@ -1271,4 +1284,134 @@ body.root-bump .view { animation: bump .3s ease; }
   .play-visual { display: none; }
   .play-ready { display: none; }
   .play-stage { padding: 8px 14px; }
+}
+
+/* ================================================================ 1画面に おさめる
+
+   打つ 画面いがい（えらぶ・きろく・せってい）を、タブレットや パソコンで
+   ひらいた ときに **スクロールしないで 見わたせる** ように します。
+
+   ■ なぜ カードの はばを かえるのか
+   カードは たてに 1れつ ならんで いました。せまい スマートフォンでは
+   それが 正しい ならびですが、よこに ひろい 画面では **本文の 右がわが
+   ずっと 空いた まま、たてに どんどん 長く なります**。
+   1画面に 入らない ぶんは スクロールしないと 見えないので、
+   「どんな ものが あるのか」が ひと目では わからなく なります。
+   よこの あいた ぶんに カードを ならべると、同じ 中身が
+   たて はんぶんの 高さに おさまります。
+
+   ■ 打つ 画面には かけません
+   打つ 画面は お題と キーボードの 図が 主役で、ならべる ものが ありません
+   （キーボードの 大きさは play.js が 画面を はかって 決めます）。 */
+
+@media (min-width: 800px) {
+  /* きろく・せっていの ひきだしの 中。
+     multicol（columns）を つかうのは、カードの まいすうも 高さも
+     ひきだしごとに ちがう からです。grid で れつを 決めうちすると
+     となりの れつの 高さに ひきずられて、下に 大きな すきまが できます。
+     multicol なら 高さを そろえて 分けて くれます。
+
+     ■ れつは 2つまで
+     3れつも ためしましたが、カードの 中には えらぶ ボタンの ならび（.seg）や
+     スイッチが 入って いて、れつが せまく なると **ボタンが おれて
+     かえって たてに のびます**（せってい画面は 118px 高く なりました）。
+     2れつは、どの ひきだしでも 中身が おれない はば です。 */
+  .section-body, .card-cols { columns: 2; column-gap: 16px; }
+  .section-body > .card, .card-cols > .card,
+  .section-body > .fold { break-inside: avoid; }
+
+  /* れんしゅうした 日の カレンダー（4週間）。よこに ゆとりが ある ときは
+     2行では なく **1行**に します（1しゅうかんずつ 目で 追えます）*/
+  .cal { grid-template-columns: repeat(28, 1fr); max-width: none; }
+  .cal-axis { max-width: none; }
+
+  /* えらぶ画面。「つづきから」の かたまりと 行き先の ならびを よこに おきます。
+     auto-fit なので、つづきの カードが ない ときは ならびが はば いっぱいに なります */
+  .menu-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 16px; align-items: start;
+  }
+  .menu-col > .card:last-child { margin-bottom: 0; }
+
+  /* コースと ステージの 一覧。行が 高い ので、2れつに すると
+     たての ながさが ほぼ はんぶんに なります */
+  .course-list, .stage-list {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 10px; align-items: start;
+  }
+  /* ステージを つなぐ たての 線（「みち」）は、1れつに ならんで いる ときだけ
+     すじが とおります。2れつでは 出しません（番号と かんむりで 順は わかります）*/
+  .course-list .stage-row + .stage-row::before,
+  .stage-list .stage-row + .stage-row::before { display: none; }
+}
+
+/* キーボードの 図が 入る カードは よこに ひろい ほうが 見やすい ので、
+   **たてに ゆとりが ある ときだけ** 2れつぶんを つかいます。
+   たてが みじかい ノートPC では、ひろげた ぶんが そのまま
+   「スクロールしないと 見えない」に なるので、れつの 中に おさめます
+   （はいらない ときは .kb-guide の 中だけで よこに うごきます）。 */
+@media (min-width: 1000px) and (min-height: 901px) {
+  .section-body > .card-wide, .card-cols > .card-wide { column-span: all; }
+}
+
+/* ひろい 画面では、一覧（コース・ステージ）の ために 本文の わくを
+   すこし ひろげます。1れつぶんが せまいと ステージ名が 2行に おれて、
+   行の たかさが 1.4ばいに なります（おれない ほうが みじかく おさまります）。 */
+@media (min-width: 1200px) {
+  body:not([data-screen="play"]) .view { width: min(1240px, 100%); }
+}
+
+/* たてが みじかい 画面（学校の Chromebook・ノートPC）では、
+   すきまと かざりを つめて 中身の ぶんを かせぎます。
+   文字の 大きさは かえません（読みにくく なるのが いちばん こまります）。
+   打つ 画面は じぶんで 場所を はかるので、ここでは さわりません。
+   ヒーロー（レベルの わっか）と ひきだしの 見出しは css/fx.css の もち物 なので、
+   その 2つの つめかたは あちらに 書いて あります。 */
+@media (max-height: 900px) {
+  body:not([data-screen="play"]) .view { padding-top: 10px; padding-bottom: 16px; }
+  body:not([data-screen="play"]) .page-head { margin: 0 2px 10px; }
+  /* 画面の 名前は、大きさより「そこに ある こと」が だいじ です。
+     行の たかさも つめます（1.75 → 1.35 で 20px ちかく かせげます）*/
+  body:not([data-screen="play"]) .page-head h1 { font-size: clamp(1.25rem, 3vw, 1.5rem); line-height: 1.4; }
+  body:not([data-screen="play"]) .page-note { font-size: .88rem; line-height: 1.5; }
+  body:not([data-screen="play"]) .card { padding: 12px 14px; margin-bottom: 10px; }
+  body:not([data-screen="play"]) .hint-box { padding: 9px 12px; margin-bottom: 10px; }
+  body:not([data-screen="play"]) .lead { margin-bottom: 6px; }
+  .menu-row { min-height: 66px; padding: 10px 14px; }
+  .course-row, .stage-row { min-height: 64px; padding: 8px 12px; }
+  .today-item { padding: 6px 4px; }
+  .cal { margin: 6px 0; }
+  .section-body, .card-cols { column-gap: 14px; }
+  .switch { min-height: 44px; }
+  /* 図の キーは、たてが みじかい ときは もう ひとまわり 小さく します
+     （手もとと 見くらべる ための 図 なので、これ より 小さくは しません）*/
+  .kb-guide { margin: 6px 0; }
+  .kb-guide .kb { font-size: clamp(9px, min(1.05vw, 1.35vh), 13px); }
+  /* 指の 色の 見本は 9つ。れつを ふやすと 行が へって、その ぶん
+     キーボードの 図が 画面に おさまります */
+  .finger-legend { margin-top: 6px; gap: 3px; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); }
+  .finger-legend li { font-size: .84rem; }
+  .stage-note, .row-note { line-height: 1.5; }
+  .card-course .btn { min-height: 40px; padding: 6px 14px; font-size: .9rem; }
+  /* あつめた ものが ふえると いちばん たかく なる ところ。
+     れつを ふやし、1まいの すきまを つめます */
+  .badge-grid { grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 8px; }
+  .badge-tile { padding: 8px 6px; }
+  .badge-note { line-height: 1.4; }
+  .weak-list { gap: 4px; }
+  .weak-list li { line-height: 1.5; }
+  .heat-legend { margin: 6px 0 8px; }
+  .hist-list li { padding: 5px 0; line-height: 1.5; }
+}
+
+/* たてが 700px より みじかい 画面（学校の Chromebook で ブラウザの わくを
+   のぞくと ここに 入ります）。もう ひとまわり つめます。
+   ここでも 文字の 大きさは かえず、すきまと 行の たかさだけを つめます。 */
+@media (max-height: 700px) {
+  body:not([data-screen="play"]) .card { padding: 10px 14px; margin-bottom: 8px; }
+  body:not([data-screen="play"]) .view { padding-bottom: 12px; }
+  .stage-row, .course-row, .menu-row { padding: 6px 12px; }
+  .stage-title, .row-title { line-height: 1.45; }
+  .stage-note, .row-note, .stage-best, .row-count { line-height: 1.4; }
+  .kb-guide { margin: 4px 0; }
 }

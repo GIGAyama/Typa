@@ -16,6 +16,11 @@
  * しごとは office（かいしゃいん）/ chef（シェフ）/ carpenter（大工）。
  * 絵の 素材は 1つも つかわず、ぜんぶ この ファイルの 中で SVG を 組みます。
  *
+ * だれが 出るかは、きほん **くじ引き**です（せっていの「おまかせ」）。
+ * ドリルが ひとまわり 終わる ごとに 引きなおすので、つづけて 打つほど
+ * いろいろな しごとに 会えます（reroll）。じぶんで 決めたい 子は
+ * せっていで しごとを えらべます。
+ *
  * ---------------------------------------------------------------------
  * ■ なめらかに 動かすために していること
  *
@@ -492,19 +497,39 @@
   const JOB_IDS = Object.keys(JOBS);
   const STACK_MAX = 6;
 
+  /**
+   * 「おまかせ」。だれと はたらくかを **アプリが くじで 決めます**。
+   *
+   * 3つの しごとを つくったのに、いつも 同じ 1つしか 出て こないのでは
+   * つくった ぶんが むだに なります。ドリルが ひとまわり 終わる ごとに
+   * くじを 引きなおすので、つづけて 打つほど いろいろな キャラクターに
+   * 会えます。じぶんで 決めたい 子は せっていで えらべます。
+   */
+  const RANDOM = 'random';
+
+  /** つづけて 同じ しごとに ならない ように、いまの ものを のぞいて 引きます */
+  function pickJob(exclude) {
+    const list = JOB_IDS.filter(id => id !== exclude);
+    const from = list.length ? list : JOB_IDS;
+    return from[Math.floor(Math.random() * from.length)];
+  }
+
   // ------------------------------------------------------------------
   // 本体
   // ------------------------------------------------------------------
 
   const state = {
     host: null, ctx: null, job: null, jobId: '',
-    stack: 0, flip: false, idle: [], faceTimer: 0, doneTimer: 0
+    stack: 0, flip: false, idle: [], faceTimer: 0, doneTimer: 0,
+    // 'おまかせ' で 出して いるか（そのときだけ くじを 引きなおします）
+    random: false, rerollTimer: 0
   };
 
   /**
    * キャラクターを 出します。
    * @param {HTMLElement} host おく ところ
-   * @param {Object} [opt] { job: 'office'|'chef'|'carpenter' }
+   * @param {Object} [opt] { job: 'office'|'chef'|'carpenter'|'random' }
+   *   'random'（や 知らない 名前）なら くじで 決めます。
    */
   function render(host, opt) {
     if (!host) return;
@@ -513,7 +538,10 @@
     state.stack = 0;
     state.flip = false;
 
-    const jobId = (opt && JOBS[opt.job]) ? opt.job : 'office';
+    const want = opt ? opt.job : '';
+    state.random = !JOBS[want];
+    // まえに 出て いた しごとは のぞきます（1回目は state.jobId が 空なので ぜんぶ から）
+    const jobId = state.random ? pickJob(state.jobId) : want;
     const job = JOBS[jobId];
     state.jobId = jobId;
     state.job = job;
@@ -738,14 +766,44 @@
     setTimeout(() => { state.stack = 0; drawStack(); }, 460);
   }
 
+  /**
+   * つぎの キャラクターを くじで 引きなおします（ドリルが ひとまわり
+   * 終わった ところで よばれます）。
+   *
+   * ■ すぐには 入れかえません
+   * ひとまわり できた しゅんかんは、キャラクターが 大よろこびして
+   * つみ上げた ものを おさめて いる ところです。そこで 絵を 組みなおすと、
+   * いちばん うれしい うごきが 途中で 切られて しまいます。
+   * よろこびが 終わるまで（きほん 1.8びょう）待ってから 入れかえます。
+   *
+   * せっていで しごとを じぶんで えらんで いる ときは 何も しません。
+   *
+   * @param {number} [delayMs] 待つ 時間
+   * @returns {boolean} 引きなおすか
+   */
+  function reroll(delayMs) {
+    if (!state.random || !state.host) return false;
+    if (state.rerollTimer) clearTimeout(state.rerollTimer);
+    const host = state.host;
+    state.rerollTimer = setTimeout(() => {
+      state.rerollTimer = 0;
+      // 画面が かわって いたら 何も しません（消えた ところに 描きなおしません）
+      if (!host.isConnected) return;
+      render(host, { job: RANDOM });
+    }, delayMs > 0 ? delayMs : 1800);
+    return true;
+  }
+
   /** タイマーと うごきを かたづけます（画面を はなれる とき） */
   function stop() {
     state.idle.forEach(a => { try { a.cancel(); } catch (e) { /* もう 消えて います */ } });
     state.idle = [];
     if (state.faceTimer) clearTimeout(state.faceTimer);
     if (state.doneTimer) clearTimeout(state.doneTimer);
+    if (state.rerollTimer) clearTimeout(state.rerollTimer);
     state.faceTimer = 0;
     state.doneTimer = 0;
+    state.rerollTimer = 0;
   }
 
   /** せっていの ならびに つかう しごとの 一覧 */
@@ -753,12 +811,16 @@
     return JOB_IDS.map(id => ({ id, label: JOBS[id].label, unit: JOBS[id].unit }));
   }
 
-  /** 知らない しごと名を うけとっても 落ちないように します */
-  function normalizeJob(id) { return JOBS[id] ? id : 'office'; }
+  /**
+   * 知らない しごと名を うけとっても 落ちないように します。
+   * 'random'（おまかせ）は そのまま 返します。せってい画面が
+   * 「どれが えらばれて いるか」を 出すのに つかいます。
+   */
+  function normalizeJob(id) { return JOBS[id] ? id : RANDOM; }
 
   global.Typa = global.Typa || {};
   global.Typa.Buddy = {
-    render, tap, done, miss, combo, cheer, stop, jobs, normalizeJob,
+    RANDOM, render, reroll, tap, done, miss, combo, cheer, stop, jobs, normalizeJob,
     get job() { return state.jobId; },
     get produced() { return state.stack; }
   };

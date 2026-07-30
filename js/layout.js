@@ -79,15 +79,32 @@
     K('Power', '', '', '', { label: 'でんげん', w: 1.75, top: true })
   ];
 
-  /** 日本語配列（JIS）— GIGA スクールの Chromebook で多い配列 */
+  /**
+   * 日本語配列（JIS）— GIGA スクールの Chromebook で多い配列
+   *
+   * ■ すうじの だんは、ひだりに 1つ ずれて います
+   * 本物の キーボードでは、すうじの だんの いちばん 左に
+   * **かな英数キー**（ひらがなと 英数を きりかえる キー）が あります。
+   * その ぶん「1」は Q の **ななめ 左上** に 来ます。
+   * ここを 本物どおりに して おかないと、画面の「1」を 見て
+   * 手もとの Q の まっすぐ 上を さがす ことに なります。
+   *
+   * 1行は よこ15マスぶん（keyboard.js が 60マスの グリッドに 4ばいで
+   * 置きます）。だから かな英数キーを 足した ぶん、けすキーは 1マスに します。
+   * 本物の 日本語配列も、けすキーは ほかの キーと 同じ はばです。
+   */
   const JIS = [
     CHROMEBOOK_TOP,
     [
+      // Windows の 日本語配列で「半角/全角」が ある ばしょです。
+      // 打つ 練習には つかいませんが、ここに キーが ある ことが
+      // すうじの だんの ずれ（1 が Q の ななめ 左上）を つくります
+      K('Backquote', '', '', '', { label: 'かな英数' }),
       K('Digit1', '1', '!', 'ぬ'), K('Digit2', '2', '"', 'ふ'), K('Digit3', '3', '#', 'あ'),
       K('Digit4', '4', '$', 'う'), K('Digit5', '5', '%', 'え'), K('Digit6', '6', '&', 'お'),
       K('Digit7', '7', "'", 'や'), K('Digit8', '8', '(', 'ゆ'), K('Digit9', '9', ')', 'よ'),
       K('Digit0', '0', '', 'わ'), K('Minus', '-', '=', 'ほ'), K('Equal', '^', '~', 'へ'),
-      K('IntlYen', '\\', '|', 'ー'), K('Backspace', '', '', '', { label: 'けす', w: 2 })
+      K('IntlYen', '\\', '|', 'ー'), K('Backspace', '', '', '', { label: 'けす' })
     ],
     [
       K('Tab', '', '', '', { label: 'タブ', w: 1.5 }),
@@ -178,6 +195,8 @@
     const rows = (LAYOUTS[layoutId] || LAYOUTS.jis).rows;
     for (let r = 1; r < rows.length; r++) {          // 0 は Chromebook の操作キー列なので除く
       for (const key of rows[r]) {
+        // 文字を もたない キー（かな英数・けす など）は 打つ 相手では ありません
+        if (!key.lo) continue;
         if (key.lo === ch) return { key, shift: false };
         if (key.up && key.up === ch) return { key, shift: true };
       }
