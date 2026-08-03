@@ -18,7 +18,17 @@
  * キャッシュとは べつの ものです。バージョンを 上げて 古い キャッシュを
  * 消しても、児童の きろくは 消えません。
  */
-const VERSION = 'typa-v17';
+/*
+ * 【最重要】activate では自アプリ以外のキャッシュを削除しない。
+ *   gigayama.github.io は数十個のアプリが同一オリジンを共有しているため、
+ *   CACHE_PREFIX で始まるキャッシュだけを掃除する。
+ *   以前はここで caches.keys() の結果を全部消していた。そのため
+ *   このアプリを開くたびに、同じ端末に入っている他の GIGA アプリの
+ *   キャッシュまで巻き添えで消え、それらがオフラインで起動しなくなっていた。
+ */
+const CACHE_PREFIX = 'typa-';
+const APP_VERSION = 'v18';   // ← リリースごとに必ず上げる
+const VERSION = CACHE_PREFIX + APP_VERSION;
 const ASSETS = [
   './',
   './index.html',
@@ -64,7 +74,11 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k))))
+      .then(keys => Promise.all(keys
+        // ← 自アプリ接頭辞のものだけを削除する。ここを外すと
+        //    同一オリジンの他アプリを巻き添えにする。
+        .filter(k => k.startsWith(CACHE_PREFIX) && k !== VERSION)
+        .map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
