@@ -113,6 +113,26 @@
      見えなく なるので、うすくし すぎません（キーの 文字は 読めるはば で）*/
   --finger-tint: 22%;
 
+  /* ------------------------------------------------------------------
+     画面の キーボードの 小さい 字（かな・上の 記号・キーの 名まえ）の 色。
+
+     ■ なぜ --muted と 分けるのか
+     --muted は 白い 面での 色として 決めて あります（白の 上で 5.07）。
+     ところが キーには 指の 色が しいて あるので、面が 白より くらく なり、
+     実測で **3.25〜4.44** まで 落ちて いました。基準の 4.5 に とどきません。
+     いちばん 落ちたのは あかるい 教室で いちばん 見づらい 色の キーです。
+     面用と 文字用を 2段階に する（Part I §2-8）ため、ここだけ 分けます。
+     この 値は 9本の 指の 色すべての 上で 4.5 を こえる ことを 計算で
+     たしかめて えらんで います（最悪 4.59）。 */
+  --kb-ink: #536276;
+  /* 「つぎに 押す キー」の 地の こさと、その 上の 文字の 色。
+     地を こく するほど キーは 目立ちますが、文字は 読みにくく なります。
+     あかるい 画面では 72% の ままでも こい 字で 4.87 まで 上がります。 */
+  --kb-next-tint: 72%;
+  --kb-next-ink: #1f2a38;
+  /* 打った しゅんかんの ○×の 面（みどり・あか）の 上に のせる 文字の 色 */
+  --kb-hit-ink: #ffffff;
+
   /* 画面の キーボードの 大きさの もとに なる「1文字ぶん」。
      キー1つの たかさは この 2.6ばい、キーボードぜんたいの たかさは
      およそ この 15ばい に なります。
@@ -177,6 +197,20 @@ html[data-theme="dark"] {
 
   /* くらい 画面では 同じ こさでも 色が しずんで 見えるので、すこし こく します */
   --finger-tint: 34%;
+
+  /* くらい 画面での キーの 小さい 字。--muted のままでは 実測 3.25 でした。
+     9本の 指の 色すべての 上で 4.5 を こえる ところまで 明るく して います
+     （最悪 4.60）。 */
+  --kb-ink: #b7c1ce;
+  /* 指の 色は あかるい 画面と 同じ 値を つかう（手の 絵と そろえる ため）ので、
+     くらい 地に 72% で しくと 中あかるさの 面に なり、白い 字でも 4.25 しか
+     出ませんでした。ここだけ こさを 60% に して 白で 5.22 を 取ります。
+     わく・かげ・三角の しるしは そのままなので、目立ちかたは 変わりません。 */
+  --kb-next-tint: 60%;
+  --kb-next-ink: #ffffff;
+  /* みどり・あかは くらい 画面では **明るい** 色に ふりなおして あるので、
+     白い 字だと 1.58 / 2.21 まで 落ちます。ここは こい 字に します */
+  --kb-hit-ink: #0b1622;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -198,6 +232,11 @@ html[data-theme="dark"] {
     --shadow-lift: 0 .8rem 1.6rem rgba(0, 0, 0, .55);
     --btn-edge: #16375f;
     --finger-tint: 34%;
+    /* 上の html[data-theme="dark"] と 同じ 値。理由も そちらに 書いて あります */
+    --kb-ink: #b7c1ce;
+    --kb-next-tint: 60%;
+    --kb-next-ink: #ffffff;
+    --kb-hit-ink: #0b1622;
   }
 }
 
@@ -223,6 +262,7 @@ body {
   font-size: 16px;
   line-height: 1.75;
   -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
   padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom));
 
@@ -232,6 +272,13 @@ body {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+}
+/* dvh を 知らない 古い 端末（学校には まだ あります）むけの ひかえ。
+   dvh を 先に 書き、知らない ときだけ vh で 受けます。
+   vh は モバイルの アドレスバーの ぶん はみ出しますが、
+   「高さが 決まらない」より ましです */
+@supports not (height: 100dvh) {
+  body { min-height: 100vh; }
 }
 
 html.big-text body { font-size: 18.5px; }
@@ -397,7 +444,10 @@ body:not([data-screen="play"]) .view {
   width: 100%; min-height: 76px; justify-content: space-between;
   border-radius: var(--radius); text-align: left; padding: 12px 22px;
 }
-.btn-big .btn-sub { display: block; font-size: .78rem; opacity: .9; font-weight: 600; }
+/* opacity: .9 を かけて いました。オレンジの 大きい ボタンの 上で
+   コースの 名まえ（「ゆびの ばしょ」）が 比 4.27 まで 落ちて いたので 外します。
+   外すと 5.0 に なり、見た目は ほとんど 変わりません */
+.btn-big .btn-sub { display: block; font-size: .78rem; font-weight: 600; }
 .btn-big .btn-main { display: block; font-size: 1.15rem; font-weight: 800; }
 /* コース名は 1行に おさめます（「ゆびの ばし／ょ」のような 変な 折り返しを ふせぎます） */
 .btn-big > span:first-child { flex: 1; min-width: 0; }
@@ -675,9 +725,24 @@ body[data-screen="play"] .play > *:not(.play-lower) {
   display: flex; align-items: center; justify-content: center;
   gap: 12px; flex-wrap: wrap; min-height: 48px;
 }
-.btn-stop { display: inline-flex; flex-direction: column; align-items: center; gap: 0; line-height: 1.3; }
+.btn-stop { display: inline-flex; flex-direction: column; align-items: center; gap: 0; line-height: 1.3; position: relative; }
 .btn-stop .btn-note { font-size: .72rem; font-weight: 400; color: var(--muted); }
 .btn-stop .ico { width: 18px; height: 18px; }
+/* さわれる 大きさを 44px 以上に します。
+
+   ■ ボタン そのものを 大きく しては いけません
+   たてが みじかい Chromebook（1366×768）では、下の @media で この ボタンを
+   40px に つめて、その ぶんを キーボードに まわして います。
+   ここで min-height を 44px に すると キーボードが 小さく なるか、
+   ボタンが 折り返して 別の 形で くずれます。
+   そこで **見た目は そのまま、当たり判定だけ**を 疑似要素で ひろげます。
+   実測 104×40 → 104×44。 */
+.btn-stop::after {
+  content: ""; position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%; height: 100%;
+  min-width: 44px; min-height: 44px;
+}
 
 /* れんぞく（コンボ）。10だ ごとに ひとこと ほめます */
 .meter-combo b { color: var(--c-teal); }
@@ -911,12 +976,21 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1c2a3d
   transition: background-color .1s ease, border-color .1s ease, transform .06s ease;
 }
 .kb-main { font-weight: 800; font-size: 1.25em; }
-.kb-up { position: absolute; top: 2px; left: 4px; font-size: .8em; color: var(--muted); }
-.kb-kana { position: absolute; right: 4px; bottom: 2px; font-size: .8em; color: var(--muted); }
-.kb-name { font-size: .82em; color: var(--muted); text-align: center; padding: 0 2px; }
-/* いちばん上の 行（ブラウザ操作キー）は 練習に つかわないので すこし ひくく */
+.kb-up { position: absolute; top: 2px; left: 4px; font-size: .8em; color: var(--kb-ink); }
+.kb-kana { position: absolute; right: 4px; bottom: 2px; font-size: .8em; color: var(--kb-ink); }
+.kb-name { font-size: .82em; color: var(--kb-ink); text-align: center; padding: 0 2px; }
+/* いちばん上の 行（ブラウザ操作キー）は 練習に つかわないので すこし ひくく。
+
+   ■ ここに opacity は かけません
+   まえは 行ごと opacity: .62 に して いました。地は 白に ちかいので
+   うすく 見えるだけ ですが、**字まで いっしょに うすく なり**、
+   「もどる」「すすむ」「ぜんがめん」「あかるさ ＋」などの キーの 名まえが
+   実測で **2.48**（くらい 画面で 2.88）まで 落ちて いました。
+   この 行の 名まえは ショートカットの れんしゅうで 実さいに 読む ことばです。
+   「つかわない 行」で ある ことは、ひくい たかさ・うすい 地・ほそい 下わく の
+   3つで 出せるので、字の こさは そのまま のこします。 */
 .kb-key.is-top {
-  min-height: calc(var(--kb-row, 2.6em) * .73); opacity: .62;
+  min-height: calc(var(--kb-row, 2.6em) * .73);
   background: var(--surface-2); border-bottom-width: 2px;
 }
 .kb-key.is-home { background: var(--surface-2); }
@@ -958,15 +1032,22 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1c2a3d
 
 /* つぎに 押す キー。色 だけでは なく 太い わくと 三角の しるしで しめします。
    指の 色分けより 強く 出したいので、セレクタを .kb から 書きます */
+/* ■ 地は --primary では なく --primary-deep を つかいます
+   あかるい 画面の --primary（#4a90e2）に 白い 字を のせると 比 3.29 で、
+   「つぎに 押す キー」の 文字が いちばん 読めない という 形に なって
+   いました。--primary-deep なら 同じ 青の まま 5.61 に なります。 */
 .kb .kb-key.is-next {
-  background: var(--primary); color: var(--primary-ink);
+  background: var(--primary-deep); color: var(--primary-ink);
   border-color: var(--primary-deep); transform: translateY(-2px);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 45%, transparent);
   z-index: 2;
 }
+/* ■ ここでも opacity は かけません
+   .85 を かけると かな・記号だけが うすく なり、いちばん 見たい キーの
+   よみが いちばん 読めなく なります。色は 地に あわせて 継がせるだけに します。 */
 .kb .kb-key.is-next .kb-up,
 .kb .kb-key.is-next .kb-kana,
-.kb .kb-key.is-next .kb-name { color: inherit; opacity: .85; }
+.kb .kb-key.is-next .kb-name { color: inherit; }
 
 /* 指の 色分けを 出して いる ときは、つぎに 押す キーも **その 指の 色**で
    光らせます。手の 絵の 光る 指と 色が そろうので、
@@ -974,8 +1055,8 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1c2a3d
    キーの 文字が 読めなく ならない ように、色は 72% までに して
    文字は そのまま こい 色（--text）で のこします。 */
 .kb.show-finger .kb-key.is-next {
-  background: color-mix(in srgb, var(--finger, var(--primary)) 72%, var(--surface));
-  color: var(--text);
+  background: color-mix(in srgb, var(--finger, var(--primary)) var(--kb-next-tint), var(--surface));
+  color: var(--kb-next-ink);
   border-color: var(--finger, var(--primary));
   border-bottom-color: var(--finger, var(--primary));
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--finger, var(--primary)) 40%, transparent);
@@ -989,9 +1070,19 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1c2a3d
 
 /* 打った しゅんかん。地の 色は 正誤で 分けますが、わくは すみ色の まま です
    （かたちが 変わらないので、色が 見分けにくい 子でも キーを 見うしないません）*/
-.kb .kb-key.hit-ok { background: var(--ok); color: #fff; }
-.kb .kb-key.hit-miss { background: var(--ng); color: #fff; }
-.kb.shift-on .kb-key[data-code^="Shift"] { background: var(--primary); color: var(--primary-ink); }
+/* ■ 文字色を #fff で 決め打ちしません
+   くらい 画面では みどり・あかを **明るい ほう**に ふりなおして いるので、
+   白い 字だと 実測で 1.58（みどり）／2.21（あか）に なって いました。
+   打った しゅんかんに 出る しるしなので、いちばん 見たい ときに 見えません。 */
+.kb .kb-key.hit-ok { background: var(--ok); color: var(--kb-hit-ink); }
+.kb .kb-key.hit-miss { background: var(--ng); color: var(--kb-hit-ink); }
+/* 小さい 字にも 継がせます。.kb-kana などは じぶんで --kb-ink を もって いるので、
+   親の color だけ 変えても かなの ふりがなだけ 前の 色の まま のこり、
+   みどり・あかの 面の 上で 実測 2.19 に なって いました */
+.kb .kb-key.hit-ok .kb-up, .kb .kb-key.hit-ok .kb-kana, .kb .kb-key.hit-ok .kb-name,
+.kb .kb-key.hit-miss .kb-up, .kb .kb-key.hit-miss .kb-kana, .kb .kb-key.hit-miss .kb-name,
+.kb.shift-on .kb-key[data-code^="Shift"] .kb-name { color: inherit; }
+.kb.shift-on .kb-key[data-code^="Shift"] { background: var(--primary-deep); color: var(--primary-ink); }
 
 /* にがてな キーの ヒートマップ（きろく画面）。
    色の こさ だけでは わからない 子の ために、キーを 指で さわると 数も 出ます（title） */
@@ -1524,6 +1615,7 @@ body.root-bump .view { animation: bump .3s ease; }
     animation-duration: .001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
   }
 
   /* うごきを 飛ばすのは「最後の すがたを すぐ 出す」ためで、
@@ -1533,6 +1625,81 @@ body.root-bump .view { animation: bump .3s ease; }
      ここは アニメーションを つかわず、そのまま 出して
      js/play.js の 時間で 消します */
   .lap-flash.is-on, .lap-flash.is-full.is-on { animation: none; opacity: 1; }
+}
+
+/* ---------------------------------------------------------------- ハイコントラスト
+
+   Windows の「ハイコントラスト（コントラストテーマ）」を つかって いる 児童の
+   画面では、**地の 色が ぜんぶ 無効に されます**。
+   Typa は「つぎに 押す キー」を 地の 色で 出して いるので、
+   その ままだと **どこを 押せば いいのか 分からなく なります**。
+   色の かわりに、OS が 用意した 色（Highlight / ButtonText）で
+   わくと 文字を 引きなおします。 */
+@media (forced-colors: active) {
+  /* 押せる ものは、地が 消えても わくで 分かるように します */
+  .btn, .nav-btn, .kb-key, .switch-box, .tile, .row-btn {
+    border: 2px solid ButtonText;
+  }
+  /* つぎに 押す キー。OS の 選択色で ぬり、ふとい わくを 足します */
+  .kb .kb-key.is-next {
+    background: Highlight; color: HighlightText;
+    border: 3px solid Highlight; outline: 2px solid HighlightText; outline-offset: -4px;
+  }
+  .kb .kb-key.is-next .kb-up,
+  .kb .kb-key.is-next .kb-kana,
+  .kb .kb-key.is-next .kb-name,
+  .kb .kb-key.is-next .kb-main { color: HighlightText; forced-color-adjust: none; }
+  /* ○×は 色が 消えても 分かるよう、わくの 太さで 分けます */
+  .kb .kb-key.hit-ok { border: 4px double ButtonText; }
+  .kb .kb-key.hit-miss { border: 4px dashed ButtonText; }
+  /* いま えらばれて いる タブ */
+  .nav-btn.is-on { background: Highlight; color: HighlightText; }
+  /* 指の 色分けは 地の 色でしか 出せないので、下の わくで つなぎます。
+     色の 区別は つきませんが、「ここで 指が かわる」は 見えます */
+  .kb.show-finger .kb-key { border-bottom: 5px solid ButtonText; }
+  .kb.show-finger .kb-key.is-home { outline: 2px dotted ButtonText; outline-offset: -5px; }
+  /* かざりの かげは 消えるので、わくで 面の 切れ目を 出します */
+  .card, .play-stage { border: 1px solid CanvasText; }
+  .update-bar { border: 2px solid ButtonText; }
+}
+
+/* ---------------------------------------------------------------- あたらしい 版の おしらせ
+
+   新しい 版が 待って いる ときだけ 出ます。**押されるまで 切りかわりません。**
+   打って いる とちゅうでも じゃまに ならないよう、下部バーの すぐ 上に
+   横いっぱいの 帯で 出し、「あとで」も えらべる ようにして います。 */
+.update-bar {
+  position: fixed; z-index: 60;
+  left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right));
+  bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 10px);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px;
+  background: var(--surface); color: var(--text);
+  border: 2px solid var(--primary-deep); border-radius: var(--radius);
+  box-shadow: var(--shadow-lift);
+  padding: 10px 14px;
+}
+.update-bar .update-text { flex: 1; min-width: 140px; font-weight: 800; font-size: .95rem; }
+.update-bar .btn { min-height: 44px; margin: 0; padding: 8px 16px; font-size: .92rem; }
+
+/* ---------------------------------------------------------------- 印刷
+
+   Typa は 印刷して つかう アプリでは ありませんが、
+   先生が ローマ字ひょうを 紙に する ことは あります。
+   そのとき 画面に はりついた ボタンや 帯が 上に かぶって 出ないように します。
+   （更新の 帯・トーストのような **あとから 足した 固定要素**にも
+   .no-print を 付けて ここで 消します） */
+@media print {
+  @page { size: A4 portrait; margin: 12mm; }
+  body {
+    background: #fff; color: #000;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    padding-bottom: 0; min-height: 0;
+  }
+  .navbar, .brand, .toast-area, .fx-layer, .edge-hint,
+  .update-bar, .no-print, .btn { display: none !important; }
+  .view { padding: 0; }
+  .card, .rt-table, table { break-inside: avoid; }
+  a[href]::after { content: ""; }
 }
 
 /* たてに ゆとりの ある 画面では 練習の お題を もっと 大きく */

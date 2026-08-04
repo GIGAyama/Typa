@@ -3,6 +3,57 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=yes">
+
+<!-- ▼ 安全のための せいげん（Content-Security-Policy）
+
+     Typa は 外の サイトから 何も 読まず、どこへも おくりません。
+     その ことを ブラウザに 宣言して、まんいち 中身が すりかわっても
+     外への つながりが できないように します。
+
+     ・script-src 'self' … 外の スクリプトも、この HTML の 中に 直接 書いた
+       <script> も、onclick= も 動きません。だから 本体は ぜんぶ js/ の
+       ファイルに 分けて あり、インストールの 合図も install-hook.js に して
+       あります（下を 見て ください）。ここは しめた ままに します。
+     ・connect-src 'self' … 通信は しません。'self' も 実さいには つかいません。
+
+     ⚠️ style-src に だけ 'unsafe-inline' が 入って います。理由が あります。
+        キーボードの 指の 色分けは、キー1つ ずつに style="--finger: …" を
+        書いて 出して います（app.js・play.js・hands.js の 6か所）。
+        style-src 'self' だけに すると これが ぜんぶ 止まり、
+        **画面は ふつうに 出るのに 指の 色分けだけが 黙って 消えます**。
+        エラーも 出ないので 気づけません（実さいに 入れて 走らせて 分かりました。
+        コンソールに 27件 出ました）。
+        script-src が しまって いれば、スタイルの インラインから 情報が
+        持ち出される 経路は ありません。GIGA Standard v5 §2-13 の 見本も
+        style-src には 'unsafe-inline' を 置いて います。
+
+     ⚠️ frame-ancestors は ここには 書けません。
+        <meta> で 書いても **無視され**、コンソールに 警告が 出るだけです。
+        ほかの サイトへの うめこみを 止めるには HTTP ヘッダーが 要りますが、
+        GitHub Pages では 足せません。独自ドメインや CDN を はさむ ときに
+        サーバー側で `frame-ancestors 'self'` を 足して ください。 -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self';
+  style-src 'self' 'unsafe-inline';
+  img-src 'self' data:;
+  font-src 'self';
+  connect-src 'self';
+  worker-src 'self';
+  manifest-src 'self';
+  object-src 'none';
+  base-uri 'self';
+  form-action 'self';
+">
+
+<!-- ① インストールの 合図を いちばん 先に 受け取ります。
+     Chrome は 条件が そろうと すぐに beforeinstallprompt を 出すので、
+     19本の スクリプトの さいごに ある app.js で 受けて いた ころは
+     通信が おそい 端末で 合図を 取りこぼし、「ホーム画面に 入れる」ボタンが
+     出ない ことが ありました。CSP に 'unsafe-inline' を 足さずに すむよう、
+     この HTML の 中では なく 小さな 外の ファイルにして 同期で 読みます。 -->
+<script src="./install-hook.js"></script>
+
 <title>Typa（タイパ） — タイピングれんしゅう</title>
 <meta name="description" content="小学生の Chromebook のための タイピング学習アプリ。どの指で どのキーを 押すかを 見ながら、ローマ字入力と ショートカットキーを 練習できます。">
 <meta name="color-scheme" content="light dark">
@@ -18,7 +69,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Typa">
-<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<!-- ⚠️ apple-touch-icon には 透明を ふくむ 画像を 指しません。
+     iOS は 透明な ところを 黒で うめる ため、ホーム画面で アイコンの
+     四すみ だけが 黒く 出ます。この 画像は 下地を はしまで のばして
+     あり、透明は 0% です（icons/make_icons.py の mode='apple'）。 -->
+<link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
 
 <link rel="stylesheet" href="./css/style.css">
 <!-- 見た目の たのしさと 階層（ヒーロー・ひきだし・アニメーション）。

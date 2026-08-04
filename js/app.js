@@ -42,6 +42,10 @@
 
   let view = null;
   let installPrompt = null;
+  /** 更新の おしらせ。「押されたか どうか」だけを 見て 読みこみ直します */
+  let userAskedUpdate = false;
+  let reloading = false;
+  let updateShown = false;
 
   /** チャレンジ画面で えらんで いる 中身（画面を いききしても のこします） */
   const challengePick = { pool: 'word', seconds: 60 };
@@ -2473,10 +2477,15 @@
       });
     });
 
+    // ボタンは「案内できる ときだけ」出します。出せない ボタンを おいて おくと
+    // 「押しても 何も 起きない」と 言われます。
+    // ただし **押したときの 処理は いつも 付けて** おきます。
+    // せってい画面を ひらいた あとで 合図が 来る ことが あるためです。
     const install = $('install-btn');
-    if (install && installPrompt) {
-      install.hidden = false;
+    if (install) {
+      install.hidden = !installPrompt;
       install.addEventListener('click', async () => {
+        if (!installPrompt) return;
         install.hidden = true;
         installPrompt.prompt();
         await installPrompt.userChoice;
@@ -2704,18 +2713,118 @@
     });
     if (deep) T.Nav.go(deep, {});
 
-    global.addEventListener('beforeinstallprompt', e => {
-      e.preventDefault();
-      installPrompt = e;
+    // ■ インストールの 合図は install-hook.js が <head> の いちばん 上で 受けて います
+    //   app.js は 19本目の スクリプトなので、ここで はじめて listener を 付けると
+    //   通信が おそい 端末で 合図に 間に あわず、ボタンが 出ませんでした。
+    //   ここでは「もう 受け取って いるか」を 見て、あとから 来る ぶんも 拾います。
+    installPrompt = global.__pwaInstallPrompt || null;
+    if (installPrompt) showInstallButton();
+    global.addEventListener('pwa-install-available', () => {
+      installPrompt = global.__pwaInstallPrompt;
+      showInstallButton();
+    });
+    global.addEventListener('pwa-installed', () => {
+      installPrompt = null;
       const btn = $('install-btn');
-      if (btn) btn.hidden = false;
+      if (btn) btn.hidden = true;
     });
 
-    if ('serviceWorker' in navigator) {
-      global.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').catch(() => { /* オフライン対応が なくても 動きます */ });
+    startServiceWorker();
+  }
+
+  function showInstallButton() {
+    const btn = $('install-btn');
+    if (btn) btn.hidden = false;
+  }
+
+  /**
+   * Service Worker の 登録と、あたらしい 版の おしらせ。
+   *
+   * ■ load を 待つだけ では 登録されない ことが あります
+   * この 関数は 画面を 組み立てた あと（boot の 中）で よばれます。
+   * その ときには load が **もう おわって いる** ことが あり、
+   * `addEventListener('load', …)` は 二度と よばれません。
+   * リスナーは 付くので エラーにも ならず、**黙って 登録されない** 形に なります。
+   * だから readyState を 見て 分けます。
+   */
+  function startServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+    const start = () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then(watchForUpdate)
+        .catch(() => { /* オフライン対応が なくても 動きます */ });
+    };
+    if (document.readyState === 'complete') start();
+    else global.addEventListener('load', start, { once: true });
+  }
+
+  /**
+   * あたらしい 版が 待って いたら おしらせを 出します。
+   * **押されるまで 切りかえません。**
+   */
+  function watchForUpdate(reg) {
+    if (!reg) return;
+
+    // ⚠️ controllerchange は、はじめて ひらいた ときにも 飛んで きます
+    //    （sw.js の clients.claim() で ページが 管理下に 入る ため）。
+    //    そのまま 受けると **初回訪問が かならず 1回 リロードされます**。
+    //    打ちかけの お題や ならべた ばかりの 画面が 消えるので、
+    //    見るのは「利用者が 押したか どうか」だけに します。
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!userAskedUpdate || reloading) return;
+      reloading = true;
+      location.reload();
+    });
+
+    const notify = (worker) => {
+      if (!worker || updateShown) return;
+      updateShown = true;
+      showUpdateBar(() => {
+        userAskedUpdate = true;
+        worker.postMessage({ type: 'SKIP_WAITING' });
       });
-    }
+    };
+
+    reg.addEventListener('updatefound', () => {
+      const sw = reg.installing;
+      if (!sw) return;
+      sw.addEventListener('statechange', () => {
+        // controller が いる ＝ はじめての インストールでは なく 更新。
+        // 初回で おしらせを 出すと「入れた 直後に 新しい 版が あります」と
+        // 出て しまい、児童も 先生も とまどいます。
+        if (sw.state === 'installed' && navigator.serviceWorker.controller) notify(sw);
+      });
+    });
+    // まえに ひらいた ときに もう 入って いた ぶんも 拾います
+    if (reg.waiting && navigator.serviceWorker.controller) notify(reg.waiting);
+  }
+
+  /** 画面の 下に「あたらしい ばんが あります」の 帯を 出します */
+  function showUpdateBar(onAccept) {
+    if ($('update-bar')) return;
+    const bar = document.createElement('div');
+    bar.id = 'update-bar';
+    bar.className = 'update-bar no-print';
+    bar.setAttribute('role', 'status');
+    const text = document.createElement('span');
+    text.className = 'update-text';
+    text.textContent = 'あたらしい ばんが あります';
+    const yes = document.createElement('button');
+    yes.type = 'button';
+    yes.className = 'btn btn-primary update-yes';
+    yes.textContent = 'さいしんに する';
+    const later = document.createElement('button');
+    later.type = 'button';
+    later.className = 'btn btn-ghost update-later';
+    later.textContent = 'あとで';
+    yes.addEventListener('click', () => {
+      yes.disabled = true;
+      yes.textContent = 'かえて います…';
+      onAccept();
+    });
+    later.addEventListener('click', () => bar.remove());
+    bar.append(text, yes, later);
+    document.body.appendChild(bar);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

@@ -1,0 +1,9 @@
+# Typa は 実行時の 依存が 0 個（CDN も npm も つかって いません）なので、
+# 見張るのは GitHub Actions の アクションだけです。
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 3
