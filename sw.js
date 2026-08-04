@@ -27,11 +27,13 @@
  *   キャッシュまで巻き添えで消え、それらがオフラインで起動しなくなっていた。
  */
 const CACHE_PREFIX = 'typa-';
-const APP_VERSION = 'v18';   // ← リリースごとに必ず上げる
+const APP_VERSION = 'v19';   // ← リリースごとに必ず上げる
 const VERSION = CACHE_PREFIX + APP_VERSION;
 const ASSETS = [
   './',
   './index.html',
+  './offline.html',
+  './install-hook.js',
   './css/style.css',
   './css/fx.css',
   './js/icons.js',
@@ -65,10 +67,19 @@ const ASSETS = [
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(VERSION)
-      // 1つでも 取れないと 全部 失敗して しまうので、1件ずつ 入れます
-      .then(cache => Promise.all(ASSETS.map(url => cache.add(url).catch(() => null))))
-      .then(() => self.skipWaiting())
+      // 1つでも 取れないと 全部 失敗して しまうので、1件ずつ 入れます。
+      // cache: 'reload' で、ブラウザの 古い ひかえでは なく
+      // ネットワークから 取り直します（版を 上げたのに 中身が 古い、を ふせぎます）
+      .then(cache => Promise.all(ASSETS.map(
+        url => cache.add(new Request(url, { cache: 'reload' })).catch(() => null))))
   );
+  // ■ ここで skipWaiting() は しません
+  //   まえは していました。そのため 版を 上げると、児童が 打って いる
+  //   まっさい中でも 断りなく 新しい 版に 入れかわって いました。
+  //   実測でも、版を 上げて 3秒 待つ あいだに 勝手に 切りかわりました。
+  //   打ちかけの お題や、出した ばかりの けっかが 消えます。
+  //   新しい 版は「待つ」だけに して、画面の おしらせを 押して もらってから
+  //   切りかえます（js/app.js の 更新おしらせ を 見て ください）。
 });
 
 self.addEventListener('activate', event => {
@@ -100,7 +111,13 @@ self.addEventListener('fetch', event => {
           caches.open(VERSION).then(cache => cache.put('./index.html', copy));
           return res;
         })
-        .catch(() => caches.match('./index.html').then(hit => hit || caches.match('./')))
+        // 圏外の ときは 手もとの ひかえ。それも 無い ときは
+        // 「こわれた」と 思わせない ための offline.html を 出します
+        .catch(async () => (await caches.match('./index.html'))
+          || (await caches.match('./'))
+          || (await caches.match('./offline.html'))
+          || new Response('<!doctype html><meta charset="utf-8"><p>いま インターネットに つながって いません。</p>',
+            { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }))
     );
     return;
   }
@@ -118,4 +135,12 @@ self.addEventListener('fetch', event => {
       return hit || network;
     })
   );
+});
+
+/*
+ * 画面から「さいしんに する」を 押された ときだけ、待って いる 版に 切りかえます。
+ * 押されない かぎり、いま 動いて いる 版の まま です。
+ */
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });

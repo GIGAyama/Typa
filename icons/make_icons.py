@@ -31,12 +31,41 @@ def rounded_rect(x, y, w, h, r):
     return inside
 
 
-def build(size, maskable=False):
-    """1枚ぶんの RGBA ピクセルを作ります。"""
-    # maskable は 円に切り抜かれても欠けないよう、図を中央 78% に収めます
-    pad = size * 0.11 if maskable else 0.0
-    inner = size - pad * 2
-    plate = rounded_rect(pad, pad, inner, inner, inner * (0.30 if not maskable else 0.22))
+def build(size, mode='any'):
+    """1枚ぶんの RGBA ピクセルを作ります。
+
+    mode は 3つあります。
+
+      'any'      角丸の板。板の外は透明。ブラウザのタブや一覧に出るふつうのアイコン。
+      'maskable' Android が円などに切り抜く版。**下地を画像のはしまで伸ばします**。
+                 図（Tとキー）だけを中央 78% に収め、切り抜かれても欠けないようにします。
+      'apple'    iOS のホーム画面用。**透明をいっさい含めません**。
+
+    ■ maskable で下地をはしまで伸ばす理由
+    以前は下地も中央 78% に縮めて余白（透明）を付けていました。図は欠けませんが、
+    切り抜きの内側が余白で埋まるため、**ほかのアプリより一回り小さく見えます**
+    （実測：画像の 42% が透明）。maskable の余白は OS が用意するもので、
+    アプリが用意するものではありません。
+
+    ■ apple で透明を含めない理由
+    iOS は透明部分を黒でうめます。角丸の外が透明な画像を apple-touch-icon に
+    指すと、**ホーム画面でアイコンの四隅だけが黒く出ます**。
+    角丸は iOS が自分で付けるので、こちらは四角いまま渡すのが正解です。
+    """
+    if mode == 'maskable':
+        # 下地は全面。図だけを中央 78% に収めます
+        plate = lambda px, py: True
+        pad = size * 0.11
+        inner = size - pad * 2
+    elif mode == 'apple':
+        # 下地は全面。図は 'any' と同じ大きさ（iOS は円で切り抜かないため）
+        plate = lambda px, py: True
+        pad = 0.0
+        inner = size
+    else:
+        pad = 0.0
+        inner = size
+        plate = rounded_rect(pad, pad, inner, inner, inner * 0.30)
 
     # T の形（たて棒とよこ棒）
     bar_h = inner * 0.13
@@ -111,15 +140,17 @@ def write_png(path, rows, size):
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     targets = [
-        ('favicon-32.png', 32, False),
-        ('icon-192.png', 192, False),
-        ('icon-512.png', 512, False),
-        ('apple-touch-icon.png', 180, True),   # iOS は角を自分で丸めるので余白つき
-        ('icon-maskable-192.png', 192, True),
-        ('icon-maskable-512.png', 512, True),
+        ('favicon-32.png', 32, 'any'),
+        ('icon-192.png', 192, 'any'),
+        ('icon-512.png', 512, 'any'),
+        # iOS は角を自分で丸めます。こちらが角を丸めて外を透明にすると、
+        # その透明が黒でうまり、ホーム画面で四隅が黒く出ます
+        ('apple-touch-icon.png', 180, 'apple'),
+        ('icon-maskable-192.png', 192, 'maskable'),
+        ('icon-maskable-512.png', 512, 'maskable'),
     ]
-    for name, size, maskable in targets:
-        write_png(os.path.join(here, name), build(size, maskable), size)
+    for name, size, mode in targets:
+        write_png(os.path.join(here, name), build(size, mode), size)
 
 
 if __name__ == '__main__':
