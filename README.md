@@ -1243,12 +1243,22 @@ DOM にもさわらないので、node からそのまま呼べます（`global.
 
 ```
 Typa/
-├── index.html                アプリの外枠（下部ナビゲーションバー）
+├── index.html                アプリの外枠（下部ナビゲーションバー）・CSP
+├── install-hook.js           「ホーム画面に入れる」の合図を head の先頭で受ける
+├── offline.html              圏外で本体も手もとに無いときに出る画面
 ├── manifest.webmanifest      PWA の設定
 ├── sw.js                     オフライン対応
+├── LICENSE                   MIT
+├── MANUAL.md                 先生向け（専門用語ゼロ・「うまくいかないとき」つき）
+├── AUDIT.md                  GIGA Standard v5 の監査結果（実測値と、測っていないもの）
 ├── css/style.css             デザイントークンと全画面のスタイル
 ├── css/fx.css                たのしさと階層（ヒーロー・ひきだし・アニメーション）
 ├── icons/                    アイコン（make_icons.py で生成）
+├── scripts/
+│   ├── check-project.mjs     品質ゲート（CI と同じもの。npm run check）
+│   ├── self-test.mjs         検査そのものが動いているかを、わざと壊して確かめる
+│   ├── lib/giga-v5-checks.mjs  Part I の検査（他リポジトリと共通・差しかえ可能）
+│   └── measure/              実ブラウザで測る道具（playwright）
 ├── tools/
 │   ├── check-lessons.js      お題がほんとうに打てるかを確かめる
 │   ├── check-progress.js     「ひとまわり」のつみあげが正しいかを確かめる
@@ -1286,6 +1296,59 @@ Typa/
 python3 icons/make_icons.py
 ```
 
+`apple-touch-icon` と maskable は **下地を画像のはしまで伸ばした、透明を含まない版**を
+出します。理由は `icons/make_icons.py` の `build()` の説明を読んでください。
+
+---
+
+## 品質ゲートと実測
+
+### 走らせかた
+
+```bash
+npm run check              # 静的な検査。CI（pull_request と push）で走るのと同じもの
+npm run check:self-test    # 検査そのものが動いているかを確かめる
+```
+
+`npm run check` は 2つを合成します。
+
+| | 中身 | 置き場所 |
+|---|---|---|
+| Part I の検査 | GIGA Standard v5 の共通の決まりごと（32件） | `scripts/lib/giga-v5-checks.mjs` |
+| アプリの中身の検査 | お題が打てるか、記録の計算が合っているか（6件） | `tools/check-*.js` |
+
+Part I の検査は**他のリポジトリと共通の中身**です。正本が更新されたら
+ファイルごと差しかえられる形にしてあります。Typa 固有の検査はここに書かず、
+`tools/` に置いてください。
+
+### 「0件でした」を信じない
+
+`npm run check:self-test` は、リポジトリを一時フォルダに写して
+検査ごとにわざと 1か所こわし、**その検査がちゃんと落ちるか**を見ます。
+落ちなければ、その検査は何も見ていません。
+
+この確認をしたことで、検査そのものの不具合が実際に 3件見つかっています
+（`AUDIT.md` §2-6）。検査を足したら、`scripts/self-test.mjs` の `BREAKAGES` に
+こわしかたも足してください。足し忘れると self-test が警告します。
+
+### 実ブラウザで測る
+
+```bash
+npm i -D playwright && npx playwright install chromium
+npm run measure            # コントラスト・タップ44px・320px幅・JSエラー（4画面サイズ × 明暗）
+npm run measure:typing     # 打っているとちゅうにしか出ない色（○×・つぎのキー・シフト中）
+npm run measure:pwa        # 更新・圏外・他アプリのキャッシュ
+```
+
+読むだけでは分からないことがあります。とくに次の 3つは、
+**走らせないと絶対に気づけません**でした。
+
+- CSP を入れると、`style="--finger: …"` が止まって**指の色分けだけが黙って消える**
+  （画面はふつうに出るので、ビルドも静的解析も通ります）
+- 打ったしゅんかんにしか出ない色は、画面を歩くだけの検査では 1つも見えません
+- Playwright の `context.setOffline(true)` は **Service Worker からの通信に効きません**。
+  圏外の検査はサーバーそのものを止めて行います
+
 ---
 
 ## 公開のしかた（GitHub Pages）
@@ -1295,6 +1358,27 @@ python3 icons/make_icons.py
 2. `https://gigayama.github.io/Typa/` が開くことを確認する
 
 サーバー側の準備は要りません。静的ファイルを置くだけで動きます。
+
+### リリースの手順（この順で）
+
+1. **`sw.js` の `APP_VERSION` を上げる。**
+   上げないと、児童の端末に新しい版が届きません。いちばん多い抜けです
+2. 先読みするファイルを増やした／減らしたなら、`sw.js` の `ASSETS` も直す
+3. `npm run check` を通す（CI と同じもの）
+4. 見た目やキーボードに手を入れたなら `npm run measure` と `npm run measure:typing` も通す
+5. push する
+
+児童の端末では、新しい版は**すぐには切りかわりません**。
+「あたらしい ばんが あります／さいしんに する」の帯が出て、
+**押されたときだけ**切りかわります。打っているとちゅうに
+打ちかけのお題や出したばかりの結果が消えないようにするためです。
+
+### `frame-ancestors` について
+
+`index.html` の CSP には `frame-ancestors` を書いていません。
+`<meta>` で書いても**無視され**、読みこみのたびにコンソールへ警告が出るだけです。
+他サイトへの埋めこみを止めるには HTTP ヘッダーが要りますが、GitHub Pages では足せません。
+独自ドメインや CDN をはさむときは、サーバー側で `frame-ancestors 'self'` を足してください。
 
 ---
 

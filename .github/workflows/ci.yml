@@ -1,0 +1,20 @@
+name: check
+
+# pull_request と push の 両方で 走らせます。
+# push だけに すると、PR の 時点で 落ちて いることに 気づけません。
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      # Typa は 実行時の 依存が 0 個なので npm install は いりません
+      - name: 品質ゲート（Part I の 検査 と アプリの 中身の 検査）
+        run: npm run check
