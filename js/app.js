@@ -38,7 +38,7 @@
    * アプリの ばんごう。**ここ 1か所だけ**に 書きます。
    * せってい画面の 表示にも、学習ログの appVersion にも これを つかいます。
    */
-  const APP_VERSION = '4.2.0';
+  const APP_VERSION = '4.2.1';
 
   let view = null;
   let installPrompt = null;
@@ -2381,8 +2381,15 @@
         <p class="lead">${icon('back')} 読みこむ</p>
         <p class="muted"><b>いまの きろくは 消えて</b>、ファイルの きろくに なります。
         もとには もどせません。読みこむ 前に、いまの きろくを 書き出して おくと あんしんです。</p>
+        <!-- ⚠️ この input に hidden を つけては いけません。
+             hidden は display:none と 同じ なので、Tab の 順から 外れます。
+             まえは そう なって いて、**マウスでしか「ファイルを えらぶ」を
+             押せません** でした（キーボードだけで 使う 子・先生は、
+             書き出した きろくを 読みこむ 手が まったく ありませんでした）。
+             見た目だけ 消して、Tab には のこします（css の .file-pick-input）。
+             フォーカスの しるしは となりの ラベルに 出します。 -->
+        <input type="file" id="bk-file" accept="application/json,.json" class="file-pick-input">
         <label class="btn btn-outline" for="bk-file">${icon('grid')} ファイルを えらぶ</label>
-        <input type="file" id="bk-file" accept="application/json,.json" hidden>
         <p class="bk-error" id="bk-error" hidden></p>
         <div id="bk-preview" hidden>
           <ul class="bk-summary" id="bk-summary"></ul>

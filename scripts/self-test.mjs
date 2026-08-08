@@ -48,6 +48,10 @@ const BREAKAGES = {
   D_REDUCED_MOTION: (d) => edit(d, 'css/style.css', (s) => s.replace('animation-duration: .001ms !important;', 'animation-duration: 0 !important;')),
   D_FORCED_COLORS:  (d) => forEachCss(d, (s) => s.replace(/forced-colors\s*:\s*active/g, 'min-width: 1px')),
   D_RT_COLOR:       (d) => edit(d, 'css/style.css', (s) => s + '\nrt { color: #666; }\n'),
+  // 「ファイルを えらぶ」が マウスでしか 押せなかった 形に もどします
+  F_LABEL_FOR_TABBABLE: (d) => edit(d, 'js/app.js', (s) =>
+    s.replace('<input type="file" id="bk-file" accept="application/json,.json" class="file-pick-input">',
+      '<input type="file" id="bk-file" accept="application/json,.json" hidden>')),
   E_MANIFEST_ID:    (d) => editJson(d, 'manifest.webmanifest', (j) => { j.scope = './'; j.start_url = './'; }),
   E_ICONS:          (d) => editJson(d, 'manifest.webmanifest', (j) => { j.icons = j.icons.filter((i) => !(i.purpose || '').includes('maskable')); }),
   E_SW_CACHE_SCOPE: (d) => edit(d, 'sw.js', (s) => s.replace(/\.filter\(k => k\.startsWith\(CACHE_PREFIX\) && k !== VERSION\)/, '.filter(k => k !== VERSION)')),

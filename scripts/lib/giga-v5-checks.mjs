@@ -306,6 +306,50 @@ export const CHECKS = [
       return { ok: bad.length === 0, detail: bad };
     },
   },
+  {
+    id: 'F_LABEL_FOR_TABBABLE',
+    title: '<label for> の さす 部品が Tab の 順から 外れて いない',
+    /*
+     * F3（キーボードのみで 全機能に 到達）が 静的に 見える ただ 1つの 形。
+     *
+     * <label class="btn" for="x">えらぶ</label>
+     * <input type="file" id="x" hidden>          ← これ
+     *
+     * label は それ自身 Tab に 乗りません。さす 先が hidden
+     * （＝ display:none）だと、**マウスでしか 押せない ボタン**に なります。
+     * ビルドも 静的解析も 通り、画面も ふつうに 出るので 気づけません。
+     * 実さいに Typa の「ファイルを えらぶ」が この 形で、
+     * キーボードだけの 人は 書き出した きろくを 読みこむ 手が
+     * まったく ありませんでした（scripts/measure/keyboard.mjs で 見つけました）。
+     *
+     * 見えなく する こと 自体は 問題では ありません。
+     * position:absolute + opacity:0 なら Tab には のこります。
+     * **hidden / display:none だけ**を 落とします。
+     */
+    run: (root) => {
+      const bad = [];
+      const sources = ['index.html', ...listFiles(root, 'js', '.js')];
+      for (const rel of sources) {
+        const src = read(root, rel);
+        if (src === null) continue;
+        const wanted = new Set();
+        for (const m of src.matchAll(/<label[^>]*\sfor=["']([^"']+)["']/g)) wanted.add(m[1]);
+        if (!wanted.size) continue;
+        for (const id of wanted) {
+          const esc = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const re = new RegExp(`<(input|select|textarea|button)\\b[^>]*\\bid=["']${esc}["'][^>]*>`, 'g');
+          for (const m of src.matchAll(re)) {
+            const tag = m[0];
+            if (/\shidden(\s|>|=)/.test(tag) || /display\s*:\s*none/.test(tag)) {
+              bad.push(`${rel}: <label for="${id}"> の さす ${m[1]} が Tab の 順から 外れて います`
+                + '（hidden／display:none では なく、position:absolute + opacity:0 で 見えなく します）');
+            }
+          }
+        }
+      }
+      return { ok: bad.length === 0, detail: bad };
+    },
+  },
 
   {
     id: 'E_MANIFEST_ID',
