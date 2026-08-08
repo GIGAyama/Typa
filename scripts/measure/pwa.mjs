@@ -27,7 +27,7 @@
  * リポジトリには さわりません。一時フォルダに 写した ほうの sw.js を
  * 書きかえます。
  */
-import { chromium } from 'playwright';
+import { launchBrowser } from './launch.mjs';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -60,7 +60,7 @@ const say = (ok, label, extra = '') => { if (!ok) ng++; console.log(`${ok ? '✅
 startServer();
 await wait(900);
 
-const browser = await chromium.launch();
+const browser = await launchBrowser();
 const ctx = await browser.newContext();
 const page = await ctx.newPage();
 let loads = 0;

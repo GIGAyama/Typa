@@ -1291,6 +1291,15 @@ html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1c2a3d
 .switch input:focus-visible + .switch-box { outline: 3px solid var(--primary-deep); outline-offset: 2px; }
 .switch-label { font-size: .98rem; font-weight: 700; }
 
+/* ファイルを えらぶ ボタン（きろくを もちだす 画面）。
+   ブラウザが 出す「ファイルが 選択されて いません」の 見た目を 消しますが、
+   **hidden や display:none には しません。** それを すると Tab の 順から
+   外れ、マウスの 無い 人には 押す 手が なく なります。
+   上の .switch と 同じで、見えない 本体に フォーカスを のこし、
+   しるしは となりの 見える ラベルに 出します。 */
+.file-pick-input { position: absolute; opacity: 0; width: 0; height: 0; }
+.file-pick-input:focus-visible + .btn { outline: 3px solid var(--primary); outline-offset: 2px; }
+
 /* きろくを けす ボタン。まちがえて 押しても すぐには 消えません（2だんかい） */
 .btn-danger { color: var(--ng); background: var(--surface); }
 .btn-danger-solid { background: var(--ng); color: #fff; }

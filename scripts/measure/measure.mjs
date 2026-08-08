@@ -32,7 +32,7 @@
  * 打って いる とちゅうにしか 出ない 色（○×の しるし・つぎの キー・シフト中）は
  * この スクリプトでは 出ません。scripts/measure/typing.mjs で 測ります。
  */
-import { chromium } from 'playwright';
+import { launchBrowser } from './launch.mjs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -192,7 +192,7 @@ const server = spawn(process.execPath, [path.join(HERE, 'server.mjs'), path.reso
 await new Promise((s) => setTimeout(s, 900));
 
 const total = { contrast: 0, tap: 0, overflow: 0, errors: 0 };
-const browser = await chromium.launch();
+const browser = await launchBrowser();
 for (const [label, viewport, scheme] of VIEWPORTS) {
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: 2, colorScheme: scheme });
   const page = await ctx.newPage();

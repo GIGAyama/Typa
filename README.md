@@ -1410,16 +1410,39 @@ npm i -D playwright && npx playwright install chromium
 npm run measure            # コントラスト・タップ44px・320px幅・JSエラー（4画面サイズ × 明暗）
 npm run measure:typing     # 打っているとちゅうにしか出ない色（○×・つぎのキー・シフト中）
 npm run measure:pwa        # 更新・圏外・他アプリのキャッシュ
+npm run measure:keyboard   # キーボードだけで全機能に届くか（12画面を Tab で歩く）
+npm run measure:perf       # LCP・CLS・初回に届く大きさ
 ```
 
-読むだけでは分からないことがあります。とくに次の 3つは、
+ブラウザをダウンロードできないネットワーク（`cdn.playwright.dev` が塞がれている）では、
+**手もとに Chromium があっても playwright が版ちがいだと使ってくれず**、
+実測がまるごとできません。その場合は場所を教えます。
+
+```bash
+CHROME_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run measure
+```
+
+読むだけでは分からないことがあります。とくに次の 4つは、
 **走らせないと絶対に気づけません**でした。
 
 - CSP を入れると、`style="--finger: …"` が止まって**指の色分けだけが黙って消える**
   （画面はふつうに出るので、ビルドも静的解析も通ります）
 - 打ったしゅんかんにしか出ない色は、画面を歩くだけの検査では 1つも見えません
+- `<label for="x">` ＋ `<input id="x" hidden>` は、**マウスでしか押せないボタン**になります。
+  見た目はふつうのボタンです。Tab で歩いてみるまで分かりません（`AUDIT.md` §8-1）
 - Playwright の `context.setOffline(true)` は **Service Worker からの通信に効きません**。
   圏外の検査はサーバーそのものを止めて行います
+
+### 測る道具そのものも疑う
+
+`measure:keyboard` を最初に走らせたときは 24件出ましたが、
+**そのうち 23件は検査側のまちがい**でした（`cursor: pointer` の継承、
+ヘッドレスに アドレスバーがないための Tab の巻きもどり）。
+`measure:perf` は `Content-Length` を出さないサーバーで
+**「0 KB なので 300 KB 以下、合格」といううその ✅** を出していました。
+
+「0件でした」と同じくらい、**「たくさん出ました」もそのままでは信じられません。**
+0 バイトは「軽い」ではなく「測れていない」です。
 
 ---
 
@@ -1433,15 +1456,17 @@ npm run measure:pwa        # 更新・圏外・他アプリのキャッシュ
 
 ### リリースの手順（この順で）
 
-1. **`sw.js` の `APP_VERSION` を上げる。**（キャッシュの名前です。いまは `v21`）
+1. **`sw.js` の `APP_VERSION` を上げる。**（キャッシュの名前です。いまは `v22`）
    上げないと、児童の端末に新しい版が届きません。いちばん多い抜けです
-2. 中身が変わったなら `js/app.js` の `APP_VERSION` も上げる（いまは `4.2.0`）。
+2. 中身が変わったなら `js/app.js` の `APP_VERSION` も上げる（いまは `4.2.1`）。
    こちらは**人が読む版**で、「せってい →『データ』」の表示と学習ログの
    `appVersion` に出ます。`sw.js` のほうとは別の数字です
 3. 先読みするファイルを増やした／減らしたなら、`sw.js` の `ASSETS` も直す
 4. `npm run check` を通す（CI と同じもの）
 5. 見た目やキーボードに手を入れたなら `npm run measure` と `npm run measure:typing` も通す
-6. push する
+6. 画面や部品を足したなら `npm run measure:keyboard` も通す
+   （Tab で届かないボタンが増えていないか。見た目では分かりません）
+7. push する
 
 児童の端末では、新しい版は**すぐには切りかわりません**。
 「あたらしい ばんが あります／さいしんに する」の帯が出て、

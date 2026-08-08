@@ -17,3 +17,7 @@ Thumbs.db
 
 # 実測の作業あと（scripts/measure/*.mjs が書き出すもの）
 measure-out/
+
+# 実測のために ad hoc で 入れる playwright の あと
+# （実行時の 依存は 0 個なので、ロックファイルは もちません）
+package-lock.json
