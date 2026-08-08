@@ -27,7 +27,7 @@
  * style-src を しめすぎると **画面は 出るのに 色分けだけ 黙って 消えます**。
  * キーの 地の 色が 何種類 あるかを 数えて、生きて いる ことを たしかめます。
  */
-import { chromium } from 'playwright';
+import { launchBrowser } from './launch.mjs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -80,7 +80,7 @@ const server = spawn(process.execPath, [path.join(HERE, 'server.mjs'), path.reso
 await new Promise((s) => setTimeout(s, 900));
 
 let ng = 0;
-const browser = await chromium.launch();
+const browser = await launchBrowser();
 for (const scheme of ['light', 'dark']) {
   const ctx = await browser.newContext({ viewport: { width: 1366, height: 768 }, colorScheme: scheme });
   const page = await ctx.newPage();

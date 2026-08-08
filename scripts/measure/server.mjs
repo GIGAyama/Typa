@@ -34,6 +34,8 @@ http.createServer((req, res) => {
     if (err) { res.writeHead(404); return res.end('404'); }
     res.writeHead(200, {
       'Content-Type': MIME[path.extname(file)] || 'application/octet-stream',
+      // 大きさを 測る 側が とどいた バイト数を 数えられる ように 出します
+      'Content-Length': data.length,
       'Access-Control-Allow-Origin': '*',
       'Cache-Control': 'no-store',
     });
