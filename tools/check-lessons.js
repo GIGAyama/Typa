@@ -30,9 +30,9 @@ const path = require('path');
 
 // ブラウザむけの ファイルを そのまま よみこむため、window を 用意します
 global.window = global;
-require(path.join(__dirname, '..', 'src', 'romaji.js'));
-require(path.join(__dirname, '..', 'src', 'layout.js'));
-require(path.join(__dirname, '..', 'src', 'lessons.js'));
+require(path.join(__dirname, '..', 'js', 'romaji.js'));
+require(path.join(__dirname, '..', 'js', 'layout.js'));
+require(path.join(__dirname, '..', 'js', 'lessons.js'));
 
 const { Romaji, Layout, Lessons } = global.Typa;
 const LAYOUT_IDS = Object.keys(Layout.LAYOUTS);

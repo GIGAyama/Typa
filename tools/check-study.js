@@ -38,14 +38,14 @@ global.localStorage = {
   removeItem: k => { delete memory[k]; }
 };
 
-require(path.join(__dirname, '..', 'src', 'romaji.js'));
-require(path.join(__dirname, '..', 'src', 'layout.js'));
-require(path.join(__dirname, '..', 'src', 'lessons.js'));
-require(path.join(__dirname, '..', 'src', 'mastery.js'));
-require(path.join(__dirname, '..', 'src', 'store.js'));
-require(path.join(__dirname, '..', 'src', 'studyLog.js'));
-require(path.join(__dirname, '..', 'src', 'studySession.js'));
-require(path.join(__dirname, '..', 'src', 'studyStats.js'));
+require(path.join(__dirname, '..', 'js', 'romaji.js'));
+require(path.join(__dirname, '..', 'js', 'layout.js'));
+require(path.join(__dirname, '..', 'js', 'lessons.js'));
+require(path.join(__dirname, '..', 'js', 'mastery.js'));
+require(path.join(__dirname, '..', 'js', 'store.js'));
+require(path.join(__dirname, '..', 'js', 'studyLog.js'));
+require(path.join(__dirname, '..', 'js', 'studySession.js'));
+require(path.join(__dirname, '..', 'js', 'studyStats.js'));
 
 const T = global.Typa;
 const Study = T.Study;
@@ -471,7 +471,7 @@ group('11. 中断の あつかい（§5.4・§3.9）');
 
 group('12. リセットと 書き出しが 学習ログに さわらないか（§1.2）');
 {
-  require(path.join(__dirname, '..', 'src', 'backup.js'));
+  require(path.join(__dirname, '..', 'js', 'backup.js'));
 
   Object.keys(memory).forEach(k => delete memory[k]);
   memory['study.records.v1'] = JSON.stringify([build()]);
