@@ -38,7 +38,7 @@
    * アプリの ばんごう。**ここ 1か所だけ**に 書きます。
    * せってい画面の 表示にも、学習ログの appVersion にも これを つかいます。
    */
-  const APP_VERSION = '4.1.0';
+  const APP_VERSION = '4.1.1';
 
   let view = null;
   let installPrompt = null;
@@ -1072,7 +1072,13 @@
     const isBest = !!(meta.newBestKps || meta.isBestScore);
     const levelUp = !!(awarded && awarded.levelUp);
     const newBadge = !!(awarded && awarded.badges && awarded.badges.length);
-    const great = n >= 3;
+    // ★3つ ＝ **ひとまわり できた 回の ★** です。ひとまわりして いない 回の
+    // n は starsOf(r) の 見つもりで、そこには「みじかい ひとまわりでも
+    // ミス1かいまでは ゆるす」という 下ささえが きいて います。つまり
+    // **5打 打って 1かい まちがえた だけの 回も ★3つ あつかい**に なり、
+    // ★を 1つも 出して いない 画面で ひらひらだけが まって いました。
+    // 何を しても まうなら、それは もう おいわいでは なく ただの かざりです
+    const great = lapped && n >= 3;
 
     if (!(isBest || levelUp || newBadge || great || (lapped && meta.firstClear))) return;
 
@@ -1254,9 +1260,13 @@
     }
 
     // 5. よく できて いて、まだ ヒントが 強い とき … 手もとを 見ない 練習へ
+    //    その回の ★は **20打いじょう 打った 回**でしか 見ません。starsOf() には
+    //    みじかい ひとまわりむけの 下ささえ（ミス1かいまで ゆるす）が あるので、
+    //    3打で やめた 回まで「ばっちり 打てて います」に なって しまいます
     const s = T.Store.getSettings();
     const level = typeof s.assist === 'number' ? s.assist : (s.keyboard === false ? 3 : 0);
-    if (typing && stars >= 3 && level < 3 && s.assist !== 'auto' && T.Store.starsOf(r) >= 3) {
+    const solid = (r.totalKeys || 0) >= T.Store.MIN_RECORD_KEYS;
+    if (typing && stars >= 3 && level < 3 && s.assist !== 'auto' && solid && T.Store.starsOf(r) >= 3) {
       return {
         why: 'ばっちり 打てて います。つぎは ヒントを へらして、手もとを 見ないで やってみよう。',
         sub: r.course.short, title: 'めかくしで やってみる',

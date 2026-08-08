@@ -186,19 +186,34 @@
     $('sc-dst').value = '';
   }
 
+  /**
+   * つぎの 課題を 出します。
+   *
+   * ⚠️ **やめた あとに よばれる ことが あります。** 課題が できると
+   * 0.26びょう おいて ここを よぶので（completeTask）、その あいだに
+   * 「もどる」や 下の タブを おされると、画面は もう けっか画面に
+   * 入れかわって います。前は そのまま `$('sc-task').innerHTML` を 書いて
+   * いたので、**null に 書きこんで エラーで 止まって いました**
+   * （そこから 先の onFinish が よばれず、その回の きろくが 消えます）。
+   * 走って いない ときは 何も しません。
+   */
   function renderTask() {
+    if (!state.running) return;
     const task = state.tasks[state.index];
-    if (!task) return;
+    const box = $('sc-task');
+    if (!task || !box) return;
     state.attempts = 0;
-    $('sc-task').innerHTML = `
+    box.innerHTML = `
       <p class="sc-name">${T.icon('bolt')} ${esc(task.name)}</p>
       <p class="sc-instruct">${esc(task.instruct)}</p>
       <p class="sc-combo">${comboLabel(task.combo)}</p>
       <p class="sc-hint">${esc(task.hint)}</p>
       <p class="sc-judge" id="sc-judge" aria-live="polite"></p>`;
     const pct = Math.round(state.index / state.tasks.length * 100);
-    $('sc-bar').style.width = `${pct}%`;
-    $('sc-done').textContent = String(state.index);
+    const bar = $('sc-bar');
+    if (bar) bar.style.width = `${pct}%`;
+    const done = $('sc-done');
+    if (done) done.textContent = String(state.index);
     // 課題によって、どちらの らんで やるかが かわります
     const focusDst = ['sc-paste', 'sc-paste2', 'sc-del-word'].indexOf(task.id) >= 0;
     const target = focusDst ? $('sc-dst') : $('sc-src');
@@ -244,6 +259,8 @@
 
   /** 「じっさいに できたか」を たしかめます */
   function verify(task, before) {
+    // 0.03びょう おいて よばれます。その あいだに やめられて いる ことが あります
+    if (!state.running) return;
     const src = $('sc-src'), dst = $('sc-dst');
     if (!src || !dst) return;
     const source = T.Lessons.SHORTCUT_SOURCE;
@@ -304,6 +321,7 @@
 
   /** 課題を 1つ おえます。ok=false は「とばした」ので 正かいには しません */
   function completeTask(ok) {
+    if (!state.running) return;
     const task = state.tasks[state.index];
     if (!task) return;
     judge(ok, '');

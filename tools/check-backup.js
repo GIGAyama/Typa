@@ -137,6 +137,53 @@ if (dirty.ok) {
 }
 
 // ------------------------------------------------------------------
+// 3-2. ヒントの つよさ（数にも なる せってい）が おちないか
+// ------------------------------------------------------------------
+//
+// assist の きほんは 'custom'（文字）ですが、せってい画面で えらぶと
+// **0〜3 の 数**に なります。型だけを 見て いた ころは その 数が だまって
+// おちて いました。見た目の 4つの スイッチは 別に 保存されて いるので
+// 画面は そのまま 出ますが、せってい画面の えらびが 外れ、「じどう」に して
+// いた 子は **おぼえぐあいに あわせて ヒントを 下げる しくみが 止まります**。
+// 端末を うつした とたんに そうなるので、だれも 気づけません。
+
+function settingAfterImport(value) {
+  const res = Backup.parseImport(JSON.stringify({
+    app: 'Typa', schema: 1, data: { [K.settings]: { assist: value } }
+  }));
+  return res.ok ? res.clean[K.settings].assist : undefined;
+}
+
+[0, 1, 2, 3].forEach(level => {
+  ok(settingAfterImport(level) === level, `ヒントの つよさ ${level} が おちました`);
+});
+ok(settingAfterImport('auto') === 'auto', '「じどう」が おちました');
+ok(settingAfterImport('custom') === 'custom', '「じぶんで」が おちました');
+ok(settingAfterImport(9) === undefined, 'ない つよさ 9 が 取りこまれました');
+ok(settingAfterImport(-1) === undefined, 'ない つよさ -1 が 取りこまれました');
+ok(settingAfterImport(1.5) === undefined, '整数で ない つよさが 取りこまれました');
+ok(settingAfterImport('evil') === undefined, '知らない ことばの つよさが 取りこまれました');
+
+// 実さいに 書き出して 読みこんでも もどるか（1本の 道で たしかめます）
+Store.setAssist(2);
+const withAssist = Backup.parseImport(Backup.toText(Backup.buildExport('2.1.0')));
+ok(withAssist.ok === true, 'ヒントの つよさを 入れた ファイルが 読みこめません');
+if (withAssist.ok) {
+  ok(withAssist.clean[K.settings].assist === 2, '書き出して 読みこむと ヒントの つよさが もどりません');
+}
+
+// 画面の 色と キーボードの ならびも、ある ものだけ 取りこみます
+const odd = Backup.parseImport(JSON.stringify({
+  app: 'Typa', schema: 1,
+  data: { [K.settings]: { theme: 'neon', layout: 'dvorak' } }
+}));
+ok(odd.ok === true, 'せっていだけの ファイルが 読みこめません');
+if (odd.ok) {
+  ok(odd.clean[K.settings].theme === undefined, 'ない 画面の 色が 取りこまれました');
+  ok(odd.clean[K.settings].layout === undefined, 'ない キーボードの ならびが 取りこまれました');
+}
+
+// ------------------------------------------------------------------
 // 4. きろくの 中の こわれた ものを おとすか
 // ------------------------------------------------------------------
 

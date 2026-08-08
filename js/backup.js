@@ -129,6 +129,35 @@
   function num(v) { return typeof v === 'number' && isFinite(v) ? v : 0; }
 
   /**
+   * せっていの 中で、**きほんの 値と 型が ちがう ことが ある** ものだけ
+   * ここに 書きます。ほかは きほんの 値と 同じ 型なら 取りこみます。
+   *
+   * ■ どうして ひつようか
+   * ヒントの つよさ（assist）の きほんは `'custom'`（文字）ですが、
+   * じっさいには **0〜3 の 数**にも なります（せってい画面で えらんだ とき）。
+   * 型だけを 見て いた ころは、その 数が だまって おちて いました。
+   * 見た目の 4つの スイッチは 別に 保存されて いるので 画面は そのまま 出ますが、
+   * せってい画面の「ゆびの 色だけ」の えらびが 外れ、「じどう」に していた 子は
+   * つぎの 回から **おぼえぐあいに あわせて ヒントを 下げる しくみが 止まります**。
+   * 端末を うつした とたんに そうなるので、だれも 気づけません。
+   */
+  const SETTING_VALUES = {
+    assist: v => v === 'auto' || v === 'custom' ||
+      (typeof v === 'number' && Number.isInteger(v) &&
+        v >= 0 && v < T.Store.ASSIST_LEVELS.length),
+    theme: v => v === 'auto' || v === 'light' || v === 'dark',
+    layout: v => typeof v === 'string' &&
+      Object.prototype.hasOwnProperty.call(T.Layout.LAYOUTS, v)
+  };
+
+  /** その せっていに 入れて よい 値か */
+  function settingOk(name, value) {
+    const rule = SETTING_VALUES[name];
+    if (rule) return !!rule(value);
+    return typeof value === typeof T.Store.DEFAULT_SETTINGS[name];
+  }
+
+  /**
    * ファイルの 中身を しらべます。**ここでは まだ 保存しません**。
    * @param {string} text ファイルの 中身
    * @returns {{ok: true, clean: Object, summary: Object} | {ok: false, message: string}}
@@ -157,8 +186,7 @@
       const out = {};
       Object.keys(T.Store.DEFAULT_SETTINGS).forEach(name => {
         if (!Object.prototype.hasOwnProperty.call(src, name)) return;
-        const want = typeof T.Store.DEFAULT_SETTINGS[name];
-        if (typeof src[name] === want) out[name] = src[name];
+        if (settingOk(name, src[name])) out[name] = src[name];
       });
       clean[K.settings] = out;
     }
