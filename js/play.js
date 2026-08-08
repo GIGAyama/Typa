@@ -27,10 +27,22 @@
  * そこで ひとまわりの ★が 3つの ときだけ、おいわいの しるしを
  * 金色に かえて「★3つ！」と 出します。
  *
- * **それでも 練習は 止めません。** 出すのは 2びょうほどの みじかい しるし
- * だけで、つぎの ステージに すすむ かどうかは これまで どおり
- * けっか画面で 子どもが 決めます。ここで 手を 止めさせて しまうと、
- * 上の「はじまりも おわりも 決めない」が こわれます。
+ * ■ ★3つに なったら、その ばで つぎの ステージに 入れかわります
+ * ★3つ ＝ その ステージは できた、という ことです。そこで お題と
+ * ステージ名だけが 入れかわり、**そのまま 打ちつづけられます**（lapDone）。
+ *
+ * **けっか画面は はさみません。** はさむと そこで 手が 止まり、
+ * 「きょうは やめておこう」に なります。上の「はじまりも おわりも
+ * 決めない」が こわれるのは、たいてい 画面を はさんだ ときです。
+ * 入れかえるのは **お題の 切れ目**（1つ 打ち終えて、つぎを 出す 直前）なので、
+ * 打ちかけの ことばを とりあげる ことも ありません。
+ * おいわいは 入れかわった **あとの 画面**で 出します（flashCleared）。
+ * 前の 画面で 出すと、見て いる さいちゅうに 入れかわって しまいます。
+ *
+ * 行き先を 知って いるのは app.js です。ここは
+ * 「行き先が あるか」（canAdvance）と「行く」（onAdvance）だけを あずかります。
+ * 「もう1かい」「めかくし」「だんを ねらう」で 入った 回は 入れかえません
+ * （じぶんで えらんだ ことを とりあげない ため）。
  *
  * ■ 打ちまちがえても 先へは すすみません
  * まちがえた ままで すすむと、まちがった 指づかいの まま 速くなります。
@@ -96,6 +108,8 @@
     // この ステージは もう ★3つを とって いるか（おしらせの ことばを かえます）
     hadFullStars: false,
     lapFlashTimer: 0,
+    // ★3つに なった ときに つぎの ステージへ 入れかえる ための もの
+    advanceTimer: 0,
     // そのさきの「だん」を ねらって いる ときの はやさの めやす（0 = 出さない）
     goalKps: 0,
     matcher: null,
@@ -115,7 +129,9 @@
     itemKeyCount: 0, lastOk: true, skipLatency: false,
     running: false, imeWarned: false,
     settings: null, view: null, showKeyboard: true, showHands: false, showBuddy: false,
-    timerId: 0, onFinish: null, onStop: null, onPick: null, onAway: null
+    timerId: 0, onFinish: null, onStop: null, onPick: null, onAway: null,
+    // ★3つで つぎへ すすむ しくみ（app.js が 行き先を もって います）
+    canAdvance: null, onAdvance: null
   };
 
   const $ = id => document.getElementById(id);
@@ -244,6 +260,11 @@
     state.onPick = typeof p.onPick === 'function' ? p.onPick : null;
     // 5分いじょう 画面を はなれて もどって きた ときの 行き先（app.js が 決めます）
     state.onAway = typeof p.onAway === 'function' ? p.onAway : null;
+    // ★3つで つぎの ステージへ。どこへ 行くかを 知って いるのは app.js なので、
+    // 「行き先が あるか」（canAdvance）と「行く」（onAdvance）を あずかります
+    state.canAdvance = typeof p.canAdvance === 'function' ? p.canAdvance : null;
+    state.onAdvance = typeof p.onAdvance === 'function' ? p.onAdvance : null;
+    if (state.advanceTimer) { clearTimeout(state.advanceTimer); state.advanceTimer = 0; }
     state.pool = p.stage.items.slice();
 
     // ひとまわりの ながさと、前の れんしゅうの つづき。
@@ -356,6 +377,39 @@
     bindLeaveGuard();
     bindVisibility();
     if (state.limitMs) startTimer();
+    // 前の ステージを ★3つに して ここへ 来た とき。おいわいは **この 画面**で 出します
+    // （前の 画面で 出すと、見て いる さいちゅうに 入れかわって しまいます）
+    if (p.cleared) flashCleared(p.cleared);
+  }
+
+  /**
+   * 「前の ステージが ★3つ できました」の おしらせ。
+   *
+   * ひとまわりの おいわい（celebrateLap）と 同じ 見た目に して、
+   * **打つのは 止めません**。ちがうのは、しるしが さす ステージが
+   * ひとつ 前の もの だという こと だけ です。上の ステージ名は もう
+   * つぎの ものに かわって いるので、ここで どちらの ことかを 言います。
+   */
+  function flashCleared(info) {
+    const flash = $('play-lap-flash');
+    if (!flash) return;
+    flash.innerHTML =
+      `<span class="stars">${`<span class="star on">${T.icon('star')}</span>`.repeat(3)}</span>` +
+      `${info.first ? 'はじめての ★3つ！' : '★3つ！'}` +
+      `${esc(info.title)}が できました`;
+    flash.classList.add('is-full');
+    flash.hidden = false;
+    flash.classList.remove('is-on');
+    void flash.getBoundingClientRect();
+    flash.classList.add('is-on');
+    if (state.lapFlashTimer) clearTimeout(state.lapFlashTimer);
+    state.lapFlashTimer = setTimeout(() => {
+      state.lapFlashTimer = 0;
+      flash.hidden = true;
+      flash.classList.remove('is-on');
+    }, FULL_FLASH_MS);
+    if (T.FX) T.FX.confettiAt(flash, { count: 54, power: .8 });
+    chimeFull();
   }
 
   // ------------------------------------------------------------------
@@ -1097,6 +1151,30 @@
 
     const stars = lapStarsNow();
     if (stars > state.lapStarsSeen) state.lapStarsSeen = stars;
+
+    // ■ ★3つ ＝ この ステージは できた。その ばで つぎの ステージに 入れかわります
+    //
+    // ここは **お題の 切れ目**です（loadItem の 直前）。だから 打ちかけの
+    // ことばを とりあげる ことも、打った ぶんが むだに なる ことも ありません。
+    // けっか画面は はさみません。はさむと そこで「きょうは やめておこう」に
+    // なり、この ファイルの 上に 書いた「はじまりも おわりも 決めない」が
+    // こわれます。子どもから 見ると、ステージ名と お題が 入れかわって
+    // **そのまま 打ちつづけられる** だけ です。
+    //
+    // 入れかえは **つぎの 順番で** します。いま この 中は
+    // handleChar → finishItem → lapDone と つみあがって いる とちゅうで、
+    // ここで 画面を 作り直すと、下に のこって いる loadItem() が
+    // **新しい 画面を さわって** しまいます。
+    if (stars >= 3 && state.onAdvance && state.canAdvance && state.canAdvance()) {
+      const go = state.onAdvance;
+      const first = !state.hadFullStars;
+      state.hadFullStars = true;
+      state.advanceTimer = setTimeout(() => {
+        state.advanceTimer = 0;
+        go({ first });
+      }, 0);
+      return;                    // おいわいは つぎの 画面で 出します（flashCleared）
+    }
     celebrateLap(stars);
   }
 
@@ -1219,6 +1297,8 @@
     unbindFit();
     unbindLeaveGuard();
     unbindVisibility();
+    // 「やめる」が さきに おされた ときに、あとから 入れかえが 走らない ように します
+    if (state.advanceTimer) { clearTimeout(state.advanceTimer); state.advanceTimer = 0; }
     T.Buddy.stop();
 
     const stats = liveStats();

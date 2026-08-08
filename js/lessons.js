@@ -438,11 +438,43 @@
     return COURSES.reduce((sum, c) => sum + c.stages.length, 0);
   }
 
+  /**
+   * ★3つを とった ステージの **つぎに やると よい ステージ**。
+   *
+   * ■ 何を さがすか
+   * すぐ うしろから じゅんに 見て、**まだ ★3で ない**ステージを 1つ 返します。
+   * コースの さいごまで いったら、こんどは 先頭から さがします。
+   * ぜんぶ ★3なら null（そこで「そのさき」＝ だんの 時期に 入ります）。
+   *
+   * ■ もう ★3の ステージは とばします
+   * 「つぎの ステージ」を そのまま 返すと、すでに ★3の ところへ
+   * 送りこむ ことに なります。それでは「できた から すすんだ」に なりません。
+   *
+   * ■ ショートカットは 入れません
+   * 打鍵の れんしゅうの とちゅうに、コピー・はりつけの 課題が
+   * 出て くるのは べつの しごとです。あちらは 一覧から えらんで もらいます。
+   *
+   * localStorage には さわりません（node から そのまま ためせます）。
+   *
+   * @param {string} stageId いま ★3に した ステージ
+   * @param {Function} done (stageId) => その ステージは もう ★3か
+   * @returns {{course: Object, stage: Object}|null}
+   */
+  function nextStageAfter(stageId, done) {
+    const list = [];
+    COURSES.forEach(c => c.stages.forEach(s => list.push({ course: c, stage: s })));
+    const at = list.findIndex(x => x.stage.id === stageId);
+    const pick = x => x.stage.mode !== 'shortcut' && !x.stage.noStars && !done(x.stage.id);
+    for (let i = at + 1; i < list.length; i++) if (pick(list[i])) return list[i];
+    for (let i = 0; i < Math.max(0, at); i++) if (pick(list[i])) return list[i];
+    return null;
+  }
+
   global.Typa = global.Typa || {};
   global.Typa.Lessons = {
     COURSES, SHORTCUT_TASKS, SHORTCUT_SOURCE,
     CHALLENGE_COURSE, WEAK_COURSE, CHALLENGE_SECONDS, CHALLENGE_POOLS,
     buildChallengeStage, buildWeakStage,
-    findCourse, findStage, findStageById, stageCount, totalStages
+    findCourse, findStage, findStageById, stageCount, totalStages, nextStageAfter
   };
 })(window);

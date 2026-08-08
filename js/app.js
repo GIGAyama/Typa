@@ -38,7 +38,7 @@
    * アプリの ばんごう。**ここ 1か所だけ**に 書きます。
    * せってい画面の 表示にも、学習ログの appVersion にも これを つかいます。
    */
-  const APP_VERSION = '4.1.1';
+  const APP_VERSION = '4.2.0';
 
   let view = null;
   let installPrompt = null;
@@ -750,10 +750,24 @@
       && found.stage.mode !== 'shortcut')
       ? goalKpsOf(progressNow[found.stage.id]) : 0;
 
+    // ★3つを とったら、その ばで つぎの ステージに 入れかわります。
+    //
+    // **ふつうの れんしゅうの ときだけ** です。「もう1かい」「めかくしで
+    // やってみる」「だんを ねらう」で 入った 回まで 入れかえると、
+    // じぶんで えらんだ ことを とりあげる ことに なります。
+    // チャレンジ・にがて とっくん・ショートカットは ★を つけないので 対象外です。
+    const autoNext = !special && !params.blind && params.assistLevel === undefined &&
+      (params.source || 'course') === 'course' &&
+      !found.stage.noStars && found.stage.mode !== 'shortcut';
+
     const opt = {
       course: found.course, stage: found.stage,
       source: params.source || 'course', special, mount: view,
       goalKps,
+      // 前の ステージを ★3つに して ここへ 来た ときの おしらせ
+      cleared: params.cleared || null,
+      canAdvance: autoNext ? () => !!nextAutoStage(found.stage.id) : null,
+      onAdvance: autoNext ? info => advanceStage(found.stage, info) : null,
       // その回 だけの おためし。せっていは 書きかえません
       blind: !!params.blind,
       // その回 だけ ヒントを 下げる（そのさきの「だん」を ねらう とき）
@@ -776,6 +790,37 @@
       T.Play.setOnFinish(onSessionFinish);
       T.Play.start(opt);
     }
+  }
+
+  /** ★3つに した ステージの つぎ（まだ ★3で ない いちばん 近い ステージ） */
+  function nextAutoStage(stageId) {
+    const progress = T.Store.getProgress();
+    return T.Lessons.nextStageAfter(stageId, id => ((progress[id] || {}).stars || 0) >= 3);
+  }
+
+  /**
+   * ★3つに なったので、つぎの ステージに 入れかえます。
+   *
+   * ■ けっか画面は はさみません
+   * はさむと そこで 手が 止まり、「きょうは やめておこう」に なります。
+   * ここまでの きろくは しずかに のこして（stopReason = 'quiet'）、
+   * つぎの ステージの 打つ 画面に そのまま 入れかえます。
+   * おいわいは 入れかえた あとの 画面で 出します（play.js の flashCleared）。
+   *
+   * ■ おきかえ（replace）です。つみません
+   * つみあげると「もどる」が ★3に した ステージの 山を さかのぼる ことに
+   * なります。もどる先は、れんしゅうを はじめた ところの ままに します。
+   */
+  function advanceStage(from, info) {
+    const next = nextAutoStage(from.id);
+    if (!next) return;
+    stopReason = 'quiet';
+    T.Play.stop();
+    stopReason = null;
+    T.Nav.replace('play', {
+      courseId: next.course.id, stageId: next.stage.id, source: 'course',
+      cleared: { title: from.title, first: !!(info && info.first) }
+    });
   }
 
   /**
