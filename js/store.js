@@ -1,893 +1,440 @@
-/**
- * =====================================================================
- * store.js — 端末に のこす データ
- * =====================================================================
- * Typa は アカウントを もちません。名前も 出席番号も もたず、通信も しません。
- * れんしゅうの きろくは、すべて **この 端末の localStorage の 中だけ** に
- * のこります。ほかの サイトへ おくる しくみは アプリの 中に ありません。
- *
- * のこす もの
- *   typa.settings.v1  … せってい
- *   typa.progress.v1  … ステージごとの さいこう記録と ★
- *   typa.history.v1   … れんしゅう 1回ぶんの きろく（新しい 300件）
- *   typa.awards.v1    … けいけんち・レベル・バッジ・つみあげた 合計
- *   typa.challenge.v1 … チャレンジ（時間ないに どれだけ 打てるか）の さいこう記録
- *
- * ■ 「きょう」は 端末の 時計で 数えます
- * ISO の 文字列を そのまま 切ると 世界標準時に なり、日本では
- * あさ 9時までが「きのう」に なって しまいます。日づけは かならず
- * localDay() を とおして、端末の 時計で 数えます。
- */
+/* Typa — src/store.js から つくった 配信用です。手で 直さず src/ を 直して npm run build。*/
 (function (global) {
-  'use strict';
-
-  const KEYS = {
-    settings: 'typa.settings.v1',
-    progress: 'typa.progress.v1',
-    history: 'typa.history.v1',
-    awards: 'typa.awards.v1',
-    challenge: 'typa.challenge.v1'
-  };
-
-  const HISTORY_MAX = 300;   // 古いものから すてます（端末の 保存領域を あふれさせない）
-
-  /**
-   * こまかい きろく（打つまでの 時間・とりちがえ・ローマ字の きまり）を
-   * のこす 回数。
-   *
-   * この 3つは 1回ぶんで きろく全体の 3ばいくらいの 大きさに なります。
-   * ぜんぶの 回に つけると 300回で 600KB を こえ、いつか 保存できなく なります。
-   * にがての 集計は もともと 直近 40回 しか 見ないので、
-   * それより 少し 多い ぶんだけ のこせば じゅうぶんです。
-   */
-  const DETAIL_MAX = 60;
-  const DETAIL_FIELDS = ['lat', 'conf', 'rule'];
-
-  /**
-   * 1回 読んだ ものを おぼえて おく ところ。
-   *
-   * ■ どうして いる か
-   * きろくの ならび（typa.history.v1）は 300回ぶんで **170KB を こえます**。
-   * ところが 1つの 画面を 出すだけで、にがての 集計・おぼえぐあい・
-   * ローマ字の きまり・きょうの ぶん … と 何度も 読みなおして いました。
-   * にがての ひきだしで 6回、れんしゅうを はじめる ときにも 1回です。
-   * JSON.parse は そのたび 頭から やりなおすので、学校の Chromebook では
-   * **打ちはじめるまでの 待ち時間**に そのまま つみ上がります。
-   * このアプリが いちばん みじかく したい ところ が そこ です。
-   *
-   * ■ 古い ものを つかんだ ままに ならない ようにする
-   * おぼえて おくのは「**その ときの 文字列と、その 結果**」の 2つ 一組です。
-   * 読むたびに localStorage の 文字列と 見くらべ、1文字でも ちがえば
-   * 読みなおします。だから
-   *   ・べつの タブで 書きかえられた
-   *   ・backup.js が localStorage に じかに 書いた
-   *   ・store.js を とおさずに 消された
-   * どの ばあいでも 古い ものが 返る ことは ありません。
-   * 速く なるのは JSON.parse を とばす ぶん だけ で、
-   * 「何が 入って いるか」の 答えは かならず localStorage の ままです。
-   */
-  const cache = Object.create(null);
-
-  function read(key, fallback) {
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) { delete cache[key]; return fallback; }
-      const hit = cache[key];
-      if (hit && hit.raw === raw) return hit.value;
-      const value = JSON.parse(raw);
-      if (value === null || value === undefined) { delete cache[key]; return fallback; }
-      cache[key] = { raw, value };
-      return value;
-    } catch (e) { delete cache[key]; return fallback; }
-  }
-
-  function write(key, value) {
-    let raw;
-    try { raw = JSON.stringify(value); } catch (e) { return false; }
-    // 書けたか どうかが 決まる まで おぼえた ものは すてて おきます。
-    // 入りきらなかった ときに、画面だけ 新しい 数字に なる ことを ふせぎます
-    delete cache[key];
-    try {
-      localStorage.setItem(key, raw);
-      cache[key] = { raw, value };
-      return true;
-    } catch (e) { return false; }
-  }
-
-  /** 端末の 時計で「YYYY-MM-DD」。日づけの 数えかたは いつも これに そろえます */
-  function localDay(value) {
-    const d = value ? new Date(value) : new Date();
-    if (isNaN(d.getTime())) return '';
-    const p = n => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-  }
-
-  /** きょうから n日 前の 日づけ */
-  function dayBefore(n) {
-    const d = new Date();
-    d.setHours(12, 0, 0, 0);          // 夏時間や うるう秒で 日が ずれないように 昼で 計算します
-    d.setDate(d.getDate() - n);
-    return localDay(d);
-  }
-
-  /** きょうから n日 あとの 日づけ（ふくしゅうの 日を 決めるのに つかいます） */
-  function dayAhead(n) { return dayBefore(-n); }
-
-  // ------------------------------------------------------------------
-  // せってい
-  // ------------------------------------------------------------------
-
-  const DEFAULT_SETTINGS = {
-    layout: 'jis',        // キーボードの配列（日本語配列を きほんに します）
-    keyboard: true,       // 画面に キーボードを 出す
-    fingerGuide: true,    // 指の 色分けを 出す
-    keyLabels: true,      // 画面の キーに 文字を 書く
-    romajiHint: true,     // ローマ字の ヒントを 出す
-    sound: true,          // 打ったときの おと
-    bigText: false,       // 文字を 大きく
-    strict: true,         // まちがえたら 正しい キーを 押すまで すすまない
-    retry: true,          // まちがえた お題を さいごに もう1回 出す
-    hands: true,          // 手の イラストを 出す（押す 指が 光ります）
-    buddy: true,          // キャラクターを 出す（打つと うごきます）
-    // どの しごとの キャラクターか（buddy.js の JOBS）。
-    // 'random' は おまかせ … ドリルが ひとまわり おわる ごとに くじを 引きます
-    buddyJob: 'random',
-    assist: 'custom',     // ヒントの つよさ（0〜3 / 'auto' / 'custom'）
-    theme: 'auto'         // auto / light / dark
-  };
-
-  // ------------------------------------------------------------------
-  // ヒントの つよさ
-  // ------------------------------------------------------------------
-  //
-  // 画面の キーボードを ずっと 出して いると、「画面を 見て 打つ」癖が
-  // かたまります。手もとを 見ない ように するには、なれるに つれて
-  // ヒントを **すこしずつ** 消して いくのが いちばんの ちかみちです。
-  //
-  // ■ つまみを 4つ 目に 足さない
-  // keyboard / fingerGuide / romajiHint の 3つは たがいに 別ものなので、
-  // ここに もう1つ 足すと 言うことが 食いちがいます。そこで assist を
-  // **えらぶ ところ** に して、えらんだら 3つの ほうを 書きかえます。
-  // 読む 道は 1つだけに なり、ぜったいに くいちがいません。
-  // 手で スイッチを さわった ときは assist を 'custom' に もどします。
-  //
-  // ■ ことばの 案内は どの つよさでも 消しません
-  // 「つぎは D を みぎの ひとさしゆびで」は のこします。消えるのは 絵だけです。
-  // 「色だけに たよらない」という きまりを ここでも まもります。
-  // （めかくしだけは べつです。そこでは 色でも 何も 言って いないので、
-  //   ことばを 消しても きまりは やぶれません）
-
-  const ASSIST_LEVELS = [
-    // 0 ぜんぶ 見える
-    { keyboard: true, fingerGuide: true, keyLabels: true, nextGlow: true, romajiHint: true },
-    // 1 ゆびの 色だけ（ローマ字の ヒントを 消す）
-    { keyboard: true, fingerGuide: true, keyLabels: true, nextGlow: true, romajiHint: false },
-    // 2 ばしょだけ（キーの 文字も 指の 色も 消す。ひかりと でっぱりは のこす）
-    { keyboard: true, fingerGuide: false, keyLabels: false, nextGlow: true, romajiHint: false },
-    // 3 なにも 出ない（ことばの 案内だけ）
-    { keyboard: false, fingerGuide: false, keyLabels: false, nextGlow: false, romajiHint: false }
-  ];
-
-  const ASSIST_LABELS = ['ぜんぶ 見える', 'ゆびの 色だけ', 'ばしょだけ', 'なにも 出ない'];
-
-  /**
-   * おぼえぐあいから ちょうどよい つよさを えらびます。
-   *
-   * まもり: **★3つを 1回も とって いない ステージでは 2いじょうに しません**。
-   * まだ できて いない ところで 画面を 消すと、ただ こまるだけです。
-   */
-  function autoAssist(ctx) {
-    const m = ctx && typeof ctx.stageMastery === 'number' ? ctx.stageMastery : null;
-    if (m === null) return 0;
-    let level = m < 0.35 ? 0 : (m < 0.60 ? 1 : (m < 0.85 ? 2 : 3));
-    if (level >= 2 && !(ctx && ctx.everThreeStars)) level = 1;
-    return level;
-  }
-
-  /**
-   * いま 何を 見せるかを 決めます。play.js は これを 1回だけ よび、
-   * あとは 返って きた ものだけを 見ます（せっていを 直接 読みません）。
-   *
-   * @param {Object} settings getSettings() の 中身
-   * @param {Object} [ctx] { stageMastery, everThreeStars, blind }
-   */
-  function resolveAssist(settings, ctx) {
-    const c = ctx || {};
-    // めかくし … その回 だけの おためし。ことばの 案内も 出しません
-    if (c.blind) {
-      return {
-        keyboard: false, fingerGuide: false, keyLabels: false, nextGlow: false,
-        romajiHint: false, fingerWords: false, level: 'blind'
-      };
-    }
-    let level = settings.assist;
-    if (level === 'auto') level = autoAssist(c);
-    if (typeof level !== 'number' || level < 0 || level >= ASSIST_LEVELS.length) {
-      // 'custom' … スイッチを そのまま つかいます
-      return {
-        keyboard: settings.keyboard !== false,
-        fingerGuide: settings.fingerGuide !== false,
-        keyLabels: settings.keyLabels !== false,
-        nextGlow: settings.keyboard !== false,
-        romajiHint: settings.romajiHint !== false,
-        fingerWords: true,
-        level: 'custom'
-      };
-    }
-    return Object.assign({}, ASSIST_LEVELS[level], {
-      fingerWords: true,
-      level,
-      auto: settings.assist === 'auto'
-    });
-  }
-
-  /** ヒントの つよさを えらびます。3つの スイッチも いっしょに 書きかえます */
-  function setAssist(level) {
-    const s = getSettings();
-    s.assist = level;
-    if (typeof level === 'number' && ASSIST_LEVELS[level]) {
-      const L = ASSIST_LEVELS[level];
-      s.keyboard = L.keyboard;
-      s.fingerGuide = L.fingerGuide;
-      s.keyLabels = L.keyLabels;
-      s.romajiHint = L.romajiHint;
-    }
-    write(KEYS.settings, s);
-    return s;
-  }
-
-  function getSettings() {
-    return Object.assign({}, DEFAULT_SETTINGS, read(KEYS.settings, {}));
-  }
-
-  /** スイッチを 手で さわった ら、ヒントの つよさは「じぶんで」に もどします */
-  const ASSIST_OWNED = ['keyboard', 'fingerGuide', 'keyLabels', 'romajiHint'];
-
-  function setSetting(name, value) {
-    const s = getSettings();
-    s[name] = value;
-    if (ASSIST_OWNED.indexOf(name) >= 0) s.assist = 'custom';
-    write(KEYS.settings, s);
-    return s;
-  }
-
-  // ------------------------------------------------------------------
-  // すすみぐあい（ステージごとの さいこう記録）
-  // ------------------------------------------------------------------
-  //
-  // ■ すすみは「さいごまで やった か」では なく「つみあがった か」で 見ます
-  // 前は、ステージを 最後まで やりきった 回だけを クリアと して いました。
-  // けれど それだと **10びょうしか 時間が ない 子は、何も のこせません**。
-  // 「あとで まとまった 時間が できたら やろう」と 思う ことが、
-  // そのまま れんしゅうを しない 理由に なって いました。
-  //
-  // そこで ステージを **ひとまわり（lap）** で 数えます。
-  //   ・打った お題の 数は、やめても そのまま のこります（lapItems）
-  //   ・つぎに ひらいた ときは、その つづきの お題から 出ます
-  //   ・たまった 数が ステージの お題の 数に とどいたら「ひとまわり」。
-  //     そこで ★が つき、ふくしゅうの 日が 決まります
-  //
-  // 3もん だけ 打って やめても、その 3もんは 消えません。
-  // 5回に わけて ひとまわりしても、1回で ひとまわりしても 同じ です。
-
-  /**
-   * @returns {Object} {
-   *   [stageId]: {
-   *     clears,        ひとまわり できた 回数
-   *     bestKps, bestAccuracy, stars, lastAt, box, due,
-   *     rank,          そのさきの「だん」（0〜3。ぜんぶ ★3の あとの はしご）
-   *     lapItems,      いまの ひとまわりで すでに 打った お題の 数
-   *     lapCorrect,    いまの ひとまわりで 正しく 打てた 数（★の もと）
-   *     lapTotal       いまの ひとまわりで 打った 合計
-   *   }
-   * }
-   */
-  function getProgress() { return read(KEYS.progress, {}); }
-
-  /**
-   * さいこう記録として 数える のに いる 打鍵数。
-   *
-   * 10びょうの れんしゅうでも きろくは のこしますが、**3打だけの 回を
-   * 「正かくさ 100%の さいこう記録」に しては いけません**。
-   * すこし 打てば だれでも 出せて しまい、記録が 記録で なくなります。
-   * ひとまわりの すすみ・けいけんち・にがての 集計には 数える ので、
-   * みじかい れんしゅうが むだに なる ことは ありません。
-   */
-  const MIN_RECORD_KEYS = 20;
-
-  /**
-   * ひとまわりの すすみを 進めます。**localStorage には さわりません**
-   * （node から そのまま 呼べるように するためです。tools/check-progress.js）。
-   *
-   * @param {Object} cur   progress の 1つぶん。中身を 書きかえます
-   * @param {Object} delta { items, correct, total, byItem } この 回で 足す ぶん。
-   *   byItem は「correct / total が 打鍵では なく **お題の 数**」の しるしです
-   *   （ショートカットは 打鍵を 数えません）
-   * @param {number} lapNeed ステージの お題の 数（ひとまわりの ながさ）
-   * @returns {number[]} この 回で できあがった ひとまわりの ★（0〜3）の 一覧
-   */
-  function lapAdvance(cur, delta, lapNeed) {
-    const need = Math.max(1, Math.round(lapNeed || 1));
-    const add = (a, b) => Math.max(0, Math.round(a || 0)) + Math.max(0, Math.round(b || 0));
-    cur.lapItems = add(cur.lapItems, delta.items);
-    cur.lapCorrect = add(cur.lapCorrect, delta.correct);
-    cur.lapTotal = add(cur.lapTotal, delta.total);
-
-    // ずっと 打ちつづけると 1回で 何しゅうも まわります。
-    // その ときは **どの しゅうも 同じ 正かくさ** で 見ます。
-    // しゅうごとに 0 に もどすと、2しゅう目が いつも ★0 に なって しまいます。
-    const acc = cur.lapTotal > 0 ? (cur.lapCorrect / cur.lapTotal) * 100 : 0;
-    // お題の 数で 数えて いる ときは、打鍵むけの 下ささえを わたしません
-    const lapResult = delta.byItem
-      ? { accuracy: acc }
-      : { accuracy: acc, correctKeys: cur.lapCorrect, totalKeys: cur.lapTotal };
-    const laps = [];
-    let guard = 0;
-    while (cur.lapItems >= need && guard++ < 200) {
-      laps.push(starsOf(lapResult));
-      cur.lapItems -= need;
-    }
-    // ひとまわり できたら、正かくさは そこから 数えなおします
-    if (laps.length > 0) { cur.lapCorrect = 0; cur.lapTotal = 0; }
-    return laps;
-  }
-
-  /**
-   * 「いま ひとまわり できたと したら ★は いくつか」。**保存は しません。**
-   *
-   * れんしゅう画面が、ひとまわり できた しゅんかんに「★3つ！」と 知らせる
-   * ために つかいます（js/play.js の celebrateLap）。
-   *
-   * ■ どうして その ばで 出しなおさないのか
-   * ★は **前の れんしゅうの つづきぶんも 入れた 正かくさ**で つきます
-   * （lapAdvance）。その回 だけの 正かくさから 出しなおすと、月よう すこし
-   * つまずいて 水よう ひとまわりした 子に「れんしゅう中は ★3つ、ステージ
-   * 一覧は ★2つ」が おきます。子どもから 見れば「★3つを とったのに 消えた」
-   * です。ここは lapAdvance と **まったく 同じ 数えかた**を します。
-   *
-   * @param {string} stageId
-   * @param {Object} delta { correct, total, byItem } その回に 打った ぶん。
-   *   byItem は「打鍵では なく お題の 数で 数えて いる」しるしです
-   * @returns {number} ★（0〜3）
-   */
-  function lapStarsPreview(stageId, delta) {
-    const p = getProgress()[stageId] || {};
-    const n = v => Math.max(0, Math.round(v || 0));
-    const correct = n(p.lapCorrect) + n((delta || {}).correct);
-    const total = n(p.lapTotal) + n((delta || {}).total);
-    const accuracy = total > 0 ? (correct / total) * 100 : 0;
-    return (delta || {}).byItem
-      ? starsOf({ accuracy })
-      : starsOf({ accuracy, correctKeys: correct, totalKeys: total });
-  }
-
-  // ------------------------------------------------------------------
-  // ふくしゅう（間を あけて もう1回）
-  // ------------------------------------------------------------------
-  //
-  // ★3に した ステージは、そのままだと 二度と 出て きません。
-  // けれど 打ちかたは 使わないと わすれます。そこで、うまく できた ステージほど
-  // **間を のばしながら** もう一度 よびもどします。
-  //
-  //   1日 → 3日 → 7日 → 14日 → 30日
-  //
-  // うまく できなかった 回は はこを 1に もどして、あすまた 出します。
-  // 日づけは かならず localDay() を とおします（ISO を 切ると 世界標準時に なり、
-  // 日本では あさ9時までが「きのう」に なって しまうためです）。
-
-  const REVIEW_DAYS = [1, 3, 7, 14, 30];
-
-  /** きろくが 古い ステージを ふくしゅうに よぶまでの 日数（前からの ユーザーむけ） */
-  const REVIEW_SEED_DAYS = 7;
-
-  /**
-   * ふくしゅうの 日を 決めます。progress の 中に box と due を 足すだけなので、
-   * 前から つかって いる 人の きろくは そのまま つかえます（どちらも なければ box=0）。
-   */
-  function scheduleReview(cur, stars) {
-    const box = Math.max(0, Math.min(REVIEW_DAYS.length, cur.box || 0));
-    // ★2つ（正かくさ 92%）いじょうで つぎの はこへ。それ未満は 1に もどします
-    const next = stars >= 2 ? Math.min(box + 1, REVIEW_DAYS.length) : 1;
-    cur.box = next;
-    cur.due = dayAhead(REVIEW_DAYS[next - 1]);
-    return cur;
-  }
-
-  /**
-   * きょう ふくしゅうすると よい ステージ。
-   * @param {number} [limit] いくつまで 返すか
-   * @returns {Array<{stageId, due, box, lastAt, overdue}>} 日が すぎて いる ものから
-   */
-  function dueStages(limit) {
-    const all = getProgress();
-    const today = localDay();
-    const seedBefore = dayBefore(REVIEW_SEED_DAYS);
-    const out = [];
-    Object.keys(all).forEach(stageId => {
-      const p = all[stageId];
-      if (!p || !(p.clears > 0)) return;
-      let due = p.due;
-      // 前から つかって いる 人には due が ありません。
-      // しばらく さわって いない ステージを ふくしゅうに よびます
-      if (!due) {
-        const last = localDay(p.lastAt);
-        if (!last || last > seedBefore) return;
-        due = last;
-      }
-      if (due > today) return;
-      out.push({ stageId, due, box: p.box || 0, lastAt: p.lastAt, overdue: due < today });
-    });
-    out.sort((a, b) => (a.due < b.due ? -1 : (a.due > b.due ? 1 : 0)));
-    return limit ? out.slice(0, limit) : out;
-  }
-
-  /**
-   * ステージの けっかを すすみぐあいに 反映します。
-   * ★は「正かくさ」で 決めます。速さで 決めると、
-   * まちがえても はやく 打つほど よい、という まちがった 練習に なるためです。
-   *
-   * **とちゅうで やめた 回も かならず ここを とおります。** 打った ぶんは
-   * ひとまわりの すすみに たまり、つぎの れんしゅうに つながります。
-   *
-   * @param {string} stageId
-   * @param {Object} result { doneItems, correctItems, lapNeed, correctKeys, totalKeys, kps, accuracy, finishedAt }
-   *   lapStarsSeen … れんしゅう中に「★N」と 見せた ぶん（0〜3）。
-   *   見せた ★より 下げない ための 下ささえです（下の しくみを 見てください）
-   * @returns {{best, laps, lapStars, lapAccuracy, lapItems, lapNeed, firstClear,
-   *            newBestKps, newStars, prevBestKps}}
-   *   laps は この 回で できあがった ひとまわりの 数（0 の ことも あります）。
-   *   lapStars は その ひとまわりに ついた ★で、**けっか画面は これを 出します**
-   *   （その回 だけの 正かくさから 出しなおすと、前の つづきの ぶんが
-   *   入らず、画面の ★と ステージ一覧の ★が くいちがいます）。
-   *   さいこう記録を こえたかどうかは、けっか画面の「新記録！」に つかいます。
-   */
-  function applyResult(stageId, result) {
-    const all = getProgress();
-    const cur = all[stageId] ||
-      { clears: 0, bestKps: 0, bestAccuracy: 0, stars: 0, lastAt: null, lapItems: 0, lapCorrect: 0, lapTotal: 0 };
-    const before = {
-      bestKps: cur.bestKps || 0, stars: cur.stars || 0,
-      clears: cur.clears || 0, rank: cur.rank || 0
-    };
-    const lapNeed = Math.max(1, Math.round(result.lapNeed || 1));
-
-    // ショートカットは 打鍵を 数えません（totalKeys が 0）。そのまま 足すと
-    // ひとまわりの 正かくさが ずっと 0% の ままに なり、どんなに うまく
-    // できても ★が 1つも つきません。打鍵が ない ときは **できた 課題の 数**で
-    // 数えます
-    const doneItems = Math.max(0, Math.round(result.doneItems || 0));
-    const byItem = !((result.totalKeys || 0) > 0);
-    const correctItems = result.correctItems != null
-      ? Math.max(0, Math.min(doneItems, Math.round(result.correctItems)))
-      : Math.round(doneItems * Math.max(0, Math.min(100, result.accuracy || 0)) / 100);
-
-    const delta = byItem
-      ? { items: doneItems, correct: correctItems, total: doneItems, byItem: true }
-      : { items: doneItems, correct: result.correctKeys, total: result.totalKeys };
-
-    // ★を つけた ときの 正かくさ。ひとまわり できると lapCorrect / lapTotal は
-    // 0 に もどるので、けっか画面に 出す ぶんは 先に 出して おきます
-    const sumCorrect = Math.max(0, Math.round(cur.lapCorrect || 0)) + Math.max(0, Math.round(delta.correct || 0));
-    const sumTotal = Math.max(0, Math.round(cur.lapTotal || 0)) + Math.max(0, Math.round(delta.total || 0));
-    const lapAccuracy = sumTotal > 0 ? (sumCorrect / sumTotal) * 100 : 0;
-
-    const laps = lapAdvance(cur, delta, lapNeed);
-
-    let lapStars = null;
-    if (laps.length > 0) {
-      // れんしゅう中に「★3つ！」と 見せた ぶんは、**あとから 下がりません**。
-      //
-      // 1回で 何しゅうも まわると、どの しゅうも 同じ 正かくさで 見ます
-      // （lapAdvance）。すると 1しゅう目を ノーミスで まわって「★3つ」と
-      // 見せた あと、2しゅう目で くずれると 合計の 正かくさが さがり、
-      // けっか画面が ★2つに なって しまいます。子どもから 見れば
-      // 「さっき ★3つと 出たのに 消えた」です。あの とき ★3つだったのは
-      // 本当なので、見せた ★を 下ささえに します
-      const seen = Math.max(0, Math.min(3, Math.round(result.lapStarsSeen || 0)));
-      const best = Math.max(laps.reduce((a, b) => Math.max(a, b), 0), seen);
-      lapStars = best;
-      cur.clears = before.clears + laps.length;
-      cur.stars = Math.max(before.stars, best);
-      scheduleReview(cur, best);
-    }
-
-    // みじかすぎる 回を さいこう記録に しません（MIN_RECORD_KEYS の 説明を 見てください）。
-    // ショートカットは 打鍵を 数えないので、この 線では はかれません。
-    // そちらは「ひとまわり できたか」で 見ます
-    const enough = (result.totalKeys || 0) > 0
-      ? (result.totalKeys >= MIN_RECORD_KEYS)
-      : laps.length > 0;
-    if (enough) {
-      cur.bestKps = Math.max(before.bestKps, result.kps || 0);
-      cur.bestAccuracy = Math.max(cur.bestAccuracy || 0, result.accuracy || 0);
-    }
-
-    // だん（そのさき）。★3を たもった ひとまわりの ときだけ 見ます。
-    // はやさは その回の もの なので、さいこう記録と 同じく
-    // **20打いじょう 打った 回**でしか 上がりません（3打の まぐれを
-    // 「3だん」に しない ため。みじかい ステージは 2しゅう すれば とどきます）
-    const lapRank = (laps.length > 0 && enough)
-      ? rankOf({ stars: lapStars, kps: result.kps, hintStrength: result.hintStrength })
-      : 0;
-    if (lapRank > 0) cur.rank = Math.max(before.rank, lapRank);
-
-    cur.lastAt = result.finishedAt;
-    all[stageId] = cur;
-    write(KEYS.progress, all);
-    return {
-      best: cur,
-      laps: laps.length,
-      lapStars,
-      lapAccuracy,
-      lapItems: cur.lapItems,
-      lapNeed,
-      firstClear: before.clears === 0 && laps.length > 0,
-      newBestKps: enough && before.clears > 0 && (result.kps || 0) > before.bestKps + 0.05,
-      newStars: Math.max(0, (cur.stars || 0) - before.stars),
-      lapRank,
-      newRank: Math.max(0, (cur.rank || 0) - before.rank),
-      prevBestKps: before.bestKps
-    };
-  }
-
-  /**
-   * ステージの「いま どこまで きたか」。れんしゅう画面と ステージ一覧が つかいます。
-   * @returns {{items: number, need: number, ratio: number}}
-   */
-  function lapState(stageId, lapNeed) {
-    const need = Math.max(1, Math.round(lapNeed || 1));
-    const p = getProgress()[stageId] || {};
-    // ステージの お題を 入れかえた あとでも、はみ出した ままに ならないように します
-    const items = Math.max(0, Math.min(need - 1, Math.round(p.lapItems || 0)));
-    return { items, need, ratio: items / need };
-  }
-
-  /**
-   * ★の きめかた。`accuracy` は 正かくさ（%）、`allow` は
-   * 「みじかい ひとまわりでも、これだけの ミスは ゆるす」数です。
-   *
-   * ■ わりざん だけでは、みじかい ステージほど きびしく なります
-   * ★は ひとまわり ぜんぶを 通して 見ます。ところが ひとまわりの ながさは
-   * ステージで まるで ちがい、「ホームポジション ①」は 32打、
-   * 「あ行」に いたっては 13打 しか ありません。
-   *
-   *   13打で 98% … 12.7打 まで しか まちがえられない → **ミス 0 かい**
-   *   32打で 98% … 31.3打 まで              → **ミス 0 かい**
-   *   208打で 98%（ながい 文）…              → ミス 4かい まで
-   *
-   * つまり わりざん だけで 見ると、**いちばん さいしょの、いちばん やさしい
-   * ステージが いちばん きびしい**（1文字でも まちがえたら ★3は なし）
-   * ことに なって いました。しかも ★3を とるまで つぎの ステージに
-   * すすまない ので、ホームポジション ①から ずっと 出られません。
-   *
-   * 「98%」は もともと「ほとんど ミスなし」を あらわす ための 線です。
-   * 32打の 2% は 0.64打 なので、切りすてて 0 に するのでは なく
-   * **1かいまでは ゆるす** ほうが、ことばの 意味に あって います。
-   * ながい ステージでは わりざんの ほうが 大きく なるので、
-   * この 下ささえが きいて くるのは みじかい ステージだけ です。
-   */
-  const STAR_RULES = [
-    { stars: 3, accuracy: 98, allow: 1 },
-    { stars: 2, accuracy: 92, allow: 2 },
-    { stars: 1, accuracy: 80, allow: 3 }
-  ];
-
-  /**
-   * ★の 数（0〜3）。まちがいが 少ないほど 高くなります。
-   *
-   * @param {Object} result { accuracy, correctKeys, totalKeys }
-   *   `totalKeys` が あれば「ミス 何かい まで」の 下ささえも つかいます。
-   *   ショートカットの ように 打鍵を 数えない ものは 正かくさ だけで 見ます
-   *   （課題 4つで「1つ とばしても ★3」に なっては 意味が ありません）。
-   */
-  function starsOf(result) {
-    const acc = result.accuracy || 0;
-    const total = Math.max(0, Math.round(result.totalKeys || 0));
-    const correct = Math.max(0, Math.min(total, Math.round(result.correctKeys || 0)));
-    // 打鍵で 数えて いない ときは -1（下ささえを つかいません）
-    const miss = total > 0 ? total - correct : -1;
-    for (let i = 0; i < STAR_RULES.length; i++) {
-      const rule = STAR_RULES[i];
-      if (acc >= rule.accuracy) return rule.stars;
-      if (miss >= 0 && miss <= rule.allow) return rule.stars;
-    }
-    return 0;
-  }
-
-  // ------------------------------------------------------------------
-  // そのさき（ぜんぶ ★3に なった あと）
-  // ------------------------------------------------------------------
-  //
-  // ★は「正かくさ」で つきます。ぜんぶの ステージが ★3に なった 子は
-  // **どの キーを どの 指で 打つかを もう 知って いる** ので、
-  // ★では それ いじょう 伸びが 見えません。のこって いるのは 2つ です。
-  //
-  //   ・キーボードを 見ないで 打つ（タッチタイピング）
-  //   ・はやく 打つ
-  //
-  // この 2つを **1本の はしご**に します。それが「だん」です。
-  //
-  //   1だん … ヒント「ゆびの 色だけ」いじょう ＋ 2.0 打/びょう
-  //   2だん … ヒント「ばしょだけ」いじょう   ＋ 3.0 打/びょう
-  //   3だん … ヒント「なにも 出ない」いじょう ＋ 4.0 打/びょう
-  //
-  // ■ なぜ はやさ だけで 決めないか
-  // はやさ だけの はしごに すると「画面の キーボードを 見たまま はやい 子」が
-  // いちばん 上に 立ちます。それは この アプリが 目ざして いる ところでは
-  // ありません。だんは **ヒントを 1つ 消した じょうたいで 出した はやさ**
-  // でしか 上がりません。
-  //
-  // ■ なぜ ★3が いる か
-  // だんは ひとまわりの ★が 3つの ときだけ 上がります。
-  // これが ないと「まちがえても はやく 打つほど よい」に なって しまい、
-  // ★を 正かくさで 決めて いる 意味が なくなります。
-  // 正かくさが 先、はやさは その 上、という 順ばんは かえません。
-  //
-  // ★と 同じで、だんも 下がりません。
-
-  /**
-   * ヒントの つよさ（0〜4）。**せっていの 数字では なく、その回に
-   * ほんとうに 見えて いた もの**から 数えます。スイッチを 手で さわった
-   * 子（assist が 'custom'）にも 同じ ものさしを あてる ためです。
-   */
-  const HINT_STEPS = ['ぜんぶ 見える', 'ゆびの 色だけ', 'ばしょだけ', 'なにも 出ない', 'めかくし'];
-
-  function hintStrengthOf(view) {
-    if (!view) return 0;
-    if (view.level === 'blind' || view.fingerWords === false) return 4;
-    if (!view.keyboard) return 3;
-    if (!view.fingerGuide && !view.keyLabels) return 2;
-    if (!view.romajiHint) return 1;
-    return 0;
-  }
-
-  const SPEED_RANKS = [
-    { rank: 1, kps: 2.0, hint: 1 },
-    { rank: 2, kps: 3.0, hint: 2 },
-    { rank: 3, kps: 4.0, hint: 3 }
-  ];
-
-  /** つぎに ねらう だん（もう 3だんなら null） */
-  function nextRank(rank) {
-    return SPEED_RANKS.filter(r => r.rank === Math.max(0, Math.round(rank || 0)) + 1)[0] || null;
-  }
-
-  /**
-   * この 回で とどいた だん（0〜3）。
-   * @param {Object} r { stars, kps, hintStrength }
-   */
-  function rankOf(r) {
-    if ((r.stars || 0) < 3) return 0;
-    const kps = r.kps || 0;
-    const hint = Math.max(0, Math.round(r.hintStrength || 0));
-    let got = 0;
-    SPEED_RANKS.forEach(step => {
-      if (kps >= step.kps && hint >= step.hint) got = Math.max(got, step.rank);
-    });
-    return got;
-  }
-
-  // ------------------------------------------------------------------
-  // きろく（じぶんの あゆみ）
-  // ------------------------------------------------------------------
-
-  function getHistory() { return read(KEYS.history, []); }
-
-  /** 古い 回から こまかい きろくを おとします（新しい DETAIL_MAX 回だけ のこす） */
-  function trimDetail(list) {
-    const keepFrom = list.length - DETAIL_MAX;
-    for (let i = 0; i < keepFrom; i++) {
-      const h = list[i];
-      if (!h) continue;
-      DETAIL_FIELDS.forEach(f => { if (h[f] !== undefined) delete h[f]; });
-    }
-    return list;
-  }
-
-  /**
-   * れんしゅう1回ぶんを のこします。
-   *
-   * ■ 入りきらなかった ときに だまって 消さない
-   * localStorage が いっぱいだと setItem は 失敗します。前は その 戻り値を
-   * 見て いなかったので、**きろくが 静かに 消えて いました**。気づくのは
-   * つぎの 授業です。入らなかったら 中身を へらして やり直します。
-   *
-   * @returns {{ok: boolean, trimmed: boolean}} trimmed は 古い ぶんを けずったか
-   */
-  function addHistory(entry) {
-    const list = trimDetail(getHistory().concat([entry])).slice(-HISTORY_MAX);
-    if (write(KEYS.history, list)) return { ok: true, trimmed: false };
-
-    // 1回目の やり直し … こまかい きろくを ぜんぶ すてる
-    const lean = list.map(h => {
-      const copy = Object.assign({}, h);
-      DETAIL_FIELDS.forEach(f => delete copy[f]);
-      return copy;
-    });
-    if (write(KEYS.history, lean)) return { ok: true, trimmed: true };
-
-    // 2回目の やり直し … 数を 半分に する
-    if (write(KEYS.history, lean.slice(-Math.floor(HISTORY_MAX / 2)))) {
-      return { ok: true, trimmed: true };
-    }
-    return { ok: false, trimmed: true };
-  }
-
-  /** きょうの ぶんだけを 集めます（ホームの「きょうの ようす」に つかいます） */
-  function todaySummary() {
-    const today = localDay();
-    const list = getHistory().filter(h => localDay(h.at) === today);
-    const keys = list.reduce((sum, h) => sum + (h.correctKeys || 0), 0);
-    const ms = list.reduce((sum, h) => sum + (h.elapsedMs || 0), 0);
-    return { count: list.length, keys, minutes: Math.round(ms / 60000) };
-  }
-
-  /**
-   * これまでの いちばん よい 記録。
-   *
-   * ■ みじかすぎる 回は 記録に しません
-   * 10びょうの れんしゅうも きろくには のこりますが、**3打だけの 回**を
-   * 「さいこう記録」に すると、そこで まぐれに 出た 数が ずっと 画面に
-   * のこります。はやさの バッジも それで もらえて しまいます。
-   * 「れんしゅうした 回数」は みじかい 回も 数えます。やった ことは
-   * やった ことだからです。
-   */
-  function bestOverall() {
-    const list = getHistory().filter(h => countsAsTyping(h) && h.correctKeys > 0);
-    if (list.length === 0) return null;
-    const solid = list.filter(h => (h.totalKeys || 0) >= MIN_RECORD_KEYS);
-    const kps = solid.reduce((best, h) => Math.max(best, h.kps || 0), 0);
-    const acc = solid.reduce((best, h) => Math.max(best, h.accuracy || 0), 0);
-    return { kps, accuracy: acc, count: list.length };
-  }
-
-  /** 打鍵の 記録として かぞえる 回か（ショートカットは 打鍵を 数えません） */
-  function countsAsTyping(entry) {
-    return entry && entry.mode !== 'shortcut';
-  }
-
-  /** れんしゅうした 日の 一覧（新しい じゅん・重なりなし） */
-  function practiceDays() {
-    const seen = {};
-    getHistory().forEach(h => { const d = localDay(h.at); if (d) seen[d] = true; });
-    return Object.keys(seen).sort().reverse();
-  }
-
-  /**
-   * れんぞく日数。きょう れんしゅうして いなくても、きのうまで つづいて いれば
-   * その 日数を 返します（「きょう やれば つづく」と 見せるため）。
-   */
-  function streak() {
-    const days = practiceDays();
-    if (days.length === 0) return { days: 0, todayDone: false };
-    const today = localDay();
-    const todayDone = days[0] === today;
-    if (!todayDone && days[0] !== dayBefore(1)) return { days: 0, todayDone: false };
-    let n = 0;
-    let cursor = todayDone ? 0 : 1;
-    for (let i = 0; i < days.length; i++) {
-      if (days[i] === dayBefore(cursor)) { n++; cursor++; }
-      else if (days[i] < dayBefore(cursor)) break;
-    }
-    return { days: n, todayDone };
-  }
-
-  /** 直近 n日の れんしゅう量（カレンダーの 見た目に つかいます） */
-  function recentDays(n) {
-    const byDay = {};
-    getHistory().forEach(h => {
-      const d = localDay(h.at);
-      if (d) byDay[d] = (byDay[d] || 0) + (h.correctKeys || 0);
-    });
-    const out = [];
-    for (let i = n - 1; i >= 0; i--) {
-      const day = dayBefore(i);
-      out.push({ day, keys: byDay[day] || 0 });
-    }
-    return out;
-  }
-
-  /**
-   * にがてな キーを 数えます（新しい 回ほど おもく 見ます）。
-   * ここで 出た キーから「にがて とっくん」の お題を つくります。
-   * @param {number} [span] 見にいく 回数
-   */
-  function missSummary(span) {
-    const list = getHistory().slice(-(span || 40));
-    const byKey = {};
-    const byFinger = {};
-    list.forEach((h, i) => {
-      const weight = 1 + i / Math.max(1, list.length);     // 新しい 回を すこし おもく
-      Object.keys(h.missByKey || {}).forEach(k => { byKey[k] = (byKey[k] || 0) + h.missByKey[k] * weight; });
-      Object.keys(h.missByFinger || {}).forEach(k => { byFinger[k] = (byFinger[k] || 0) + h.missByFinger[k] * weight; });
-    });
-    const sort = map => Object.keys(map).sort((a, b) => map[b] - map[a]);
-    return { byKey, byFinger, keys: sort(byKey), fingers: sort(byFinger) };
-  }
-
-  // ------------------------------------------------------------------
-  // けいけんち・レベル・バッジ
-  // ------------------------------------------------------------------
-
-  const DEFAULT_AWARDS = {
-    xp: 0,
-    keys: 0,          // これまでに 正しく 打った 数（きろくを けずっても へりません）
-    sessions: 0,      // れんしゅうした 回数
-    perfect: 0,       // ミス 0 で おわった 回数
-    weak: 0,          // にがて とっくんを した 回数
-    challenge: 0,     // チャレンジを した 回数
-    unlocked: {}      // バッジID → もらった 日
-  };
-
-  function getAwards() {
-    const a = Object.assign({}, DEFAULT_AWARDS, read(KEYS.awards, {}));
-    a.unlocked = Object.assign({}, a.unlocked);
-    return a;
-  }
-
-  function saveAwards(a) { return write(KEYS.awards, a); }
-
-  // ------------------------------------------------------------------
-  // チャレンジの さいこう記録
-  // ------------------------------------------------------------------
-
-  function getChallenge() { return read(KEYS.challenge, {}); }
-
-  /**
-   * チャレンジの けっかを のこします。
-   * @returns {{best: Object, isBest: boolean, prev: Object|null}}
-   */
-  function applyChallenge(id, result) {
-    const all = getChallenge();
-    const prev = all[id] || null;
-    const score = Math.round(result.correctKeys || 0);
-    const isBest = !prev || score > prev.keys;
-    all[id] = {
-      keys: Math.max(score, prev ? prev.keys : 0),
-      kps: Math.max(result.kps || 0, prev ? prev.kps : 0),
-      accuracy: Math.max(result.accuracy || 0, prev ? prev.accuracy : 0),
-      at: result.finishedAt
-    };
-    write(KEYS.challenge, all);
-    return { best: all[id], isBest, prev };
-  }
-
-  // ------------------------------------------------------------------
-  // きろくを けす
-  // ------------------------------------------------------------------
-
-  /**
-   * せっていは のこして、れんしゅうの きろくだけを ぜんぶ けします。
-   *
-   * ■ けすのは typa.* の キーだけ です
-   * 学習ログ（`study.records.v1`）は **ほかの アプリと 共有** して いる もので、
-   * まだ 先生に とどいて いない 回が 入って います。ここで いっしょに 消すと、
-   * ほかの アプリで やった れんしゅうまで 消え、しかも だれも 気づけません。
-   * `localStorage.clear()` を つかっては いけないのも 同じ 理由です。
-   */
-  function clearRecords() {
-    [KEYS.progress, KEYS.history, KEYS.awards, KEYS.challenge].forEach(k => {
-      try { localStorage.removeItem(k); } catch (e) { /* けせなくても つづけます */ }
-    });
-  }
-
-  global.Typa = global.Typa || {};
-  global.Typa.Store = {
-    KEYS, HISTORY_MAX, DEFAULT_SETTINGS, getSettings, setSetting,
-    ASSIST_LEVELS, ASSIST_LABELS, resolveAssist, setAssist, autoAssist,
-    getProgress, applyResult, starsOf, STAR_RULES, lapAdvance, lapState, lapStarsPreview,
-    MIN_RECORD_KEYS,
-    SPEED_RANKS, HINT_STEPS, hintStrengthOf, rankOf, nextRank,
-    REVIEW_DAYS, scheduleReview, dueStages,
-    HISTORY_DETAIL_MAX: DETAIL_MAX,
-    getHistory, addHistory, todaySummary, bestOverall, countsAsTyping,
-    keySummary: span => global.Typa.Mastery.keySummary(getHistory(), span),
-    ruleSummary: span => global.Typa.Mastery.ruleSummary(getHistory(), span),
-    weakRules: span => global.Typa.Mastery.weakRules(getHistory(), span),
-    weakTargets: span => global.Typa.Mastery.weakTargets(getHistory(), span),
-    practiceDays, streak, recentDays, missSummary,
-    getAwards, saveAwards,
-    getChallenge, applyChallenge,
-    clearRecords, localDay, dayBefore, dayAhead
-  };
+'use strict';
+const KEYS = {
+settings: 'typa.settings.v1',
+progress: 'typa.progress.v1',
+history: 'typa.history.v1',
+awards: 'typa.awards.v1',
+challenge: 'typa.challenge.v1'
+};
+const HISTORY_MAX = 300;
+const DETAIL_MAX = 60;
+const DETAIL_FIELDS = ['lat', 'conf', 'rule'];
+const cache = Object.create(null);
+function read(key, fallback) {
+try {
+const raw = localStorage.getItem(key);
+if (!raw) { delete cache[key]; return fallback; }
+const hit = cache[key];
+if (hit && hit.raw === raw) return hit.value;
+const value = JSON.parse(raw);
+if (value === null || value === undefined) { delete cache[key]; return fallback; }
+cache[key] = { raw, value };
+return value;
+} catch (e) { delete cache[key]; return fallback; }
+}
+function write(key, value) {
+let raw;
+try { raw = JSON.stringify(value); } catch (e) { return false; }
+delete cache[key];
+try {
+localStorage.setItem(key, raw);
+cache[key] = { raw, value };
+return true;
+} catch (e) { return false; }
+}
+function localDay(value) {
+const d = value ? new Date(value) : new Date();
+if (isNaN(d.getTime())) return '';
+const p = n => String(n).padStart(2, '0');
+return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+function dayBefore(n) {
+const d = new Date();
+d.setHours(12, 0, 0, 0);
+d.setDate(d.getDate() - n);
+return localDay(d);
+}
+function dayAhead(n) { return dayBefore(-n); }
+const DEFAULT_SETTINGS = {
+layout: 'jis',
+keyboard: true,
+fingerGuide: true,
+keyLabels: true,
+romajiHint: true,
+sound: true,
+bigText: false,
+strict: true,
+retry: true,
+hands: true,
+buddy: true,
+buddyJob: 'random',
+assist: 'custom',
+theme: 'auto'
+};
+const ASSIST_LEVELS = [
+{ keyboard: true, fingerGuide: true, keyLabels: true, nextGlow: true, romajiHint: true },
+{ keyboard: true, fingerGuide: true, keyLabels: true, nextGlow: true, romajiHint: false },
+{ keyboard: true, fingerGuide: false, keyLabels: false, nextGlow: true, romajiHint: false },
+{ keyboard: false, fingerGuide: false, keyLabels: false, nextGlow: false, romajiHint: false }
+];
+const ASSIST_LABELS = ['ぜんぶ 見える', 'ゆびの 色だけ', 'ばしょだけ', 'なにも 出ない'];
+function autoAssist(ctx) {
+const m = ctx && typeof ctx.stageMastery === 'number' ? ctx.stageMastery : null;
+if (m === null) return 0;
+let level = m < 0.35 ? 0 : (m < 0.60 ? 1 : (m < 0.85 ? 2 : 3));
+if (level >= 2 && !(ctx && ctx.everThreeStars)) level = 1;
+return level;
+}
+function resolveAssist(settings, ctx) {
+const c = ctx || {};
+if (c.blind) {
+return {
+keyboard: false, fingerGuide: false, keyLabels: false, nextGlow: false,
+romajiHint: false, fingerWords: false, level: 'blind'
+};
+}
+let level = settings.assist;
+if (level === 'auto') level = autoAssist(c);
+if (typeof level !== 'number' || level < 0 || level >= ASSIST_LEVELS.length) {
+return {
+keyboard: settings.keyboard !== false,
+fingerGuide: settings.fingerGuide !== false,
+keyLabels: settings.keyLabels !== false,
+nextGlow: settings.keyboard !== false,
+romajiHint: settings.romajiHint !== false,
+fingerWords: true,
+level: 'custom'
+};
+}
+return Object.assign({}, ASSIST_LEVELS[level], {
+fingerWords: true,
+level,
+auto: settings.assist === 'auto'
+});
+}
+function setAssist(level) {
+const s = getSettings();
+s.assist = level;
+if (typeof level === 'number' && ASSIST_LEVELS[level]) {
+const L = ASSIST_LEVELS[level];
+s.keyboard = L.keyboard;
+s.fingerGuide = L.fingerGuide;
+s.keyLabels = L.keyLabels;
+s.romajiHint = L.romajiHint;
+}
+write(KEYS.settings, s);
+return s;
+}
+function getSettings() {
+return Object.assign({}, DEFAULT_SETTINGS, read(KEYS.settings, {}));
+}
+const ASSIST_OWNED = ['keyboard', 'fingerGuide', 'keyLabels', 'romajiHint'];
+function setSetting(name, value) {
+const s = getSettings();
+s[name] = value;
+if (ASSIST_OWNED.indexOf(name) >= 0) s.assist = 'custom';
+write(KEYS.settings, s);
+return s;
+}
+function getProgress() { return read(KEYS.progress, {}); }
+const MIN_RECORD_KEYS = 20;
+function lapAdvance(cur, delta, lapNeed) {
+const need = Math.max(1, Math.round(lapNeed || 1));
+const add = (a, b) => Math.max(0, Math.round(a || 0)) + Math.max(0, Math.round(b || 0));
+cur.lapItems = add(cur.lapItems, delta.items);
+cur.lapCorrect = add(cur.lapCorrect, delta.correct);
+cur.lapTotal = add(cur.lapTotal, delta.total);
+const acc = cur.lapTotal > 0 ? (cur.lapCorrect / cur.lapTotal) * 100 : 0;
+const lapResult = delta.byItem
+? { accuracy: acc }
+: { accuracy: acc, correctKeys: cur.lapCorrect, totalKeys: cur.lapTotal };
+const laps = [];
+let guard = 0;
+while (cur.lapItems >= need && guard++ < 200) {
+laps.push(starsOf(lapResult));
+cur.lapItems -= need;
+}
+if (laps.length > 0) { cur.lapCorrect = 0; cur.lapTotal = 0; }
+return laps;
+}
+function lapStarsPreview(stageId, delta) {
+const p = getProgress()[stageId] || {};
+const n = v => Math.max(0, Math.round(v || 0));
+const correct = n(p.lapCorrect) + n((delta || {}).correct);
+const total = n(p.lapTotal) + n((delta || {}).total);
+const accuracy = total > 0 ? (correct / total) * 100 : 0;
+return (delta || {}).byItem
+? starsOf({ accuracy })
+: starsOf({ accuracy, correctKeys: correct, totalKeys: total });
+}
+const REVIEW_DAYS = [1, 3, 7, 14, 30];
+const REVIEW_SEED_DAYS = 7;
+function scheduleReview(cur, stars) {
+const box = Math.max(0, Math.min(REVIEW_DAYS.length, cur.box || 0));
+const next = stars >= 2 ? Math.min(box + 1, REVIEW_DAYS.length) : 1;
+cur.box = next;
+cur.due = dayAhead(REVIEW_DAYS[next - 1]);
+return cur;
+}
+function dueStages(limit) {
+const all = getProgress();
+const today = localDay();
+const seedBefore = dayBefore(REVIEW_SEED_DAYS);
+const out = [];
+Object.keys(all).forEach(stageId => {
+const p = all[stageId];
+if (!p || !(p.clears > 0)) return;
+let due = p.due;
+if (!due) {
+const last = localDay(p.lastAt);
+if (!last || last > seedBefore) return;
+due = last;
+}
+if (due > today) return;
+out.push({ stageId, due, box: p.box || 0, lastAt: p.lastAt, overdue: due < today });
+});
+out.sort((a, b) => (a.due < b.due ? -1 : (a.due > b.due ? 1 : 0)));
+return limit ? out.slice(0, limit) : out;
+}
+function applyResult(stageId, result) {
+const all = getProgress();
+const cur = all[stageId] ||
+{ clears: 0, bestKps: 0, bestAccuracy: 0, stars: 0, lastAt: null, lapItems: 0, lapCorrect: 0, lapTotal: 0 };
+const before = {
+bestKps: cur.bestKps || 0, stars: cur.stars || 0,
+clears: cur.clears || 0, rank: cur.rank || 0
+};
+const lapNeed = Math.max(1, Math.round(result.lapNeed || 1));
+const doneItems = Math.max(0, Math.round(result.doneItems || 0));
+const byItem = !((result.totalKeys || 0) > 0);
+const correctItems = result.correctItems != null
+? Math.max(0, Math.min(doneItems, Math.round(result.correctItems)))
+: Math.round(doneItems * Math.max(0, Math.min(100, result.accuracy || 0)) / 100);
+const delta = byItem
+? { items: doneItems, correct: correctItems, total: doneItems, byItem: true }
+: { items: doneItems, correct: result.correctKeys, total: result.totalKeys };
+const sumCorrect = Math.max(0, Math.round(cur.lapCorrect || 0)) + Math.max(0, Math.round(delta.correct || 0));
+const sumTotal = Math.max(0, Math.round(cur.lapTotal || 0)) + Math.max(0, Math.round(delta.total || 0));
+const lapAccuracy = sumTotal > 0 ? (sumCorrect / sumTotal) * 100 : 0;
+const laps = lapAdvance(cur, delta, lapNeed);
+let lapStars = null;
+if (laps.length > 0) {
+const seen = Math.max(0, Math.min(3, Math.round(result.lapStarsSeen || 0)));
+const best = Math.max(laps.reduce((a, b) => Math.max(a, b), 0), seen);
+lapStars = best;
+cur.clears = before.clears + laps.length;
+cur.stars = Math.max(before.stars, best);
+scheduleReview(cur, best);
+}
+const enough = (result.totalKeys || 0) > 0
+? (result.totalKeys >= MIN_RECORD_KEYS)
+: laps.length > 0;
+if (enough) {
+cur.bestKps = Math.max(before.bestKps, result.kps || 0);
+cur.bestAccuracy = Math.max(cur.bestAccuracy || 0, result.accuracy || 0);
+}
+const lapRank = (laps.length > 0 && enough)
+? rankOf({ stars: lapStars, kps: result.kps, hintStrength: result.hintStrength })
+: 0;
+if (lapRank > 0) cur.rank = Math.max(before.rank, lapRank);
+cur.lastAt = result.finishedAt;
+all[stageId] = cur;
+write(KEYS.progress, all);
+return {
+best: cur,
+laps: laps.length,
+lapStars,
+lapAccuracy,
+lapItems: cur.lapItems,
+lapNeed,
+firstClear: before.clears === 0 && laps.length > 0,
+newBestKps: enough && before.clears > 0 && (result.kps || 0) > before.bestKps + 0.05,
+newStars: Math.max(0, (cur.stars || 0) - before.stars),
+lapRank,
+newRank: Math.max(0, (cur.rank || 0) - before.rank),
+prevBestKps: before.bestKps
+};
+}
+function lapState(stageId, lapNeed) {
+const need = Math.max(1, Math.round(lapNeed || 1));
+const p = getProgress()[stageId] || {};
+const items = Math.max(0, Math.min(need - 1, Math.round(p.lapItems || 0)));
+return { items, need, ratio: items / need };
+}
+const STAR_RULES = [
+{ stars: 3, accuracy: 98, allow: 1 },
+{ stars: 2, accuracy: 92, allow: 2 },
+{ stars: 1, accuracy: 80, allow: 3 }
+];
+function starsOf(result) {
+const acc = result.accuracy || 0;
+const total = Math.max(0, Math.round(result.totalKeys || 0));
+const correct = Math.max(0, Math.min(total, Math.round(result.correctKeys || 0)));
+const miss = total > 0 ? total - correct : -1;
+for (let i = 0; i < STAR_RULES.length; i++) {
+const rule = STAR_RULES[i];
+if (acc >= rule.accuracy) return rule.stars;
+if (miss >= 0 && miss <= rule.allow) return rule.stars;
+}
+return 0;
+}
+const HINT_STEPS = ['ぜんぶ 見える', 'ゆびの 色だけ', 'ばしょだけ', 'なにも 出ない', 'めかくし'];
+function hintStrengthOf(view) {
+if (!view) return 0;
+if (view.level === 'blind' || view.fingerWords === false) return 4;
+if (!view.keyboard) return 3;
+if (!view.fingerGuide && !view.keyLabels) return 2;
+if (!view.romajiHint) return 1;
+return 0;
+}
+const SPEED_RANKS = [
+{ rank: 1, kps: 2.0, hint: 1 },
+{ rank: 2, kps: 3.0, hint: 2 },
+{ rank: 3, kps: 4.0, hint: 3 }
+];
+function nextRank(rank) {
+return SPEED_RANKS.filter(r => r.rank === Math.max(0, Math.round(rank || 0)) + 1)[0] || null;
+}
+function rankOf(r) {
+if ((r.stars || 0) < 3) return 0;
+const kps = r.kps || 0;
+const hint = Math.max(0, Math.round(r.hintStrength || 0));
+let got = 0;
+SPEED_RANKS.forEach(step => {
+if (kps >= step.kps && hint >= step.hint) got = Math.max(got, step.rank);
+});
+return got;
+}
+function getHistory() { return read(KEYS.history, []); }
+function trimDetail(list) {
+const keepFrom = list.length - DETAIL_MAX;
+for (let i = 0; i < keepFrom; i++) {
+const h = list[i];
+if (!h) continue;
+DETAIL_FIELDS.forEach(f => { if (h[f] !== undefined) delete h[f]; });
+}
+return list;
+}
+function addHistory(entry) {
+const list = trimDetail(getHistory().concat([entry])).slice(-HISTORY_MAX);
+if (write(KEYS.history, list)) return { ok: true, trimmed: false };
+const lean = list.map(h => {
+const copy = Object.assign({}, h);
+DETAIL_FIELDS.forEach(f => delete copy[f]);
+return copy;
+});
+if (write(KEYS.history, lean)) return { ok: true, trimmed: true };
+if (write(KEYS.history, lean.slice(-Math.floor(HISTORY_MAX / 2)))) {
+return { ok: true, trimmed: true };
+}
+return { ok: false, trimmed: true };
+}
+function todaySummary() {
+const today = localDay();
+const list = getHistory().filter(h => localDay(h.at) === today);
+const keys = list.reduce((sum, h) => sum + (h.correctKeys || 0), 0);
+const ms = list.reduce((sum, h) => sum + (h.elapsedMs || 0), 0);
+return { count: list.length, keys, minutes: Math.round(ms / 60000) };
+}
+function bestOverall() {
+const list = getHistory().filter(h => countsAsTyping(h) && h.correctKeys > 0);
+if (list.length === 0) return null;
+const solid = list.filter(h => (h.totalKeys || 0) >= MIN_RECORD_KEYS);
+const kps = solid.reduce((best, h) => Math.max(best, h.kps || 0), 0);
+const acc = solid.reduce((best, h) => Math.max(best, h.accuracy || 0), 0);
+return { kps, accuracy: acc, count: list.length };
+}
+function countsAsTyping(entry) {
+return entry && entry.mode !== 'shortcut';
+}
+function practiceDays() {
+const seen = {};
+getHistory().forEach(h => { const d = localDay(h.at); if (d) seen[d] = true; });
+return Object.keys(seen).sort().reverse();
+}
+function streak() {
+const days = practiceDays();
+if (days.length === 0) return { days: 0, todayDone: false };
+const today = localDay();
+const todayDone = days[0] === today;
+if (!todayDone && days[0] !== dayBefore(1)) return { days: 0, todayDone: false };
+let n = 0;
+let cursor = todayDone ? 0 : 1;
+for (let i = 0; i < days.length; i++) {
+if (days[i] === dayBefore(cursor)) { n++; cursor++; }
+else if (days[i] < dayBefore(cursor)) break;
+}
+return { days: n, todayDone };
+}
+function recentDays(n) {
+const byDay = {};
+getHistory().forEach(h => {
+const d = localDay(h.at);
+if (d) byDay[d] = (byDay[d] || 0) + (h.correctKeys || 0);
+});
+const out = [];
+for (let i = n - 1; i >= 0; i--) {
+const day = dayBefore(i);
+out.push({ day, keys: byDay[day] || 0 });
+}
+return out;
+}
+function missSummary(span) {
+const list = getHistory().slice(-(span || 40));
+const byKey = {};
+const byFinger = {};
+list.forEach((h, i) => {
+const weight = 1 + i / Math.max(1, list.length);
+Object.keys(h.missByKey || {}).forEach(k => { byKey[k] = (byKey[k] || 0) + h.missByKey[k] * weight; });
+Object.keys(h.missByFinger || {}).forEach(k => { byFinger[k] = (byFinger[k] || 0) + h.missByFinger[k] * weight; });
+});
+const sort = map => Object.keys(map).sort((a, b) => map[b] - map[a]);
+return { byKey, byFinger, keys: sort(byKey), fingers: sort(byFinger) };
+}
+const DEFAULT_AWARDS = {
+xp: 0,
+keys: 0,
+sessions: 0,
+perfect: 0,
+weak: 0,
+challenge: 0,
+unlocked: {}
+};
+function getAwards() {
+const a = Object.assign({}, DEFAULT_AWARDS, read(KEYS.awards, {}));
+a.unlocked = Object.assign({}, a.unlocked);
+return a;
+}
+function saveAwards(a) { return write(KEYS.awards, a); }
+function getChallenge() { return read(KEYS.challenge, {}); }
+function applyChallenge(id, result) {
+const all = getChallenge();
+const prev = all[id] || null;
+const score = Math.round(result.correctKeys || 0);
+const isBest = !prev || score > prev.keys;
+all[id] = {
+keys: Math.max(score, prev ? prev.keys : 0),
+kps: Math.max(result.kps || 0, prev ? prev.kps : 0),
+accuracy: Math.max(result.accuracy || 0, prev ? prev.accuracy : 0),
+at: result.finishedAt
+};
+write(KEYS.challenge, all);
+return { best: all[id], isBest, prev };
+}
+function clearRecords() {
+[KEYS.progress, KEYS.history, KEYS.awards, KEYS.challenge].forEach(k => {
+try { localStorage.removeItem(k); } catch (e) { }
+});
+}
+global.Typa = global.Typa || {};
+global.Typa.Store = {
+KEYS, HISTORY_MAX, DEFAULT_SETTINGS, getSettings, setSetting,
+ASSIST_LEVELS, ASSIST_LABELS, resolveAssist, setAssist, autoAssist,
+getProgress, applyResult, starsOf, STAR_RULES, lapAdvance, lapState, lapStarsPreview,
+MIN_RECORD_KEYS,
+SPEED_RANKS, HINT_STEPS, hintStrengthOf, rankOf, nextRank,
+REVIEW_DAYS, scheduleReview, dueStages,
+HISTORY_DETAIL_MAX: DETAIL_MAX,
+getHistory, addHistory, todaySummary, bestOverall, countsAsTyping,
+keySummary: span => global.Typa.Mastery.keySummary(getHistory(), span),
+ruleSummary: span => global.Typa.Mastery.ruleSummary(getHistory(), span),
+weakRules: span => global.Typa.Mastery.weakRules(getHistory(), span),
+weakTargets: span => global.Typa.Mastery.weakTargets(getHistory(), span),
+practiceDays, streak, recentDays, missSummary,
+getAwards, saveAwards,
+getChallenge, applyChallenge,
+clearRecords, localDay, dayBefore, dayAhead
+};
 })(window);

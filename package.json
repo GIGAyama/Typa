@@ -5,9 +5,12 @@
   "description": "小学生の Chromebook のための タイピング学習アプリ",
   "license": "MIT",
   "_type": "tools/check-*.js は CommonJS なので \"type\": \"module\" は 付けません。付けると 6本 とも 動かなく なります（実さいに 踏みました）。品質ゲートの スクリプトは .mjs に して あります",
+  "_build": "src/*.js が 人の 読む もの、js/*.js が ブラウザに 配る ものです。src/ を 直したら かならず npm run build。わすれても npm run check が 落とします",
   "scripts": {
+    "build": "node scripts/build.mjs",
     "check": "node scripts/check-project.mjs",
     "check:self-test": "node scripts/self-test.mjs",
+    "check:bundle": "node tools/check-bundle.js",
     "check:lessons": "node tools/check-lessons.js",
     "check:mastery": "node tools/check-mastery.js",
     "check:progress": "node tools/check-progress.js",

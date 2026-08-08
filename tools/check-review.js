@@ -28,10 +28,10 @@ global.localStorage = {
   removeItem: k => { delete memory[k]; }
 };
 
-require(path.join(__dirname, '..', 'js', 'romaji.js'));
-require(path.join(__dirname, '..', 'js', 'layout.js'));
-require(path.join(__dirname, '..', 'js', 'lessons.js'));
-require(path.join(__dirname, '..', 'js', 'store.js'));
+require(path.join(__dirname, '..', 'src', 'romaji.js'));
+require(path.join(__dirname, '..', 'src', 'layout.js'));
+require(path.join(__dirname, '..', 'src', 'lessons.js'));
+require(path.join(__dirname, '..', 'src', 'store.js'));
 
 const { Store, Lessons } = global.Typa;
 

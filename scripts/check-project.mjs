@@ -37,6 +37,9 @@ if (process.argv.includes('--self-test')) {
 }
 
 const APP_CHECKS = [
+  // いちばん 先に します。配信用（js/）が 古い ままだと、この あとの 検査が
+  // ぜんぶ 通っても **配られる ものは 直って いません**
+  ['配信用が ソースと そろって いるか', 'tools/check-bundle.js'],
   ['お題が ほんとうに 打てるか', 'tools/check-lessons.js'],
   ['にがて判定の 計算',         'tools/check-mastery.js'],
   ['すすみぐあいの 計算',       'tools/check-progress.js'],
