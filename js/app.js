@@ -38,7 +38,7 @@
    * アプリの ばんごう。**ここ 1か所だけ**に 書きます。
    * せってい画面の 表示にも、学習ログの appVersion にも これを つかいます。
    */
-  const APP_VERSION = '4.1.0';
+  const APP_VERSION = '4.2.0';
 
   let view = null;
   let installPrompt = null;
@@ -750,10 +750,24 @@
       && found.stage.mode !== 'shortcut')
       ? goalKpsOf(progressNow[found.stage.id]) : 0;
 
+    // ★3つを とったら、その ばで つぎの ステージに 入れかわります。
+    //
+    // **ふつうの れんしゅうの ときだけ** です。「もう1かい」「めかくしで
+    // やってみる」「だんを ねらう」で 入った 回まで 入れかえると、
+    // じぶんで えらんだ ことを とりあげる ことに なります。
+    // チャレンジ・にがて とっくん・ショートカットは ★を つけないので 対象外です。
+    const autoNext = !special && !params.blind && params.assistLevel === undefined &&
+      (params.source || 'course') === 'course' &&
+      !found.stage.noStars && found.stage.mode !== 'shortcut';
+
     const opt = {
       course: found.course, stage: found.stage,
       source: params.source || 'course', special, mount: view,
       goalKps,
+      // 前の ステージを ★3つに して ここへ 来た ときの おしらせ
+      cleared: params.cleared || null,
+      canAdvance: autoNext ? () => !!nextAutoStage(found.stage.id) : null,
+      onAdvance: autoNext ? info => advanceStage(found.stage, info) : null,
       // その回 だけの おためし。せっていは 書きかえません
       blind: !!params.blind,
       // その回 だけ ヒントを 下げる（そのさきの「だん」を ねらう とき）
@@ -776,6 +790,37 @@
       T.Play.setOnFinish(onSessionFinish);
       T.Play.start(opt);
     }
+  }
+
+  /** ★3つに した ステージの つぎ（まだ ★3で ない いちばん 近い ステージ） */
+  function nextAutoStage(stageId) {
+    const progress = T.Store.getProgress();
+    return T.Lessons.nextStageAfter(stageId, id => ((progress[id] || {}).stars || 0) >= 3);
+  }
+
+  /**
+   * ★3つに なったので、つぎの ステージに 入れかえます。
+   *
+   * ■ けっか画面は はさみません
+   * はさむと そこで 手が 止まり、「きょうは やめておこう」に なります。
+   * ここまでの きろくは しずかに のこして（stopReason = 'quiet'）、
+   * つぎの ステージの 打つ 画面に そのまま 入れかえます。
+   * おいわいは 入れかえた あとの 画面で 出します（play.js の flashCleared）。
+   *
+   * ■ おきかえ（replace）です。つみません
+   * つみあげると「もどる」が ★3に した ステージの 山を さかのぼる ことに
+   * なります。もどる先は、れんしゅうを はじめた ところの ままに します。
+   */
+  function advanceStage(from, info) {
+    const next = nextAutoStage(from.id);
+    if (!next) return;
+    stopReason = 'quiet';
+    T.Play.stop();
+    stopReason = null;
+    T.Nav.replace('play', {
+      courseId: next.course.id, stageId: next.stage.id, source: 'course',
+      cleared: { title: from.title, first: !!(info && info.first) }
+    });
   }
 
   /**
@@ -1072,7 +1117,13 @@
     const isBest = !!(meta.newBestKps || meta.isBestScore);
     const levelUp = !!(awarded && awarded.levelUp);
     const newBadge = !!(awarded && awarded.badges && awarded.badges.length);
-    const great = n >= 3;
+    // ★3つ ＝ **ひとまわり できた 回の ★** です。ひとまわりして いない 回の
+    // n は starsOf(r) の 見つもりで、そこには「みじかい ひとまわりでも
+    // ミス1かいまでは ゆるす」という 下ささえが きいて います。つまり
+    // **5打 打って 1かい まちがえた だけの 回も ★3つ あつかい**に なり、
+    // ★を 1つも 出して いない 画面で ひらひらだけが まって いました。
+    // 何を しても まうなら、それは もう おいわいでは なく ただの かざりです
+    const great = lapped && n >= 3;
 
     if (!(isBest || levelUp || newBadge || great || (lapped && meta.firstClear))) return;
 
@@ -1254,9 +1305,13 @@
     }
 
     // 5. よく できて いて、まだ ヒントが 強い とき … 手もとを 見ない 練習へ
+    //    その回の ★は **20打いじょう 打った 回**でしか 見ません。starsOf() には
+    //    みじかい ひとまわりむけの 下ささえ（ミス1かいまで ゆるす）が あるので、
+    //    3打で やめた 回まで「ばっちり 打てて います」に なって しまいます
     const s = T.Store.getSettings();
     const level = typeof s.assist === 'number' ? s.assist : (s.keyboard === false ? 3 : 0);
-    if (typing && stars >= 3 && level < 3 && s.assist !== 'auto' && T.Store.starsOf(r) >= 3) {
+    const solid = (r.totalKeys || 0) >= T.Store.MIN_RECORD_KEYS;
+    if (typing && stars >= 3 && level < 3 && s.assist !== 'auto' && solid && T.Store.starsOf(r) >= 3) {
       return {
         why: 'ばっちり 打てて います。つぎは ヒントを へらして、手もとを 見ないで やってみよう。',
         sub: r.course.short, title: 'めかくしで やってみる',

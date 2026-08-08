@@ -27,10 +27,22 @@
  * そこで ひとまわりの ★が 3つの ときだけ、おいわいの しるしを
  * 金色に かえて「★3つ！」と 出します。
  *
- * **それでも 練習は 止めません。** 出すのは 2びょうほどの みじかい しるし
- * だけで、つぎの ステージに すすむ かどうかは これまで どおり
- * けっか画面で 子どもが 決めます。ここで 手を 止めさせて しまうと、
- * 上の「はじまりも おわりも 決めない」が こわれます。
+ * ■ ★3つに なったら、その ばで つぎの ステージに 入れかわります
+ * ★3つ ＝ その ステージは できた、という ことです。そこで お題と
+ * ステージ名だけが 入れかわり、**そのまま 打ちつづけられます**（lapDone）。
+ *
+ * **けっか画面は はさみません。** はさむと そこで 手が 止まり、
+ * 「きょうは やめておこう」に なります。上の「はじまりも おわりも
+ * 決めない」が こわれるのは、たいてい 画面を はさんだ ときです。
+ * 入れかえるのは **お題の 切れ目**（1つ 打ち終えて、つぎを 出す 直前）なので、
+ * 打ちかけの ことばを とりあげる ことも ありません。
+ * おいわいは 入れかわった **あとの 画面**で 出します（flashCleared）。
+ * 前の 画面で 出すと、見て いる さいちゅうに 入れかわって しまいます。
+ *
+ * 行き先を 知って いるのは app.js です。ここは
+ * 「行き先が あるか」（canAdvance）と「行く」（onAdvance）だけを あずかります。
+ * 「もう1かい」「めかくし」「だんを ねらう」で 入った 回は 入れかえません
+ * （じぶんで えらんだ ことを とりあげない ため）。
  *
  * ■ 打ちまちがえても 先へは すすみません
  * まちがえた ままで すすむと、まちがった 指づかいの まま 速くなります。
@@ -96,6 +108,8 @@
     // この ステージは もう ★3つを とって いるか（おしらせの ことばを かえます）
     hadFullStars: false,
     lapFlashTimer: 0,
+    // ★3つに なった ときに つぎの ステージへ 入れかえる ための もの
+    advanceTimer: 0,
     // そのさきの「だん」を ねらって いる ときの はやさの めやす（0 = 出さない）
     goalKps: 0,
     matcher: null,
@@ -115,7 +129,9 @@
     itemKeyCount: 0, lastOk: true, skipLatency: false,
     running: false, imeWarned: false,
     settings: null, view: null, showKeyboard: true, showHands: false, showBuddy: false,
-    timerId: 0, onFinish: null, onStop: null, onPick: null, onAway: null
+    timerId: 0, onFinish: null, onStop: null, onPick: null, onAway: null,
+    // ★3つで つぎへ すすむ しくみ（app.js が 行き先を もって います）
+    canAdvance: null, onAdvance: null
   };
 
   const $ = id => document.getElementById(id);
@@ -244,6 +260,11 @@
     state.onPick = typeof p.onPick === 'function' ? p.onPick : null;
     // 5分いじょう 画面を はなれて もどって きた ときの 行き先（app.js が 決めます）
     state.onAway = typeof p.onAway === 'function' ? p.onAway : null;
+    // ★3つで つぎの ステージへ。どこへ 行くかを 知って いるのは app.js なので、
+    // 「行き先が あるか」（canAdvance）と「行く」（onAdvance）を あずかります
+    state.canAdvance = typeof p.canAdvance === 'function' ? p.canAdvance : null;
+    state.onAdvance = typeof p.onAdvance === 'function' ? p.onAdvance : null;
+    if (state.advanceTimer) { clearTimeout(state.advanceTimer); state.advanceTimer = 0; }
     state.pool = p.stage.items.slice();
 
     // ひとまわりの ながさと、前の れんしゅうの つづき。
@@ -356,6 +377,39 @@
     bindLeaveGuard();
     bindVisibility();
     if (state.limitMs) startTimer();
+    // 前の ステージを ★3つに して ここへ 来た とき。おいわいは **この 画面**で 出します
+    // （前の 画面で 出すと、見て いる さいちゅうに 入れかわって しまいます）
+    if (p.cleared) flashCleared(p.cleared);
+  }
+
+  /**
+   * 「前の ステージが ★3つ できました」の おしらせ。
+   *
+   * ひとまわりの おいわい（celebrateLap）と 同じ 見た目に して、
+   * **打つのは 止めません**。ちがうのは、しるしが さす ステージが
+   * ひとつ 前の もの だという こと だけ です。上の ステージ名は もう
+   * つぎの ものに かわって いるので、ここで どちらの ことかを 言います。
+   */
+  function flashCleared(info) {
+    const flash = $('play-lap-flash');
+    if (!flash) return;
+    flash.innerHTML =
+      `<span class="stars">${`<span class="star on">${T.icon('star')}</span>`.repeat(3)}</span>` +
+      `${info.first ? 'はじめての ★3つ！' : '★3つ！'}` +
+      `${esc(info.title)}が できました`;
+    flash.classList.add('is-full');
+    flash.hidden = false;
+    flash.classList.remove('is-on');
+    void flash.getBoundingClientRect();
+    flash.classList.add('is-on');
+    if (state.lapFlashTimer) clearTimeout(state.lapFlashTimer);
+    state.lapFlashTimer = setTimeout(() => {
+      state.lapFlashTimer = 0;
+      flash.hidden = true;
+      flash.classList.remove('is-on');
+    }, FULL_FLASH_MS);
+    if (T.FX) T.FX.confettiAt(flash, { count: 54, power: .8 });
+    chimeFull();
   }
 
   // ------------------------------------------------------------------
@@ -398,26 +452,47 @@
     let saved = null;
     try {
       saved = fillLongest();
-      const setEm = em => root.style.setProperty('--kb-em', `${Math.round(em * 100) / 100}px`);
+
+      // ■ 大きさを 書く さきは **下の かたまり（.play-lower）**です
+      //
+      // まえは #play-root（打つ 画面ぜんたい）に 書いて いました。CSS変数を
+      // 書きかえると、その 下に ある もの ぜんぶの 見た目を 計算し直す ことに
+      // なります。打つ 画面には お題・メーター・ちびキャラ（SVG が 何十個）も
+      // ぶら下がって いるので、**キーボードの 大きさを 2回 ためすだけで
+      // 画面ぜんたいを 2回 組み直して いました**。実測で 1回 100ms 以上
+      // （学校の 端末に よせて CPU を 4ばい おそくした 値）です。
+      // --kb-em / --kb-row を 見るのは .kb-fit / .play-visual / .kb-key だけ
+      // なので、ここに 書けば 組み直しは **下の かたまりの 中だけ**で すみます。
+      const setEm = em => lower.style.setProperty('--kb-em', `${Math.round(em * 100) / 100}px`);
+
+      // ■ はかる ものは **先に ぜんぶ** 読みます
+      // 「書いて → 読んで → 書いて → 読んで」と まぜると、読む たびに
+      // ブラウザが その場で 組み直します。em に かかわらない ものは
+      // 書きはじめる 前に まとめて 読んで おきます。
+      const scrollW = scroll.clientWidth;
+      const nav = document.querySelector('.navbar');
+      const navH = nav ? nav.getBoundingClientRect().height : 62;
+      // 本文の 下の すきま（.view の padding-bottom）も 画面を つかいます
+      const view = root.parentElement;
+      const pad = view ? parseFloat(getComputedStyle(view).paddingBottom) || 0 : 0;
+      // 打つ 画面の 上ばし。ここより 上は キーボードの 大きさで うごきません
+      const top = root.getBoundingClientRect().top + global.scrollY;
+      // 下部バーの 上まで。すこし（4px）ゆとりを のこします
+      const room = global.innerHeight - navH - top - pad - 4;
+
       // はばの 上限。キー1つが よこ長に なりすぎない ところで 止めます
       // （キーボードぜんたいの はば ＝ 88em。style.css の .kb-fit と 同じ 数）
-      const emHi = Math.max(EM_MIN + 2, Math.min(EM_MAX, scroll.clientWidth / 88));
+      const emHi = Math.max(EM_MIN + 2, Math.min(EM_MAX, scrollW / 88));
 
       setEm(EM_MIN);
       const low = lower.getBoundingClientRect().height;
       setEm(emHi);
       const high = lower.getBoundingClientRect().height;
       const slope = (high - low) / (emHi - EM_MIN);
+      // ここは もう 組み直しが すんで いるので、ついでに 読んでも ただ です
+      const rootH = root.getBoundingClientRect().height;
 
-      const rect = root.getBoundingClientRect();
-      const nav = document.querySelector('.navbar');
-      const navH = nav ? nav.getBoundingClientRect().height : 62;
-      // 本文の 下の すきま（.view の padding-bottom）も 画面を つかいます
-      const view = root.parentElement;
-      const pad = view ? parseFloat(getComputedStyle(view).paddingBottom) || 0 : 0;
-      // 下部バーの 上まで。すこし（4px）ゆとりを のこします
-      const room = global.innerHeight - navH - (rect.top + global.scrollY) - pad - 4;
-      const em = Math.max(EM_MIN, Math.min(emHi, slope > 0 ? emHi + (room - rect.height) / slope : emHi));
+      const em = Math.max(EM_MIN, Math.min(emHi, slope > 0 ? emHi + (room - rootH) / slope : emHi));
       setEm(em);
       stretchRows(root, lower, room);
     } finally {
@@ -434,7 +509,8 @@
    * ましかくを こえては のばしません。
    */
   function stretchRows(root, lower, room) {
-    root.style.removeProperty('--kb-row');
+    // 大きさの ふだは 下の かたまりに つけます（fitKeyboard の setEm と 同じ 理由）
+    lower.style.removeProperty('--kb-row');
     const spare = room - root.getBoundingClientRect().height;
     if (spare < 6) return;
     const kb = lower.querySelector('.kb');
@@ -444,7 +520,7 @@
     const square = kb.getBoundingClientRect().width / 15 - 4;     // ましかくに なる たかさ
     // 6行ぶん（いちばん上の 行は 0.73ばい なので あわせて 5.73行ぶん）
     const row = Math.min(square, now + spare / 5.73);
-    if (row > now + 1) root.style.setProperty('--kb-row', `${Math.round(row * 10) / 10}px`);
+    if (row > now + 1) lower.style.setProperty('--kb-row', `${Math.round(row * 10) / 10}px`);
   }
 
   /** この ステージで いちばん 場所を とる お題を、いったん 画面に 入れます */
@@ -1075,6 +1151,30 @@
 
     const stars = lapStarsNow();
     if (stars > state.lapStarsSeen) state.lapStarsSeen = stars;
+
+    // ■ ★3つ ＝ この ステージは できた。その ばで つぎの ステージに 入れかわります
+    //
+    // ここは **お題の 切れ目**です（loadItem の 直前）。だから 打ちかけの
+    // ことばを とりあげる ことも、打った ぶんが むだに なる ことも ありません。
+    // けっか画面は はさみません。はさむと そこで「きょうは やめておこう」に
+    // なり、この ファイルの 上に 書いた「はじまりも おわりも 決めない」が
+    // こわれます。子どもから 見ると、ステージ名と お題が 入れかわって
+    // **そのまま 打ちつづけられる** だけ です。
+    //
+    // 入れかえは **つぎの 順番で** します。いま この 中は
+    // handleChar → finishItem → lapDone と つみあがって いる とちゅうで、
+    // ここで 画面を 作り直すと、下に のこって いる loadItem() が
+    // **新しい 画面を さわって** しまいます。
+    if (stars >= 3 && state.onAdvance && state.canAdvance && state.canAdvance()) {
+      const go = state.onAdvance;
+      const first = !state.hadFullStars;
+      state.hadFullStars = true;
+      state.advanceTimer = setTimeout(() => {
+        state.advanceTimer = 0;
+        go({ first });
+      }, 0);
+      return;                    // おいわいは つぎの 画面で 出します（flashCleared）
+    }
     celebrateLap(stars);
   }
 
@@ -1197,6 +1297,8 @@
     unbindFit();
     unbindLeaveGuard();
     unbindVisibility();
+    // 「やめる」が さきに おされた ときに、あとから 入れかえが 走らない ように します
+    if (state.advanceTimer) { clearTimeout(state.advanceTimer); state.advanceTimer = 0; }
     T.Buddy.stop();
 
     const stats = liveStats();

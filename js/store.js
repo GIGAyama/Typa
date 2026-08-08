@@ -43,18 +43,55 @@
   const DETAIL_MAX = 60;
   const DETAIL_FIELDS = ['lat', 'conf', 'rule'];
 
+  /**
+   * 1回 読んだ ものを おぼえて おく ところ。
+   *
+   * ■ どうして いる か
+   * きろくの ならび（typa.history.v1）は 300回ぶんで **170KB を こえます**。
+   * ところが 1つの 画面を 出すだけで、にがての 集計・おぼえぐあい・
+   * ローマ字の きまり・きょうの ぶん … と 何度も 読みなおして いました。
+   * にがての ひきだしで 6回、れんしゅうを はじめる ときにも 1回です。
+   * JSON.parse は そのたび 頭から やりなおすので、学校の Chromebook では
+   * **打ちはじめるまでの 待ち時間**に そのまま つみ上がります。
+   * このアプリが いちばん みじかく したい ところ が そこ です。
+   *
+   * ■ 古い ものを つかんだ ままに ならない ようにする
+   * おぼえて おくのは「**その ときの 文字列と、その 結果**」の 2つ 一組です。
+   * 読むたびに localStorage の 文字列と 見くらべ、1文字でも ちがえば
+   * 読みなおします。だから
+   *   ・べつの タブで 書きかえられた
+   *   ・backup.js が localStorage に じかに 書いた
+   *   ・store.js を とおさずに 消された
+   * どの ばあいでも 古い ものが 返る ことは ありません。
+   * 速く なるのは JSON.parse を とばす ぶん だけ で、
+   * 「何が 入って いるか」の 答えは かならず localStorage の ままです。
+   */
+  const cache = Object.create(null);
+
   function read(key, fallback) {
     try {
       const raw = localStorage.getItem(key);
-      if (!raw) return fallback;
+      if (!raw) { delete cache[key]; return fallback; }
+      const hit = cache[key];
+      if (hit && hit.raw === raw) return hit.value;
       const value = JSON.parse(raw);
-      return (value === null || value === undefined) ? fallback : value;
-    } catch (e) { return fallback; }
+      if (value === null || value === undefined) { delete cache[key]; return fallback; }
+      cache[key] = { raw, value };
+      return value;
+    } catch (e) { delete cache[key]; return fallback; }
   }
 
   function write(key, value) {
-    try { localStorage.setItem(key, JSON.stringify(value)); return true; }
-    catch (e) { return false; }
+    let raw;
+    try { raw = JSON.stringify(value); } catch (e) { return false; }
+    // 書けたか どうかが 決まる まで おぼえた ものは すてて おきます。
+    // 入りきらなかった ときに、画面だけ 新しい 数字に なる ことを ふせぎます
+    delete cache[key];
+    try {
+      localStorage.setItem(key, raw);
+      cache[key] = { raw, value };
+      return true;
+    } catch (e) { return false; }
   }
 
   /** 端末の 時計で「YYYY-MM-DD」。日づけの 数えかたは いつも これに そろえます */
@@ -179,7 +216,7 @@
     }
     return Object.assign({}, ASSIST_LEVELS[level], {
       fingerWords: true,
-      level: settings.assist === 'auto' ? level : level,
+      level,
       auto: settings.assist === 'auto'
     });
   }

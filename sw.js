@@ -27,7 +27,7 @@
  *   キャッシュまで巻き添えで消え、それらがオフラインで起動しなくなっていた。
  */
 const CACHE_PREFIX = 'typa-';
-const APP_VERSION = 'v19';   // ← リリースごとに必ず上げる
+const APP_VERSION = 'v21';   // ← リリースごとに必ず上げる
 const VERSION = CACHE_PREFIX + APP_VERSION;
 const ASSETS = [
   './',

@@ -510,6 +510,46 @@ eq(r.laps, 0, 'ひとまわり して いない');
 eq(Store.getProgress()['hp-1'].stars, 0, 'ひとまわり しない かぎり ★は つかない');
 
 // ------------------------------------------------------------------
+// 11. 1回 読んだ ものを おぼえて いても、古い ものを 返さない
+// ------------------------------------------------------------------
+//
+// store.js は JSON.parse の 結果を おぼえて おきます。きろくの ならびは
+// 170KB を こえるのに、1つの 画面を 出すだけで 何度も 読みなおして いて、
+// **打ちはじめるまでの 待ち時間**に そのまま つみ上がって いたためです。
+//
+// はやく なる かわりに「古い ものを つかんだ まま」に なっては いけません。
+// backup.js は localStorage に じかに 書き、べつの タブが 書きかえる ことも
+// あります。おぼえて いるのは「その ときの 文字列と その 結果」の 2つ 一組で、
+// 読むたびに 文字列を 見くらべます。ここが こわれると、きろくを 読みこんだ
+// あとも 前の きろくが 出つづける ことに なります。
+
+reset();
+Store.applyResult('hp-1', {
+  doneItems: 8, lapNeed: 8, correctKeys: 32, totalKeys: 32,
+  kps: 2, accuracy: 100, finishedAt: new Date().toISOString()
+});
+eq(Store.getProgress()['hp-1'].stars, 3, 'まず ★3つ を つけて おく');
+
+// (1) store.js を とおさずに 書きかえた ばあい（backup.js の 読みこみ・べつの タブ）
+memory['typa.progress.v1'] = JSON.stringify({ 'hp-1': { clears: 1, stars: 1 } });
+eq(Store.getProgress()['hp-1'].stars, 1, '外から 書きかえたら すぐ 新しい ほうを 読む');
+
+// (2) store.js を とおさずに 消した ばあい
+delete memory['typa.progress.v1'];
+eq(Store.getProgress()['hp-1'], undefined, '外から 消したら もう 返さない');
+
+// (3) 同じ 中身を 2回 読んでも 同じ こたえ
+memory['typa.history.v1'] = JSON.stringify([{ at: '2026-07-20T10:00:00.000Z', correctKeys: 40 }]);
+eq(Store.getHistory().length, 1, '1回目');
+eq(Store.getHistory().length, 1, '2回目（おぼえた ものを つかう）');
+memory['typa.history.v1'] = JSON.stringify([]);
+eq(Store.getHistory().length, 0, '中身が かわれば こたえも かわる');
+
+// (4) こわれた 文字列は そのまま すてる（おぼえた 前の ものを 返さない）
+memory['typa.history.v1'] = '{こわれて います';
+eq(Store.getHistory().length, 0, 'こわれた ものは 空として あつかう');
+
+// ------------------------------------------------------------------
 
 console.log(`しらべた こと: ${checked}`);
 if (problems.length === 0) {

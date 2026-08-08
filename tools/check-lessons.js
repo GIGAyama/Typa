@@ -95,6 +95,75 @@ Object.keys(Lessons.SHORTCUT_TASKS).forEach(group => {
   });
 });
 
+// ------------------------------------------------------------------
+// ★3つを とった あとの 行き先
+// ------------------------------------------------------------------
+//
+// ★3つに なると その ばで つぎの ステージに 入れかわります（js/play.js）。
+// ここが ずれると、**できたのに 同じ ステージに とどまる**か、
+// **もう ★3の ところへ 送られる**か、どちらかが しずかに 起きます。
+// どちらも「打てて いる のに 手ごたえが ない」形に なります。
+
+function nextOf(stageId, doneIds) {
+  const done = new Set(doneIds || []);
+  const r = Lessons.nextStageAfter(stageId, id => done.has(id));
+  return r ? r.stage.id : null;
+}
+
+function want(got, expect, what) {
+  checked++;
+  if (got !== expect) problems.push(`${what} … ${JSON.stringify(expect)} の はずが ${JSON.stringify(got)}`);
+}
+
+const ALL = [];
+Lessons.COURSES.forEach(c => c.stages.forEach(s => ALL.push(s)));
+const TYPING = ALL.filter(s => s.mode !== 'shortcut' && !s.noStars).map(s => s.id);
+
+want(nextOf('hp-1', []), 'hp-2', 'すぐ つぎの ステージへ');
+want(nextOf('hp-1', ['hp-2', 'hp-3']), 'hp-4', 'もう ★3の ステージは とばす');
+
+// コースの さいごまで いったら、つぎの コースの さいしょへ つながります
+const lastOfFirst = Lessons.COURSES[0].stages[Lessons.COURSES[0].stages.length - 1].id;
+want(nextOf(lastOfFirst, []), Lessons.COURSES[1].stages[0].id, 'コースを またいで つながる');
+
+// うしろが ぜんぶ ★3なら、先頭に もどって まだの ところへ
+want(nextOf(TYPING[TYPING.length - 1], TYPING.slice(1)), TYPING[0],
+  'うしろが ぜんぶ ★3なら 先頭の まだの ところへ');
+
+// ぜんぶ ★3なら もう 行き先は ありません（そこから「そのさき」の 時期に なります）
+want(nextOf('hp-1', TYPING), null, 'ぜんぶ ★3なら 入れかえない');
+
+// ショートカットには 送りません（打鍵の れんしゅうの とちゅうに 出て きては こまります）
+const scIds = ALL.filter(s => s.mode === 'shortcut').map(s => s.id);
+checked++;
+if (scIds.length === 0) problems.push('ショートカットの ステージが ありません');
+TYPING.forEach(id => {
+  const to = nextOf(id, TYPING.filter(x => x !== id));
+  checked++;
+  if (to !== null && scIds.indexOf(to) >= 0) problems.push(`${id} から ショートカット（${to}）へ 送られました`);
+});
+
+// 知らない ステージIDでも 落ちない（お題を 入れかえた あとの きろくで 起きます）
+want(nextOf('nope', []), ALL[0].id, '知らない ステージIDでも 先頭から さがす');
+
+// ★3に する たびに 行き先が へって、いつか かならず おわる
+checked++;
+{
+  const done = new Set();
+  let at = TYPING[0];
+  let guard = 0;
+  while (guard++ < TYPING.length + 5) {
+    done.add(at);
+    const r = Lessons.nextStageAfter(at, id => done.has(id));
+    if (!r) break;
+    at = r.stage.id;
+  }
+  if (guard > TYPING.length + 1) problems.push('★3に して いっても 行き先が つきません（ぐるぐる まわります）');
+  if (done.size !== TYPING.length) {
+    problems.push(`ぜんぶの ステージを とおりません（${done.size} / ${TYPING.length}）`);
+  }
+}
+
 // --- ステージIDの かぶりが ないか ---
 const seen = {};
 Lessons.COURSES.forEach(course => course.stages.forEach(stage => {
