@@ -16,9 +16,12 @@
     "check:backup": "node tools/check-backup.js",
     "measure": "node scripts/measure/measure.mjs",
     "measure:typing": "node scripts/measure/typing.mjs",
-    "measure:pwa": "node scripts/measure/pwa.mjs"
+    "measure:pwa": "node scripts/measure/pwa.mjs",
+    "measure:keyboard": "node scripts/measure/keyboard.mjs",
+    "measure:perf": "node scripts/measure/perf.mjs"
   },
   "_measure": "measure:* だけ playwright が 要ります（npm i -D playwright && npx playwright install chromium）。CI では 走らせません",
+  "_measure_browser": "ブラウザを ダウンロードできない ネットワークでは、手もとの Chromium の 場所を CHROME_PATH で 教えます（例: CHROME_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run measure）",
   "devDependencies": {},
   "engines": {
     "node": ">=20"
