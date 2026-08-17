@@ -353,21 +353,60 @@ export const CHECKS = [
 
   {
     id: 'E_MANIFEST_ID',
-    title: 'manifest の id / scope / start_url が リポジトリ名の 絶対パス',
+    title: 'manifest の id / scope / start_url が 配信場所と 合って いる',
     run: (root) => {
       const s = read(root, 'manifest.webmanifest');
       if (!s) return { ok: false, detail: ['manifest.webmanifest が ありません'] };
       let j;
       try { j = JSON.parse(s); } catch (e) { return { ok: false, detail: ['JSON として 読めません: ' + e.message] }; }
       const bad = [];
+      // 正しい 値は「どこで 配信するか」で 変わります。
+      //
+      // 独自ドメイン（CNAME あり）だと アプリは サブドメインの 直下に 置かれます。
+      //   https://typa.giga-school.com/
+      // ここで scope を /Typa/ の ままに すると、scope が ページの URL を 含まなく なり、
+      // manifest ごと 無視されて PWA として インストール できなく なります。
+      //
+      // CNAME が なければ 共有オリジンの サブディレクトリ配信なので
+      //   https://（ID）.github.io/Typa/
+      // リポジトリ名の 絶対パスで ないと、同居する 別アプリと 取りちがえられます。
+      //
+      // 相対パス（"./"）は どちらの 配信でも 正しく 解決されるので、いつでも 通します。
+      const hasCname = fs.existsSync(path.join(root, 'CNAME'));
+      const want = hasCname ? '"./"（相対パス）か "/"' : '/{リポジトリ名}/';
+      const okPath = (v) => v === './' || (hasCname ? /^\/(\?|#|$)/.test(v) : /^\/[^/]+\/$/.test(v));
       for (const k of ['id', 'scope', 'start_url']) {
         if (!j[k]) { bad.push(`${k} が ありません`); continue; }
-        if (!/^\/[^/]+\/$/.test(j[k])) bad.push(`${k} が "${j[k]}" です。/{リポジトリ名}/ の 形に して ください`);
+        if (!okPath(j[k])) bad.push(`${k} が "${j[k]}" です。${want} の 形に して ください`);
       }
       if (j.id && j.scope && j.start_url && new Set([j.id, j.scope, j.start_url]).size !== 1) {
         bad.push('id / scope / start_url が そろって いません');
       }
       return { ok: bad.length === 0, detail: bad };
+    },
+  },
+  {
+    id: 'E_CNAME',
+    title: 'CNAME に BOM が なく、ドメイン名 1行だけ',
+    run: (root) => {
+      const p = path.join(root, 'CNAME');
+      if (!fs.existsSync(p)) return { ok: true, detail: [] };  // 独自ドメインを 使わない リポジトリ
+      const raw = fs.readFileSync(p, 'utf8');
+      // ⚠️ BOM を 必ず 見ること。メモ帳や PowerShell の `>` で 書くと 先頭に U+FEFF が 入る。
+      //    目では 見えないのに GitHub Pages は ドメイン名の 一部として 読むため、
+      //    ホスト名として 不正に なり、カスタムドメインが 有効に ならない。
+      //    DNS も Pages の 設定も 正しいのに「なぜか つながらない」という、
+      //    いちばん 探しにくい 壊れかたを する。実際に これで 全リポジトリが 止まった。
+      if (raw.charCodeAt(0) === 0xFEFF) {
+        return { ok: false, detail: ['先頭に BOM が あります。BOM なし UTF-8 で 保存し直して ください'] };
+      }
+      const lines = raw.split('\n').filter((l) => l.trim() !== '');
+      if (lines.length !== 1) return { ok: false, detail: [`ドメイン名 1行だけに して ください（${lines.length} 行 あります）`] };
+      const host = lines[0].trim();
+      if (!/^(?!-)[a-z0-9-]+(\.(?!-)[a-z0-9-]+)+$/.test(host)) {
+        return { ok: false, detail: [`"${host}" は ホスト名として 正しく ありません（https:// ・ 末尾の / ・ 大文字 ・ 空白は 入れられません）`] };
+      }
+      return { ok: true, detail: [] };
     },
   },
   {

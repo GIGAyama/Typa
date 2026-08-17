@@ -52,7 +52,11 @@ const BREAKAGES = {
   F_LABEL_FOR_TABBABLE: (d) => edit(d, 'js/app.js', (s) =>
     s.replace('<input type="file" id="bk-file" accept="application/json,.json" class="file-pick-input">',
       '<input type="file" id="bk-file" accept="application/json,.json" hidden>')),
-  E_MANIFEST_ID:    (d) => editJson(d, 'manifest.webmanifest', (j) => { j.scope = './'; j.start_url = './'; }),
+  // "./" は 独自ドメインでも サブディレクトリ配信でも 正しく 解決されるので、もう こわれた 形では ない。
+  // 配信場所と 食いちがう 絶対パス（CNAME が あるのに /Typa/ の まま）が いまの こわれかた。
+  E_MANIFEST_ID:    (d) => editJson(d, 'manifest.webmanifest', (j) => { j.id = '/Typa/'; j.scope = '/Typa/'; j.start_url = '/Typa/'; }),
+  // 目に 見えない BOM。テストで 押さえて おかないと 二度と 気づけない。
+  E_CNAME:          (d) => write(d, 'CNAME', '﻿typa.giga-school.com\n'),
   E_ICONS:          (d) => editJson(d, 'manifest.webmanifest', (j) => { j.icons = j.icons.filter((i) => !(i.purpose || '').includes('maskable')); }),
   E_SW_CACHE_SCOPE: (d) => edit(d, 'sw.js', (s) => s.replace(/\.filter\(k => k\.startsWith\(CACHE_PREFIX\) && k !== VERSION\)/, '.filter(k => k !== VERSION)')),
   E_SW_NO_LOCALSTORAGE: (d) => edit(d, 'sw.js', (s) => s + "\nself.addEventListener('sync', () => { localStorage.setItem('x','1'); });\n"),
@@ -141,8 +145,10 @@ const require$ = createRequire(import.meta.url);
 // ---------------------------------------------------------------- 本体
 function copyRepo() {
   const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'giga-selftest-'));
+  // CNAME も 写すこと。E_MANIFEST_ID は「CNAME が あるか」で 正しい 値が 変わるため、
+  // 写し忘れると 独自ドメイン側の 判定が まるごと 検査されない。
   for (const rel of ['index.html', 'offline.html', 'sw.js', 'install-hook.js', 'manifest.webmanifest',
-    'LICENSE', '.gitignore', 'README.md', 'MANUAL.md', 'AUDIT.md', 'package.json']) {
+    'CNAME', 'LICENSE', '.gitignore', 'README.md', 'MANUAL.md', 'AUDIT.md', 'package.json']) {
     const src = path.join(ROOT, rel);
     if (fs.existsSync(src)) { fs.mkdirSync(path.dirname(path.join(dest, rel)), { recursive: true }); fs.copyFileSync(src, path.join(dest, rel)); }
   }
