@@ -103,7 +103,7 @@ README が古くなっていることがあるので、数えられるものは�
 | 4回まちがえると「とばす」が出る | `MANUAL.md` §2 | 撮影中に実際に出ることを確認 |
 | 画面が出るまで0.8秒 | `AUDIT.md` §8-4 | LCP 756ms。CPU を4倍おそくした Chromebook 想定、5回の中央値。**実機の数字ではない**と記事にも書いた |
 | 最初に読みこむ合計 約630KB | `AUDIT.md` §8-4 | 632.7 KB |
-| 許可が要るのは gigayama.github.io だけ | `index.html` の CSP と grep | `default-src 'self'` ほか。`index.html` `js/` `sw.js` を grep して外部 URL が1つもないことを確認した |
+| 許可が要るのは typa.giga-school.com だけ | `index.html` の CSP と grep | `default-src 'self'` ほか。`index.html` `js/` `sw.js` を grep して外部 URL が1つもないことを確認した |
 | 記録は端末の中だけ、送信しない | `MANUAL.md` §4、`README.md` | |
 | iPad は7日で消えることがある | `MANUAL.md` §4 | |
 | 書き出し・読みこみが Tab と Enter だけでできる | `AUDIT.md` §8-1 | 2026-08-08 に直したところ。それ以前の版はマウスでしか押せなかった |

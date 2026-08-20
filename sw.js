@@ -20,14 +20,15 @@
  */
 /*
  * 【最重要】activate では自アプリ以外のキャッシュを削除しない。
- *   gigayama.github.io は数十個のアプリが同一オリジンを共有しているため、
+ *   旧配信元の gigayama.github.io は数十個のアプリが同一オリジンを共有していた。
+ *   同居する配置に戻したときに他アプリを巻き込まないよう、
  *   CACHE_PREFIX で始まるキャッシュだけを掃除する。
  *   以前はここで caches.keys() の結果を全部消していた。そのため
  *   このアプリを開くたびに、同じ端末に入っている他の GIGA アプリの
  *   キャッシュまで巻き添えで消え、それらがオフラインで起動しなくなっていた。
  */
 const CACHE_PREFIX = 'typa-';
-const APP_VERSION = 'v23';   // ← リリースごとに必ず上げる
+const APP_VERSION = 'v24';   // ← リリースごとに必ず上げる
 const VERSION = CACHE_PREFIX + APP_VERSION;
 const ASSETS = [
   './',
@@ -46,6 +47,8 @@ const ASSETS = [
   './js/studyLog.js',
   './js/studySession.js',
   './js/studyStats.js',
+  './records-export.html',
+  './js/records-export.js',
   './js/backup.js',
   './js/awards.js',
   './js/keyboard.js',

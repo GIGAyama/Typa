@@ -82,7 +82,7 @@
 ブラウザで ひらくだけです。インストールも 登録も 要りません。
 
 ```
-https://gigayama.github.io/Typa/
+https://typa.giga-school.com/
 ```
 
 ### アプリとして 入れる（おすすめ）
