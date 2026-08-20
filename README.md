@@ -13,7 +13,7 @@
 **これも保存だけで、送信はしません。**
 
 ```
-https://gigayama.github.io/Typa/
+https://typa.giga-school.com/
 ```
 
 ---
@@ -1463,7 +1463,7 @@ CHROME_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run measure
 
 1. このリポジトリの **Settings → Pages** で、Source を `Deploy from a branch`、
    ブランチを `main` / `(root)` にする
-2. `https://gigayama.github.io/Typa/` が開くことを確認する
+2. `https://typa.giga-school.com/` が開くことを確認する
 
 サーバー側の準備は要りません。静的ファイルを置くだけで動きます。
 
