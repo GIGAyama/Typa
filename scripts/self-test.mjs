@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { CHECKS, runGigaChecks } from './lib/giga-v5-checks.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const CONFIG = JSON.parse(fs.readFileSync(path.join(ROOT, 'quality.config.json'), 'utf8'));
 
 /** 検査ID → わざと こわす やりかた */
 const BREAKAGES = {
@@ -69,6 +70,12 @@ const BREAKAGES = {
   F_FILE_SIZE:      (d) => write(d, 'js/huge.js', '// ' + 'x'.repeat(10) + '\n'.repeat(1) + Array(5100).fill('// ぎょう').join('\n')),
   F_IMG_SIZE:       (d) => fs.writeFileSync(path.join(d, 'icons/big.png'), Buffer.alloc(200 * 1024)),
   F_IMG_DIMENSIONS: (d) => edit(d, 'index.html', (s) => s.replace('</body>', '<img src="./icons/icon-192.png">\n</body>')),
+  B_NO_SECRETS:     (d) => edit(d, 'js/app.js', (s) => s + '\nconst KEY = "AIzaSyA1234567890abcdefghijklmnopqrstuv";\n'),
+  // 独自ドメインなのに 旧リポジトリ名の 絶対パスが のこって いた 形
+  E_STALE_REPO_PATH: (d) => edit(d, 'sw.js', (s) => s.replace("'./offline.html'", "'/Typa/offline.html'")),
+  E_INSTALL_HOOK:   (d) => edit(d, 'index.html', (s) => s.replace('<script src="./install-hook.js"></script>', '')),
+  // 自動生成の 目印を 外す ＝ 手書き運用に もどす、が いまの こわれかた
+  E_SW_VERSION_GENERATED: (d) => edit(d, 'sw.js', (s) => s.replace(' /* __APP_VERSION__ */', '')),
 };
 
 // ---------------------------------------------------------------- 道具
@@ -148,11 +155,12 @@ function copyRepo() {
   // CNAME も 写すこと。E_MANIFEST_ID は「CNAME が あるか」で 正しい 値が 変わるため、
   // 写し忘れると 独自ドメイン側の 判定が まるごと 検査されない。
   for (const rel of ['index.html', 'offline.html', 'sw.js', 'install-hook.js', 'manifest.webmanifest',
-    'CNAME', 'LICENSE', '.gitignore', 'README.md', 'MANUAL.md', 'AUDIT.md', 'package.json']) {
+    'CNAME', 'LICENSE', '.gitignore', 'README.md', 'MANUAL.md', 'AUDIT.md', 'package.json',
+    'quality.config.json', 'sw-build.config.json']) {
     const src = path.join(ROOT, rel);
     if (fs.existsSync(src)) { fs.mkdirSync(path.dirname(path.join(dest, rel)), { recursive: true }); fs.copyFileSync(src, path.join(dest, rel)); }
   }
-  for (const dir of ['js', 'css', 'icons', '.github/workflows', '.github']) {
+  for (const dir of ['js', 'css', 'icons', 'tools', '.github/workflows', '.github']) {
     const src = path.join(ROOT, dir);
     if (!fs.existsSync(src)) continue;
     fs.mkdirSync(path.join(dest, dir), { recursive: true });
@@ -165,7 +173,7 @@ function copyRepo() {
 }
 
 const base = copyRepo();
-const baseline = runGigaChecks(base);
+const baseline = runGigaChecks(base, CONFIG);
 const baseFail = baseline.filter((r) => !r.ok).map((r) => r.id);
 if (baseFail.length) {
   console.log('⚠️  こわす まえから 落ちて いる 検査が あります: ' + baseFail.join(', '));
@@ -184,7 +192,7 @@ for (const check of CHECKS) {
   try { breaker(dir); } catch (e) { err = e.message; }
   if (err) { console.log(`❌ ${check.id.padEnd(34)} こわせませんでした: ${err}`); bad++; fs.rmSync(dir, { recursive: true, force: true }); continue; }
 
-  const after = runGigaChecks(dir).find((r) => r.id === check.id);
+  const after = runGigaChecks(dir, CONFIG).find((r) => r.id === check.id);
   done++;
   if (after.ok) { console.log(`❌ ${check.id.padEnd(34)} こわしたのに 通りました（この 検査は 何も 見て いません）`); bad++; }
   else console.log(`✅ ${check.id.padEnd(34)} こわしたら 落ちました`);
