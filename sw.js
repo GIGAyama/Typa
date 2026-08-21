@@ -28,7 +28,8 @@
  *   キャッシュまで巻き添えで消え、それらがオフラインで起動しなくなっていた。
  */
 const CACHE_PREFIX = 'typa-';
-const APP_VERSION = 'v24';   // ← リリースごとに必ず上げる
+// APP_VERSION は手で上げない。node tools/build-sw.mjs が先読み対象の中身から自動で決める
+const APP_VERSION = 'vf257b86a'; /* __APP_VERSION__ */
 const VERSION = CACHE_PREFIX + APP_VERSION;
 const ASSETS = [
   './',

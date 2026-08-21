@@ -6,7 +6,7 @@
   "license": "MIT",
   "_type": "tools/check-*.js は CommonJS なので \"type\": \"module\" は 付けません。付けると 6本 とも 動かなく なります（実さいに 踏みました）。品質ゲートの スクリプトは .mjs に して あります",
   "scripts": {
-    "check": "node scripts/check-project.mjs",
+    "check": "node tools/build-sw.mjs --check && node scripts/check-project.mjs",
     "check:self-test": "node scripts/self-test.mjs",
     "check:lessons": "node tools/check-lessons.js",
     "check:mastery": "node tools/check-mastery.js",
@@ -18,7 +18,8 @@
     "measure:typing": "node scripts/measure/typing.mjs",
     "measure:pwa": "node scripts/measure/pwa.mjs",
     "measure:keyboard": "node scripts/measure/keyboard.mjs",
-    "measure:perf": "node scripts/measure/perf.mjs"
+    "measure:perf": "node scripts/measure/perf.mjs",
+    "build:sw": "node tools/build-sw.mjs"
   },
   "_measure": "measure:* だけ playwright が 要ります（npm i -D playwright && npx playwright install chromium）。CI では 走らせません",
   "_measure_browser": "ブラウザを ダウンロードできない ネットワークでは、手もとの Chromium の 場所を CHROME_PATH で 教えます（例: CHROME_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run measure）",
