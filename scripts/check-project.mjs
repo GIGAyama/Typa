@@ -25,9 +25,12 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { runGigaChecks, CHECKS } from './lib/giga-v5-checks.mjs';
+import { readFileSync } from 'node:fs';
+import { runGigaChecks } from './lib/giga-v5-checks.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// リポジトリ固有の値（repoName / sw 型 など）。正本の検査はこれで差を吸収する
+const CONFIG = JSON.parse(readFileSync(path.join(ROOT, 'quality.config.json'), 'utf8'));
 
 // --self-test は べつの スクリプトに 委ねます（元の リポジトリを こわさない ため、
 // 一時フォルダに 写して から わざと 壊します）
@@ -51,7 +54,7 @@ let failed = 0;
 
 // ---------------------------------------------------------------- Part I
 heading('GIGA Standard v5 — Part I の 検査');
-const results = runGigaChecks(ROOT);
+const results = runGigaChecks(ROOT, CONFIG);
 for (const r of results) {
   const mark = r.ok ? '✅' : '❌';
   console.log(`${mark} ${r.id.padEnd(22)} ${r.title}`);

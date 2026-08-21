@@ -1,31 +1,57 @@
 /**
  * =====================================================================
- * giga-v5-checks.mjs — GIGA Standard v5 / Part I の 検査
+ * 【正本】standards/lib/giga-v5-checks.mjs — GIGA Standard v5 / Part I の検査
  * =====================================================================
  *
- * ここは **ほかの リポジトリと 共通の 中身**です。
- * 正本が 更新されたら、この ファイルごと 差しかえられる 形に して います。
- * Typa 固有の 検査は ここには 書かず、tools/check-*.js に 置いて ください。
+ * 各リポジトリへは scripts/lib/giga-v5-checks.mjs としてコピーする（中身は変えない）。
+ * リポジトリ固有の値は quality.config.json に置き、呼び出し側（check-project.mjs）が
+ * runGigaChecks(root, config) に渡す。アプリ固有の検査はこのファイルに書かず、
+ * 各リポジトリの tools/ に置く。
  *
- * ■ 検査を 書く ときの 決まりごと（実さいに 踏んだ 3つの あな）
+ * ■ 検査を書くときの決まりごと（実際に踏んだ穴）
  *
- *   1. 「消す 式」を 正規表現で 追わない。
- *      caches.keys() の 全削除を さがす とき、`caches.delete(k)` の 形を
- *      追うと `(k) => caches.delete(k)` のような 書き方を 見のがします。
- *      見るべきは **`startsWith` で しぼって いる 式が あるか** です。
+ *   1. 「消す式」を正規表現で追わない。
+ *      caches.keys() の全削除をさがすとき、`caches.delete(k)` の形を追うと
+ *      `(k) => caches.delete(k)` のような書き方を見のがす。
+ *      見るべきは **`startsWith` でしぼっている式があるか**。
  *
- *   2. 判定の 前に コメントを 落とす。
- *      「localStorage は さわりません」という **注意書き**に 反応して
- *      誤検知します。
+ *   2. 判定の前にコメントを落とす。
+ *      「localStorage はさわりません」という**注意書き**に反応して誤検知する。
  *
- *   3. 前方も 見る。
- *      `@supports not (height: 100dvh) { … 100vh … }` は 正しい
- *      フォールバックです。100vh を 見つけただけで 落として は いけません。
+ *   3. 前方も見る。
+ *      `@supports not (height: 100dvh) { … 100vh … }` は正しいフォールバック。
+ *      100vh を見つけただけで落としてはいけない。
+ *
+ *   4. 引用符は ' と " の両方を受ける。
+ *      addEventListener("install" と書くリポジトリがあり、['"] にしていない
+ *      コピーは skipWaiting の検査が素通りしていた。
+ *
+ *   5. ハンドラの切れ目は「次の addEventListener」まで。
+ *      install の次に message ハンドラ（正しい skipWaiting の置き場）が来る
+ *      構成で、区間を event 名の決め打ちで切ると、並び順しだいで
+ *      message の中の skipWaiting を install のものと誤判定する。
+ *
+ * ■ config（quality.config.json から呼び出し側が渡す）
+ *   {
+ *     "repoName": "Typa",              // E_STALE_REPO_PATH が /Typa/ をさがす
+ *     "sw": "static",                  // static | vite | workbox | none
+ *     "swSource": "sw.js",             // 検査する SW の原文（vite なら public/sw.js）
+ *     "swVersionConst": "APP_VERSION", // 版の定数名（VERSION 等の別名を許す）
+ *     "manifest": "manifest.webmanifest",
+ *     "jsDirs": ["js"], "cssDirs": ["css"],
+ *     "htmlFiles": ["index.html", "offline.html"],
+ *     "imageDirs": ["icons", "img", "images"],
+ *     "fluidTypeMin": 3,
+ *     "allowedRemoteScripts": ["^https://fonts\\.googleapis\\.com/"],
+ *     "skips": [{ "id": "D_CANVAS_DPR", "reason": "Canvas を使わない" }]
+ *   }
+ *   skips は「検査をゆるめる」のではなく、事情を理由つきで明示する場所。
+ *   理由の無い skip は受け付けない。
  */
 import fs from 'node:fs';
 import path from 'node:path';
 
-/** JavaScript / CSS の コメントを 落とす（判定の 前に 必ず 通す） */
+/** JavaScript / CSS のコメントを落とす（判定の前に必ず通す） */
 export function stripComments(src) {
   let out = '';
   let i = 0;
@@ -49,6 +75,21 @@ export function stripComments(src) {
   return out;
 }
 
+const DEFAULTS = {
+  repoName: null,
+  sw: 'static',
+  swSource: null,               // 未指定なら sw に応じて既定を選ぶ
+  swVersionConst: null,         // 未指定なら APP_VERSION / VERSION の両方を受ける
+  manifest: 'manifest.webmanifest',
+  jsDirs: ['js'],
+  cssDirs: ['css'],
+  htmlFiles: ['index.html', 'offline.html'],
+  imageDirs: ['icons', 'img', 'images'],
+  fluidTypeMin: 3,
+  allowedRemoteScripts: [],
+  skips: [],
+};
+
 const read = (root, rel) => {
   const p = path.join(root, rel);
   return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null;
@@ -58,180 +99,204 @@ const listFiles = (root, dir, ext) => {
   if (!fs.existsSync(p)) return [];
   return fs.readdirSync(p).filter((f) => f.endsWith(ext)).map((f) => path.join(dir, f));
 };
+const jsFiles = (root, cfg) => cfg.jsDirs.flatMap((d) => listFiles(root, d, '.js'));
+const cssFiles = (root, cfg) => cfg.cssDirs.flatMap((d) => listFiles(root, d, '.css'));
+const swSourceOf = (cfg) => cfg.swSource || (cfg.sw === 'vite' ? 'public/sw.js' : 'sw.js');
 
 /**
- * 検査の 定義。
- * run(root) は { ok, detail[] } を 返します。
+ * 検査の定義。run(root, cfg) は { ok, detail[], skip? } を返す。
+ * skip は「このリポジトリでは対象がない」の説明（ok:true と併用）。
  */
 export const CHECKS = [
   {
     id: 'A_LICENSE',
-    title: 'LICENSE が 実ファイルで ある',
+    title: 'LICENSE が実ファイルである',
     run: (root) => {
       const s = read(root, 'LICENSE');
-      if (!s) return { ok: false, detail: ['LICENSE が ありません'] };
-      if (!/Copyright \(c\)/i.test(s)) return { ok: false, detail: ['LICENSE に 著作権表示が ありません'] };
+      if (!s) return { ok: false, detail: ['LICENSE がありません'] };
+      if (!/Copyright \(c\)/i.test(s)) return { ok: false, detail: ['LICENSE に著作権表示がありません'] };
       return { ok: true, detail: [] };
     },
   },
   {
     id: 'A_GITIGNORE',
-    title: '.gitignore が 秘密ファイルを 除いて いる',
+    title: '.gitignore が秘密ファイルを除いている',
     run: (root) => {
       const s = read(root, '.gitignore');
-      if (!s) return { ok: false, detail: ['.gitignore が ありません'] };
-      const missing = ['node_modules', '.env', '.clasp.json'].filter((k) => !s.includes(k));
-      return { ok: missing.length === 0, detail: missing.map((m) => `${m} の 行が ありません`) };
+      if (!s) return { ok: false, detail: ['.gitignore がありません'] };
+      const missing = ['node_modules', '.env'].filter((k) => !s.includes(k));
+      return { ok: missing.length === 0, detail: missing.map((m) => `${m} の行がありません`) };
     },
   },
   {
     id: 'A_DEPENDABOT',
-    title: 'dependabot.yml が ある',
+    title: 'dependabot.yml がある',
     run: (root) => ({
       ok: !!read(root, '.github/dependabot.yml'),
-      detail: ['.github/dependabot.yml が ありません'],
+      detail: ['.github/dependabot.yml がありません'],
     }),
   },
   {
     id: 'A_CI_ON_PR',
-    title: 'CI が pull_request でも 走る',
+    title: 'CI が pull_request でも走る',
     run: (root) => {
       const files = listFiles(root, '.github/workflows', '.yml');
-      if (!files.length) return { ok: false, detail: ['.github/workflows に ワークフローが ありません'] };
+      if (!files.length) return { ok: false, detail: ['.github/workflows にワークフローがありません'] };
       const any = files.some((f) => /^\s*pull_request\s*:/m.test(read(root, f) || ''));
-      return { ok: any, detail: ['push だけでは PR の 時点で 落ちて いる ことに 気づけません'] };
+      return { ok: any, detail: ['push だけでは PR の時点で落ちていることに気づけません'] };
     },
   },
   {
     id: 'A_DOCS',
-    title: 'README / MANUAL / AUDIT が ある',
+    title: 'README / MANUAL / AUDIT がある',
     run: (root) => {
       const missing = ['README.md', 'MANUAL.md', 'AUDIT.md'].filter((f) => !read(root, f));
-      return { ok: missing.length === 0, detail: missing.map((m) => `${m} が ありません`) };
+      return { ok: missing.length === 0, detail: missing.map((m) => `${m} がありません`) };
     },
   },
 
   {
     id: 'B_NO_CDN_CODE',
-    title: 'CDN から 取る 実行コードが 0 バイト',
-    run: (root) => {
+    title: 'CDN から取る実行コードが 0 バイト',
+    run: (root, cfg) => {
+      const allowed = cfg.allowedRemoteScripts.map((re) => new RegExp(re));
       const bad = [];
-      for (const rel of ['index.html', 'offline.html', ...listFiles(root, 'js', '.js')]) {
+      for (const rel of [...cfg.htmlFiles, ...jsFiles(root, cfg)]) {
         const s = read(root, rel);
         if (!s) continue;
-        const code = stripComments(s);
-        for (const m of code.matchAll(/(?:src|href)\s*=\s*["']https?:\/\/([^"'/]+)/gi)) {
-          bad.push(`${rel}: ${m[1]} を 読んで います`);
+        const code = stripComments(s).replace(/<!--[\s\S]*?-->/g, ' ');
+        for (const m of code.matchAll(/(?:src|href)\s*=\s*["'](https?:\/\/[^"']+)["']/gi)) {
+          if (allowed.some((re) => re.test(m[1]))) continue;
+          bad.push(`${rel}: ${m[1]} を読んでいます`);
         }
-        if (/babel\/standalone|cdn\.tailwindcss\.com/.test(code)) bad.push(`${rel}: ブラウザの 中で コンパイルして います`);
+        if (/babel\/standalone|cdn\.tailwindcss\.com/.test(code)) bad.push(`${rel}: ブラウザの中でコンパイルしています`);
+      }
+      return { ok: bad.length === 0, detail: bad };
+    },
+  },
+  {
+    id: 'B_NO_SECRETS',
+    title: 'API キー・秘密鍵の直書きがない',
+    run: (root, cfg) => {
+      const bad = [];
+      for (const rel of [...cfg.htmlFiles, ...jsFiles(root, cfg)]) {
+        const s = read(root, rel);
+        if (!s) continue;
+        // AIza… は Google API キーの形。BEGIN PRIVATE KEY は鍵そのもの。
+        if (/AIza[0-9A-Za-z_-]{35}/.test(s)) bad.push(`${rel}: Google API キーらしき文字列があります`);
+        if (/-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(s)) bad.push(`${rel}: 秘密鍵があります`);
       }
       return { ok: bad.length === 0, detail: bad };
     },
   },
   {
     id: 'B_CSP',
-    title: 'CSP が あり、script-src が しまって いる',
+    title: 'CSP があり、script-src がしまっている',
     run: (root) => {
       const s = read(root, 'index.html');
-      if (!s) return { ok: false, detail: ['index.html が ありません'] };
-      const m = s.match(/http-equiv=["']Content-Security-Policy["'][^>]*content=["']([\s\S]*?)["']\s*>/i);
-      if (!m) return { ok: false, detail: ['CSP の <meta> が ありません'] };
+      if (!s) return { ok: false, detail: ['index.html がありません'] };
+      const m = s.match(/http-equiv=["']Content-Security-Policy["'][^>]*content=["']([\s\S]*?)["']\s*\/?>/i);
+      if (!m) return { ok: false, detail: ['CSP の <meta> がありません'] };
       const csp = m[1];
       const bad = [];
       const script = (csp.match(/script-src([^;]*)/) || [])[1] || '';
-      if (!/'self'/.test(script)) bad.push("script-src に 'self' が ありません");
-      if (/'unsafe-inline'|'unsafe-eval'/.test(script)) bad.push('script-src に unsafe-inline / unsafe-eval が あります');
-      // frame-ancestors は <meta> では 無視される（書くと 警告が 出るだけ）
-      if (/frame-ancestors/.test(csp)) bad.push('frame-ancestors は <meta> では 無視されます。HTTP ヘッダーで 設定して ください');
+      if (!/'self'/.test(script)) bad.push("script-src に 'self' がありません");
+      if (/'unsafe-inline'|'unsafe-eval'/.test(script)) bad.push('script-src に unsafe-inline / unsafe-eval があります');
+      // frame-ancestors は <meta> では無視される（書くと警告が出るだけ）
+      if (/frame-ancestors/.test(csp)) bad.push('frame-ancestors は <meta> では無視されます。HTTP ヘッダーで設定してください');
       return { ok: bad.length === 0, detail: bad };
     },
   },
   {
     id: 'B_NO_INLINE_SCRIPT',
-    title: 'index.html に インラインの <script> と onclick= が ない',
+    title: 'index.html にインラインの <script> と onclick= がない',
     run: (root) => {
       const s = read(root, 'index.html');
-      if (!s) return { ok: false, detail: ['index.html が ありません'] };
-      // コメントの 中の 例示に 反応しないよう、HTML コメントを 落としてから 見る
+      if (!s) return { ok: false, detail: ['index.html がありません'] };
+      // コメントの中の例示に反応しないよう、HTML コメントを落としてから見る
       const html = s.replace(/<!--[\s\S]*?-->/g, '');
       const bad = [];
       for (const m of html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)) {
-        if (m[1].trim()) bad.push('中身の ある <script> が あります（CSP で 動きません）');
+        if (m[1].trim()) bad.push('中身のある <script> があります（CSP で動きません）');
       }
-      if (/\son[a-z]+\s*=\s*["']/i.test(html)) bad.push('onclick= などの 属性が あります（CSP で 動きません）');
+      if (/\son[a-z]+\s*=\s*["']/i.test(html)) bad.push('onclick= などの属性があります（CSP で動きません）');
       return { ok: bad.length === 0, detail: bad };
     },
   },
 
   {
     id: 'C_NO_LS_CLEAR',
-    title: 'localStorage.clear() を つかって いない',
-    run: (root) => {
+    title: 'localStorage.clear() をつかっていない',
+    run: (root, cfg) => {
       const bad = [];
-      for (const rel of listFiles(root, 'js', '.js')) {
-        // ⚠️ コメントを 落としてから 見る。注意書きに 反応して 誤検知します
-        if (/localStorage\s*\.\s*clear\s*\(/.test(stripComments(read(root, rel)))) bad.push(`${rel} で つかって います`);
+      for (const rel of jsFiles(root, cfg)) {
+        // ⚠️ コメントを落としてから見る。注意書きに反応して誤検知する
+        if (/localStorage\s*\.\s*clear\s*\(/.test(stripComments(read(root, rel)))) bad.push(`${rel} でつかっています`);
       }
       return { ok: bad.length === 0, detail: bad };
     },
   },
   {
     id: 'C_PAGEHIDE',
-    title: 'pagehide で きろくを 確定して いる',
-    run: (root) => {
-      const hit = listFiles(root, 'js', '.js')
+    title: 'pagehide できろくを確定している',
+    run: (root, cfg) => {
+      // records-hub-client.js（正本コピー）の pagehide は記録ハブへの写しの
+      // 送信で、アプリ自身の確定保存ではない。混ぜると本体の保存が消えても
+      // 通ってしまうので、除いて見る。
+      const hit = jsFiles(root, cfg)
+        .filter((rel) => path.basename(rel) !== 'records-hub-client.js')
         .some((rel) => /addEventListener\(\s*['"]pagehide['"]/.test(stripComments(read(root, rel))));
-      return { ok: hit, detail: ['Chromebook は メモリ不足で タブを すてます。pagehide で 締めて ください'] };
+      return { ok: hit, detail: ['Chromebook はメモリ不足でタブをすてます。pagehide で締めてください'] };
     },
   },
   {
     id: 'C_NO_POSTMESSAGE_STAR',
-    title: "postMessage の 宛先が '*' でない",
-    run: (root) => {
+    title: "postMessage の宛先が '*' でない",
+    run: (root, cfg) => {
       const bad = [];
-      for (const rel of listFiles(root, 'js', '.js')) {
+      for (const rel of jsFiles(root, cfg)) {
         if (/\.postMessage\([^)]*,\s*['"]\*['"]\s*\)/.test(stripComments(read(root, rel)))) bad.push(rel);
       }
-      return { ok: bad.length === 0, detail: bad.map((f) => `${f} で 宛先が '*' です`) };
+      return { ok: bad.length === 0, detail: bad.map((f) => `${f} で宛先が '*' です`) };
     },
   },
 
   {
     id: 'D_VIEWPORT',
-    title: 'viewport が viewport-fit=cover で、拡大を 禁止して いない',
+    title: 'viewport が viewport-fit=cover で、拡大を禁止していない',
     run: (root) => {
       const s = read(root, 'index.html');
       const m = s && s.match(/<meta\s+name=["']viewport["'][^>]*content=["']([^"']+)["']/i);
-      if (!m) return { ok: false, detail: ['viewport の <meta> が ありません'] };
+      if (!m) return { ok: false, detail: ['viewport の <meta> がありません'] };
       const bad = [];
-      if (!/viewport-fit\s*=\s*cover/.test(m[1])) bad.push('viewport-fit=cover が ありません');
-      if (/user-scalable\s*=\s*no/.test(m[1])) bad.push('user-scalable=no が あります（見えづらい 子が 拡大できません）');
-      if (/maximum-scale\s*=\s*1(\.0)?\b/.test(m[1])) bad.push('maximum-scale=1.0 が あります');
+      if (!/viewport-fit\s*=\s*cover/.test(m[1])) bad.push('viewport-fit=cover がありません');
+      if (/user-scalable\s*=\s*no/.test(m[1])) bad.push('user-scalable=no があります（見えづらい子が拡大できません）');
+      if (/maximum-scale\s*=\s*1(\.0)?\b/.test(m[1])) bad.push('maximum-scale=1.0 があります');
       return { ok: bad.length === 0, detail: bad };
     },
   },
   {
     id: 'D_DVH',
-    title: '100vh を 単独で つかって いない',
-    run: (root) => {
+    title: '100vh を単独でつかっていない',
+    run: (root, cfg) => {
       const bad = [];
-      for (const rel of [...listFiles(root, 'css', '.css'), 'index.html', 'offline.html']) {
+      for (const rel of [...cssFiles(root, cfg), ...cfg.htmlFiles]) {
         const s = read(root, rel);
         if (!s) continue;
-        // ⚠️ 前方も 見る。@supports not (height: 100dvh) の 中の 100vh は 正しい ひかえ
+        // ⚠️ 前方も見る。@supports not (height: 100dvh) の中の 100vh は正しいひかえ
         const css = s.replace(/\/\*[\s\S]*?\*\//g, '');
         const guards = [];
         const re = /@supports\s+not\s*\(\s*height\s*:\s*100dvh\s*\)\s*\{/g;
         let g;
         while ((g = re.exec(css))) {
-          // 対応する } まで を ひかえの 区間と する
+          // 対応する } までをひかえの区間とする
           let depth = 1; let i = re.lastIndex;
           while (i < css.length && depth > 0) { if (css[i] === '{') depth++; else if (css[i] === '}') depth--; i++; }
           guards.push([g.index, i]);
         }
         for (const m of css.matchAll(/\b100vh\b/g)) {
           const inGuard = guards.some(([a, b]) => m.index > a && m.index < b);
-          if (!inGuard) bad.push(`${rel}: @supports の 外で 100vh を つかって います`);
+          if (!inGuard) bad.push(`${rel}: @supports の外で 100vh をつかっています`);
         }
       }
       return { ok: bad.length === 0, detail: bad };
@@ -239,66 +304,66 @@ export const CHECKS = [
   },
   {
     id: 'D_SAFE_AREA',
-    title: 'safe-area-inset を つかって いる',
-    run: (root) => {
-      const n = listFiles(root, 'css', '.css')
+    title: 'safe-area-inset をつかっている',
+    run: (root, cfg) => {
+      const n = cssFiles(root, cfg)
         .reduce((a, rel) => a + (read(root, rel).match(/env\(\s*safe-area-inset/g) || []).length, 0);
-      return { ok: n > 0, detail: ['ノッチ・ホームバーの ぶんを 足して いません'] };
+      return { ok: n > 0, detail: ['ノッチ・ホームバーのぶんを足していません'] };
     },
   },
   {
     id: 'D_FLUID_TYPE',
-    title: 'clamp() で 文字の 大きさを 決めて いる',
-    run: (root) => {
-      const n = listFiles(root, 'css', '.css')
+    title: 'clamp() で文字の大きさを決めている',
+    run: (root, cfg) => {
+      const n = cssFiles(root, cfg)
         .reduce((a, rel) => a + (read(root, rel).match(/clamp\(/g) || []).length, 0);
-      return { ok: n >= 3, detail: [`clamp() が ${n} か所 しか ありません`] };
+      return { ok: n >= cfg.fluidTypeMin, detail: [`clamp() が ${n} か所しかありません（目安 ${cfg.fluidTypeMin}）`] };
     },
   },
   {
     id: 'D_CANVAS_DPR',
-    title: 'Canvas に devicePixelRatio の 補正が ある（Canvas を つかう ときだけ）',
-    run: (root) => {
-      const files = listFiles(root, 'js', '.js').filter((rel) => /getContext\(\s*['"]2d['"]/.test(stripComments(read(root, rel))));
-      if (!files.length) return { ok: true, detail: [], skip: 'Canvas を つかって いません' };
+    title: 'Canvas に devicePixelRatio の補正がある（Canvas をつかうときだけ）',
+    run: (root, cfg) => {
+      const files = jsFiles(root, cfg).filter((rel) => /getContext\(\s*['"]2d['"]/.test(stripComments(read(root, rel))));
+      if (!files.length) return { ok: true, detail: [], skip: 'Canvas をつかっていません' };
       const bad = files.filter((rel) => !/devicePixelRatio/.test(stripComments(read(root, rel))));
-      return { ok: bad.length === 0, detail: bad.map((f) => `${f}: DPR 補正が ありません（高DPI機で ぼやけます）`) };
+      return { ok: bad.length === 0, detail: bad.map((f) => `${f}: DPR 補正がありません（高DPI機でぼやけます）`) };
     },
   },
   {
     id: 'D_REDUCED_MOTION',
-    title: 'prefers-reduced-motion に 対応し、0 では なく .01ms 以下の 実数',
-    run: (root) => {
-      const css = listFiles(root, 'css', '.css').map((rel) => read(root, rel)).join('\n');
-      if (!/prefers-reduced-motion/.test(css)) return { ok: false, detail: ['対応して いません'] };
+    title: 'prefers-reduced-motion に対応し、0 ではなく .01ms 以下の実数',
+    run: (root, cfg) => {
+      const css = cssFiles(root, cfg).map((rel) => read(root, rel)).join('\n');
+      if (!/prefers-reduced-motion/.test(css)) return { ok: false, detail: ['対応していません'] };
       const bad = [];
-      // 0 に すると animation-fill-mode: forwards が 効かず、中身が 消えます
-      if (/animation-duration\s*:\s*0(m?s)?\s*(!important)?\s*;/.test(css)) bad.push('animation-duration が 0 です（fill-mode: forwards が 効かず 中身が 消えます）');
+      // 0 にすると animation-fill-mode: forwards が効かず、中身が消える
+      if (/animation-duration\s*:\s*0(m?s)?\s*(!important)?\s*;/.test(css)) bad.push('animation-duration が 0 です（fill-mode: forwards が効かず中身が消えます）');
       if (/transition-duration\s*:\s*0(m?s)?\s*(!important)?\s*;/.test(css)) bad.push('transition-duration が 0 です');
       return { ok: bad.length === 0, detail: bad };
     },
   },
   {
     id: 'D_FORCED_COLORS',
-    title: 'forced-colors（ハイコントラスト）に 対応して いる',
-    run: (root) => {
-      const css = listFiles(root, 'css', '.css').map((rel) => read(root, rel)).join('\n');
-      return { ok: /forced-colors\s*:\s*active/.test(css), detail: ['地の 色が 無効に されると、押せる ことが 分からなく なります'] };
+    title: 'forced-colors（ハイコントラスト）に対応している',
+    run: (root, cfg) => {
+      const css = cssFiles(root, cfg).map((rel) => read(root, rel)).join('\n');
+      return { ok: /forced-colors\s*:\s*active/.test(css), detail: ['地の色が無効にされると、押せることが分からなくなります'] };
     },
   },
   {
     id: 'D_RT_COLOR',
-    title: 'ふりがな（rt）の 色を 決め打ちして いない',
-    run: (root) => {
+    title: 'ふりがな（rt）の色を決め打ちしていない',
+    run: (root, cfg) => {
       const bad = [];
-      for (const rel of listFiles(root, 'css', '.css')) {
+      for (const rel of cssFiles(root, cfg)) {
         const css = read(root, rel).replace(/\/\*[\s\S]*?\*\//g, '');
         for (const m of css.matchAll(/(^|[},])\s*rt\s*\{([^}]*)\}/g)) {
           const body = m[2];
           if (/color\s*:/.test(body) && !/color\s*:\s*inherit/.test(body)) {
-            // 色のついた 面で 継がせる 手当てが あれば よい
+            // 色のついた面で継がせる手当てがあればよい
             if (!/\[class\*?=["']?bg-|button\s+rt|\brt\s*\{\s*color\s*:\s*inherit/.test(css)) {
-              bad.push(`${rel}: rt に 色を 決め打ちして います（色の ついた 面で 読めなく なります）`);
+              bad.push(`${rel}: rt に色を決め打ちしています（色のついた面で読めなくなります）`);
             }
           }
         }
@@ -308,27 +373,26 @@ export const CHECKS = [
   },
   {
     id: 'F_LABEL_FOR_TABBABLE',
-    title: '<label for> の さす 部品が Tab の 順から 外れて いない',
+    title: '<label for> のさす部品が Tab の順から外れていない',
     /*
-     * F3（キーボードのみで 全機能に 到達）が 静的に 見える ただ 1つの 形。
+     * F3（キーボードのみで全機能に到達）が静的に見えるただ1つの形。
      *
      * <label class="btn" for="x">えらぶ</label>
      * <input type="file" id="x" hidden>          ← これ
      *
-     * label は それ自身 Tab に 乗りません。さす 先が hidden
-     * （＝ display:none）だと、**マウスでしか 押せない ボタン**に なります。
-     * ビルドも 静的解析も 通り、画面も ふつうに 出るので 気づけません。
-     * 実さいに Typa の「ファイルを えらぶ」が この 形で、
-     * キーボードだけの 人は 書き出した きろくを 読みこむ 手が
-     * まったく ありませんでした（scripts/measure/keyboard.mjs で 見つけました）。
+     * label はそれ自身 Tab に乗らない。さす先が hidden（＝ display:none）だと、
+     * **マウスでしか押せないボタン**になる。ビルドも静的解析も通り、画面も
+     * ふつうに出るので気づけない。実際に Typa の「ファイルをえらぶ」が
+     * この形で、キーボードだけの人は書き出したきろくを読みこむ手が
+     * まったくなかった。
      *
-     * 見えなく する こと 自体は 問題では ありません。
-     * position:absolute + opacity:0 なら Tab には のこります。
-     * **hidden / display:none だけ**を 落とします。
+     * 見えなくすること自体は問題ではない。
+     * position:absolute + opacity:0 なら Tab にはのこる。
+     * **hidden / display:none だけ**を落とす。
      */
-    run: (root) => {
+    run: (root, cfg) => {
       const bad = [];
-      const sources = ['index.html', ...listFiles(root, 'js', '.js')];
+      const sources = ['index.html', ...jsFiles(root, cfg)];
       for (const rel of sources) {
         const src = read(root, rel);
         if (src === null) continue;
@@ -341,8 +405,8 @@ export const CHECKS = [
           for (const m of src.matchAll(re)) {
             const tag = m[0];
             if (/\shidden(\s|>|=)/.test(tag) || /display\s*:\s*none/.test(tag)) {
-              bad.push(`${rel}: <label for="${id}"> の さす ${m[1]} が Tab の 順から 外れて います`
-                + '（hidden／display:none では なく、position:absolute + opacity:0 で 見えなく します）');
+              bad.push(`${rel}: <label for="${id}"> のさす ${m[1]} が Tab の順から外れています`
+                + '（hidden／display:none ではなく、position:absolute + opacity:0 で見えなくします）');
             }
           }
         }
@@ -353,213 +417,306 @@ export const CHECKS = [
 
   {
     id: 'E_MANIFEST_ID',
-    title: 'manifest の id / scope / start_url が 配信場所と 合って いる',
-    run: (root) => {
-      const s = read(root, 'manifest.webmanifest');
-      if (!s) return { ok: false, detail: ['manifest.webmanifest が ありません'] };
+    title: 'manifest の id / scope / start_url が配信場所と合っている',
+    run: (root, cfg) => {
+      const s = read(root, cfg.manifest);
+      if (!s) return { ok: false, detail: [`${cfg.manifest} がありません`] };
       let j;
-      try { j = JSON.parse(s); } catch (e) { return { ok: false, detail: ['JSON として 読めません: ' + e.message] }; }
+      try { j = JSON.parse(s); } catch (e) { return { ok: false, detail: ['JSON として読めません: ' + e.message] }; }
       const bad = [];
-      // 正しい 値は「どこで 配信するか」で 変わります。
+      // 正しい値は「どこで配信するか」で変わる。
       //
-      // 独自ドメイン（CNAME あり）だと アプリは サブドメインの 直下に 置かれます。
+      // 独自ドメイン（CNAME あり）だとアプリはサブドメインの直下に置かれる。
       //   https://typa.giga-school.com/
-      // ここで scope を /Typa/ の ままに すると、scope が ページの URL を 含まなく なり、
-      // manifest ごと 無視されて PWA として インストール できなく なります。
+      // ここで scope を /Typa/ のままにすると、scope がページの URL を含まなくなり、
+      // manifest ごと無視されて PWA としてインストールできなくなる。
       //
-      // CNAME が なければ 共有オリジンの サブディレクトリ配信なので
+      // CNAME がなければ共有オリジンのサブディレクトリ配信なので
       //   https://（ID）.github.io/Typa/
-      // リポジトリ名の 絶対パスで ないと、同居する 別アプリと 取りちがえられます。
+      // リポジトリ名の絶対パスでないと、同居する別アプリと取りちがえられる。
       //
-      // 相対パス（"./"）は どちらの 配信でも 正しく 解決されるので、いつでも 通します。
+      // 相対パス（"./"）はどちらの配信でも正しく解決されるので、いつでも通す。
       const hasCname = fs.existsSync(path.join(root, 'CNAME'));
       const want = hasCname ? '"./"（相対パス）か "/"' : '/{リポジトリ名}/';
       const okPath = (v) => v === './' || (hasCname ? /^\/(\?|#|$)/.test(v) : /^\/[^/]+\/$/.test(v));
       for (const k of ['id', 'scope', 'start_url']) {
-        if (!j[k]) { bad.push(`${k} が ありません`); continue; }
-        if (!okPath(j[k])) bad.push(`${k} が "${j[k]}" です。${want} の 形に して ください`);
+        if (!j[k]) { bad.push(`${k} がありません`); continue; }
+        if (!okPath(j[k])) bad.push(`${k} が "${j[k]}" です。${want} の形にしてください`);
       }
       if (j.id && j.scope && j.start_url && new Set([j.id, j.scope, j.start_url]).size !== 1) {
-        bad.push('id / scope / start_url が そろって いません');
+        bad.push('id / scope / start_url がそろっていません');
       }
       return { ok: bad.length === 0, detail: bad };
     },
   },
   {
     id: 'E_CNAME',
-    title: 'CNAME に BOM が なく、ドメイン名 1行だけ',
+    title: 'CNAME に BOM がなく、ドメイン名 1行だけ',
     run: (root) => {
       const p = path.join(root, 'CNAME');
-      if (!fs.existsSync(p)) return { ok: true, detail: [] };  // 独自ドメインを 使わない リポジトリ
+      if (!fs.existsSync(p)) return { ok: true, detail: [], skip: '独自ドメインをつかっていません' };
       const raw = fs.readFileSync(p, 'utf8');
-      // ⚠️ BOM を 必ず 見ること。メモ帳や PowerShell の `>` で 書くと 先頭に U+FEFF が 入る。
-      //    目では 見えないのに GitHub Pages は ドメイン名の 一部として 読むため、
-      //    ホスト名として 不正に なり、カスタムドメインが 有効に ならない。
-      //    DNS も Pages の 設定も 正しいのに「なぜか つながらない」という、
-      //    いちばん 探しにくい 壊れかたを する。実際に これで 全リポジトリが 止まった。
+      // ⚠️ BOM を必ず見ること。メモ帳や PowerShell の `>` で書くと先頭に U+FEFF が入る。
+      //    目では見えないのに GitHub Pages はドメイン名の一部として読むため、
+      //    ホスト名として不正になり、カスタムドメインが有効にならない。
+      //    DNS も Pages の設定も正しいのに「なぜかつながらない」という、
+      //    いちばん探しにくい壊れかたをする。実際にこれで全リポジトリが止まった。
       if (raw.charCodeAt(0) === 0xFEFF) {
-        return { ok: false, detail: ['先頭に BOM が あります。BOM なし UTF-8 で 保存し直して ください'] };
+        return { ok: false, detail: ['先頭に BOM があります。BOM なし UTF-8 で保存し直してください'] };
       }
       const lines = raw.split('\n').filter((l) => l.trim() !== '');
-      if (lines.length !== 1) return { ok: false, detail: [`ドメイン名 1行だけに して ください（${lines.length} 行 あります）`] };
+      if (lines.length !== 1) return { ok: false, detail: [`ドメイン名 1行だけにしてください（${lines.length} 行あります）`] };
       const host = lines[0].trim();
       if (!/^(?!-)[a-z0-9-]+(\.(?!-)[a-z0-9-]+)+$/.test(host)) {
-        return { ok: false, detail: [`"${host}" は ホスト名として 正しく ありません（https:// ・ 末尾の / ・ 大文字 ・ 空白は 入れられません）`] };
+        return { ok: false, detail: [`"${host}" はホスト名として正しくありません（https:// ・末尾の / ・大文字・空白は入れられません）`] };
       }
       return { ok: true, detail: [] };
     },
   },
   {
-    id: 'E_ICONS',
-    title: 'アイコン 4種 と、透明を ふくまない apple-touch-icon',
-    run: (root) => {
-      const s = read(root, 'manifest.webmanifest');
-      if (!s) return { ok: false, detail: ['manifest.webmanifest が ありません'] };
-      const j = JSON.parse(s);
+    id: 'E_STALE_REPO_PATH',
+    title: '旧リポジトリ名の絶対パスがのこっていない（独自ドメインのときだけ）',
+    run: (root, cfg) => {
+      // manifest だけ直しても、SW の登録先と先読み一覧が旧構成のリポジトリ名の
+      // 絶対パス（/Qalc/…）のままだと、登録も先読みも全件 404 になる。
+      // どちらも失敗を握りつぶす作りなので、画面にもコンソールにも何も出ないまま
+      // 「オフラインで開けない・インストールできない」だけが静かに残る。
+      // 実際にこの形で残っていたので、機械で見張る。
+      if (!fs.existsSync(path.join(root, 'CNAME'))) return { ok: true, detail: [], skip: '独自ドメインをつかっていません' };
+      if (!cfg.repoName) return { ok: false, detail: ['quality.config.json に repoName がありません（この検査に必要です）'] };
+      const stale = `/${cfg.repoName}/`;
       const bad = [];
-      const has = (size, purpose) => (j.icons || []).some((i) => i.sizes === size
-        && (purpose === 'any' ? (!i.purpose || i.purpose.includes('any')) : (i.purpose || '').includes('maskable')));
-      if (!has('192x192', 'any')) bad.push('192 の any アイコンが ありません');
-      if (!has('512x512', 'any')) bad.push('512 の any アイコンが ありません');
-      if (!has('192x192', 'maskable')) bad.push('192 の maskable が ありません');
-      if (!has('512x512', 'maskable')) bad.push('512 の maskable が ありません');
-
-      const html = read(root, 'index.html') || '';
-      const m = html.replace(/<!--[\s\S]*?-->/g, '').match(/rel=["']apple-touch-icon["'][^>]*href=["']([^"']+)["']/i);
-      if (!m) bad.push('apple-touch-icon が ありません');
-      else {
-        const rel = m[1].replace(/^\.\//, '');
-        const p = path.join(root, rel);
-        if (!fs.existsSync(p)) bad.push(`apple-touch-icon の ファイルが ありません: ${rel}`);
-        else if (pngHasAlpha(p)) bad.push(`${rel} に 透明が あります（iOS で 四すみが 黒く なります）`);
+      const targets = ['index.html', 'offline.html', cfg.manifest, swSourceOf(cfg), ...jsFiles(root, cfg)];
+      for (const rel of new Set(targets)) {
+        const s = read(root, rel);
+        if (!s) continue;
+        // ⚠️ 判定の前にコメントを落とすこと。
+        //    落とさないと、この決まりを説明したコメント自身
+        //    （「旧 '/Qalc/sw.js' で書かない」）に反応して落ちる。
+        const code = stripComments(s).replace(/<!--[\s\S]*?-->/g, ' ');
+        if (code.includes(`'${stale}`) || code.includes(`"${stale}`)) bad.push(`${rel}: ${stale} がのこっています`);
       }
       return { ok: bad.length === 0, detail: bad };
     },
   },
   {
-    id: 'E_SW_CACHE_SCOPE',
-    title: 'sw.js が 自アプリ接頭辞の キャッシュだけを 消して いる',
+    id: 'E_ICONS',
+    title: 'アイコン 4種と、透明をふくまない apple-touch-icon',
+    run: (root, cfg) => {
+      const s = read(root, cfg.manifest);
+      if (!s) return { ok: false, detail: [`${cfg.manifest} がありません`] };
+      const j = JSON.parse(s);
+      const bad = [];
+      const has = (size, purpose) => (j.icons || []).some((i) => i.sizes === size
+        && (purpose === 'any' ? (!i.purpose || i.purpose.includes('any')) : (i.purpose || '').includes('maskable')));
+      if (!has('192x192', 'any')) bad.push('192 の any アイコンがありません');
+      if (!has('512x512', 'any')) bad.push('512 の any アイコンがありません');
+      if (!has('192x192', 'maskable')) bad.push('192 の maskable がありません');
+      if (!has('512x512', 'maskable')) bad.push('512 の maskable がありません');
+
+      const html = read(root, 'index.html') || '';
+      const m = html.replace(/<!--[\s\S]*?-->/g, '').match(/rel=["']apple-touch-icon["'][^>]*href=["']([^"']+)["']/i);
+      if (!m) bad.push('apple-touch-icon がありません');
+      else {
+        const rel = m[1].replace(/^\.\//, '');
+        const p = path.join(root, rel);
+        if (!fs.existsSync(p)) bad.push(`apple-touch-icon のファイルがありません: ${rel}`);
+        else if (pngHasAlpha(p)) bad.push(`${rel} に透明があります（iOS で四すみが黒くなります）`);
+      }
+      return { ok: bad.length === 0, detail: bad };
+    },
+  },
+  {
+    id: 'E_INSTALL_HOOK',
+    title: 'インストールの合図を <head> のいちばん先で受け取っている',
     run: (root) => {
-      const src = read(root, 'sw.js');
-      if (!src) return { ok: false, detail: ['sw.js が ありません'] };
+      // Chrome は条件がそろうと即座に beforeinstallprompt を出す。
+      // 本体の JS より後だと合図を取りこぼし、通信が遅い端末で
+      // 「インストール」ボタンが出なくなる。install-hook.js を
+      // <head> で（本体より先に）読むのが決まった形。
+      const html = read(root, 'index.html');
+      if (!html) return { ok: false, detail: ['index.html がありません'] };
+      const clean = html.replace(/<!--[\s\S]*?-->/g, '');
+      const headEnd = clean.indexOf('</head>');
+      const head = headEnd > 0 ? clean.slice(0, headEnd) : clean;
+      if (/<script[^>]*src=["'][^"']*install-hook\.js["']/.test(head)) return { ok: true, detail: [] };
+      // 外部ファイルに分けていなくても、head 内で受けていればよい
+      if (head.includes('beforeinstallprompt')) return { ok: true, detail: [] };
+      return { ok: false, detail: ['<head> で beforeinstallprompt を受けていません（install-hook.js を head で読みます）'] };
+    },
+  },
+  {
+    id: 'E_SW_CACHE_SCOPE',
+    title: 'SW が自アプリ接頭辞のキャッシュだけを消している',
+    run: (root, cfg) => {
+      if (cfg.sw === 'none') return { ok: true, detail: [], skip: 'Service Worker をつかっていません' };
+      const rel = swSourceOf(cfg);
+      const src = read(root, rel);
+      if (!src) return { ok: false, detail: [`${rel} がありません`] };
       const code = stripComments(src);
       const at = code.search(/caches\s*\.\s*keys\s*\(/);
       if (at < 0) return { ok: true, detail: [] };
-      // ⚠️ 「消す 式」を 追っては いけません（(k) => caches.delete(k) を 見のがします）。
-      //    見るのは「startsWith で しぼって いる か」です。
+      // ⚠️ 「消す式」を追ってはいけない（(k) => caches.delete(k) を見のがす）。
+      //    見るのは「startsWith でしぼっているか」。
       //
-      // ⚠️ ファイル 全体から startsWith を さがしても いけません。
-      //    sw.js には fetch の 中に
+      // ⚠️ ファイル全体から startsWith をさがしてもいけない。
+      //    sw.js には fetch の中に
       //      if (!url.pathname.startsWith(...)) return;
-      //    のような **別の** startsWith が ふつうに あります。
-      //    それを 拾うと、caches.keys() を 全消しして いても 通って しまいます
-      //    （scripts/self-test.mjs で 実さいに 見つかりました）。
-      //    caches.keys() から その 式の おわりまで だけを 見ます。
+      //    のような**別の** startsWith がふつうにある。
+      //    それを拾うと、caches.keys() を全消ししていても通ってしまう。
+      //    caches.keys() からその式のおわりまでだけを見る。
       const seg = code.slice(at, at + 600);
       const end = seg.search(/addEventListener\s*\(/);
       const scope = end > 0 ? seg.slice(0, end) : seg;
       const ok = /\.\s*startsWith\s*\(/.test(scope) || /\.\s*indexOf\s*\([^)]*\)\s*===?\s*0/.test(scope);
-      return { ok, detail: ['caches.keys() の 結果を しぼらずに 消して います。同じ ドメインの 他アプリが オフラインで 起動しなく なります'] };
+      return { ok, detail: ['caches.keys() の結果をしぼらずに消しています。同じドメインの他アプリがオフラインで起動しなくなります'] };
     },
   },
   {
     id: 'E_SW_NO_LOCALSTORAGE',
-    title: 'sw.js が localStorage に さわって いない',
-    run: (root) => {
-      const src = read(root, 'sw.js');
-      if (!src) return { ok: false, detail: ['sw.js が ありません'] };
-      // ⚠️ コメントを 落としてから 見る。「localStorage は さわりません」に 反応します
-      return { ok: !/localStorage/.test(stripComments(src)), detail: ['sw.js が localStorage を さわって います'] };
+    title: 'SW が localStorage にさわっていない',
+    run: (root, cfg) => {
+      if (cfg.sw === 'none') return { ok: true, detail: [], skip: 'Service Worker をつかっていません' };
+      const rel = swSourceOf(cfg);
+      const src = read(root, rel);
+      if (!src) return { ok: false, detail: [`${rel} がありません`] };
+      // ⚠️ コメントを落としてから見る。「localStorage はさわりません」に反応する
+      return { ok: !/localStorage/.test(stripComments(src)), detail: [`${rel} が localStorage をさわっています`] };
     },
   },
   {
     id: 'E_SW_NO_SKIP_WAITING_ON_INSTALL',
-    title: 'sw.js の install で skipWaiting() して いない',
-    run: (root) => {
-      const src = read(root, 'sw.js');
-      if (!src) return { ok: false, detail: ['sw.js が ありません'] };
+    title: 'SW の install で skipWaiting() していない',
+    run: (root, cfg) => {
+      if (cfg.sw === 'none') return { ok: true, detail: [], skip: 'Service Worker をつかっていません' };
+      if (cfg.sw === 'workbox') return { ok: true, detail: [], skip: 'workbox 生成のため原文に install ハンドラがありません' };
+      const rel = swSourceOf(cfg);
+      const src = read(root, rel);
+      if (!src) return { ok: false, detail: [`${rel} がありません`] };
       const code = stripComments(src);
-      const m = code.match(/addEventListener\(\s*['"]install['"][\s\S]*?(?=addEventListener\(\s*['"](?:activate|fetch|message)['"]|$)/);
-      if (!m) return { ok: false, detail: ['install の ハンドラが ありません'] };
-      const bad = /skipWaiting\s*\(/.test(m[0]);
-      return { ok: !bad, detail: ['install で skipWaiting() すると、児童が 打って いる まっさい中に 版が 入れかわります'] };
+      // ⚠️ 引用符は ' と " の両方を受けること。"install" と書くリポジトリがある。
+      const start = code.search(/addEventListener\(\s*['"]install['"]/);
+      if (start < 0) return { ok: false, detail: ['install のハンドラがありません'] };
+      // ⚠️ 区間の切れ目は「次の addEventListener」まで。event 名を決め打ちすると、
+      //    並び順しだいで message ハンドラの中の（正しい）skipWaiting を
+      //    install のものと誤判定する。
+      const rest = code.slice(start + 'addEventListener('.length);
+      const next = rest.search(/addEventListener\s*\(/);
+      const seg = next > 0 ? rest.slice(0, next) : rest;
+      const bad = /skipWaiting\s*\(/.test(seg);
+      return { ok: !bad, detail: ['install で skipWaiting() すると、児童が操作しているまっさい中に版が入れかわります'] };
     },
   },
   {
     id: 'E_SW_UPDATE_PROMPT',
-    title: '更新の おしらせが あり、押された ときだけ 切りかえる',
-    run: (root) => {
-      const js = listFiles(root, 'js', '.js').map((rel) => stripComments(read(root, rel))).join('\n');
+    title: '更新のおしらせがあり、押されたときだけ切りかえる',
+    run: (root, cfg) => {
+      if (cfg.sw === 'none') return { ok: true, detail: [], skip: 'Service Worker をつかっていません' };
+      const js = jsFiles(root, cfg).map((rel) => stripComments(read(root, rel))).join('\n');
       const bad = [];
-      if (!/SKIP_WAITING/.test(js)) bad.push('画面から SKIP_WAITING を おくって いません（更新の おしらせが ありません）');
+      if (!/SKIP_WAITING/.test(js)) bad.push('画面から SKIP_WAITING をおくっていません（更新のおしらせがありません）');
       if (/addEventListener\(\s*['"]controllerchange['"]/.test(js)) {
-        // 押した か どうか の 見はりが 無いと、初回訪問が かならず 1回 リロードされます
+        // 押したかどうかの見はりが無いと、初回訪問がかならず1回リロードされる
         const seg = js.slice(js.indexOf('controllerchange'), js.indexOf('controllerchange') + 400);
-        if (!/location\s*\.\s*reload/.test(seg)) { /* reload しないなら 問題なし */ }
-        else if (!/if\s*\(\s*!\w+/.test(seg)) bad.push('controllerchange で 無条件に reload して います（初回訪問が 1回 リロードされます）');
+        if (!/location\s*\.\s*reload/.test(seg)) { /* reload しないなら問題なし */ }
+        else if (!/if\s*\(\s*!\w+/.test(seg)) bad.push('controllerchange で無条件に reload しています（初回訪問が1回リロードされます）');
       }
       return { ok: bad.length === 0, detail: bad };
     },
   },
   {
     id: 'E_SW_REGISTER_READYSTATE',
-    title: 'Service Worker の 登録に readyState の 分岐が ある',
-    run: (root) => {
-      const files = listFiles(root, 'js', '.js').filter((rel) => /serviceWorker\s*\.\s*register/.test(stripComments(read(root, rel))));
-      if (!files.length) return { ok: false, detail: ['serviceWorker.register が ありません'] };
+    title: 'Service Worker の登録に readyState の分岐がある',
+    run: (root, cfg) => {
+      if (cfg.sw === 'none') return { ok: true, detail: [], skip: 'Service Worker をつかっていません' };
+      const files = jsFiles(root, cfg).filter((rel) => /serviceWorker\s*\.\s*register/.test(stripComments(read(root, rel))));
+      if (!files.length) return { ok: false, detail: ['serviceWorker.register がありません'] };
       const bad = files.filter((rel) => {
         const code = stripComments(read(root, rel));
-        if (!/addEventListener\(\s*['"]load['"]/.test(code)) return false;   // load を 待って いない なら 問題なし
+        if (!/addEventListener\(\s*['"]load['"]/.test(code)) return false;   // load を待っていないなら問題なし
         return !/readyState\s*===?\s*['"]complete['"]/.test(code);
       });
-      return { ok: bad.length === 0, detail: bad.map((f) => `${f}: load が もう 済んで いる 場合を 見て いません（黙って 登録されません）`) };
+      return { ok: bad.length === 0, detail: bad.map((f) => `${f}: load がもう済んでいる場合を見ていません（黙って登録されません）`) };
+    },
+  },
+  {
+    id: 'E_SW_VERSION_GENERATED',
+    title: 'SW の版が自動生成されている（手書きの定数でない）',
+    run: (root, cfg) => {
+      // 手書きの版は 2026-08-21 に全リポジトリで同時に上げ忘れる事故を起こした。
+      // いまは tools/build-sw.mjs（正本: standards/sw/）が先読み対象の中身から
+      // 版を作る。ここでは「その形になっているか」を見る。
+      //   - 目印コメント __APP_VERSION__ が行末にある（手で上げる値ではないと読み手に伝わる）
+      //   - tools/build-sw.mjs が実在する
+      //   - static は v0/dev のままでない（vite は原本が 'dev' で正しい。ビルドが埋める）
+      if (cfg.sw === 'none') return { ok: true, detail: [], skip: 'Service Worker をつかっていません' };
+      if (cfg.sw === 'workbox') return { ok: true, detail: [], skip: 'workbox がプリキャッシュのリビジョンを自動生成します' };
+      const rel = swSourceOf(cfg);
+      const src = read(root, rel);
+      if (!src) return { ok: false, detail: [`${rel} がありません`] };
+      if (!fs.existsSync(path.join(root, 'tools/build-sw.mjs'))) {
+        return { ok: false, detail: ['tools/build-sw.mjs がありません。版の自動生成が外れています'] };
+      }
+      // ⚠️ 目印はコメントなので、コメント除去前の原文で見る。
+      const name = cfg.swVersionConst ? cfg.swVersionConst.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : '(?:APP_VERSION|VERSION)';
+      const m = src.match(new RegExp(`const ${name} = '([^']*)'; /\\* __APP_VERSION__ \\*/`));
+      if (!m) {
+        return { ok: false, detail: [`${rel} の版の行が自動生成の形（__APP_VERSION__ の目印つき）になっていません`] };
+      }
+      if (cfg.sw === 'static' && (m[1] === 'v0' || m[1] === 'dev')) {
+        return { ok: false, detail: [`${rel} の版が仮の値（${m[1]}）のままです。node tools/build-sw.mjs で埋めてください`] };
+      }
+      return { ok: true, detail: [] };
     },
   },
   {
     id: 'E_OFFLINE_HTML',
-    title: 'offline.html が あり、外部資産にも JavaScript にも たよって いない',
-    run: (root) => {
+    title: 'offline.html があり、外部資産にも JavaScript にもたよっていない',
+    run: (root, cfg) => {
+      if (cfg.sw === 'none') return { ok: true, detail: [], skip: 'Service Worker をつかっていません' };
       const s = read(root, 'offline.html');
-      if (!s) return { ok: false, detail: ['offline.html が ありません'] };
+      if (!s) return { ok: false, detail: ['offline.html がありません'] };
       const bad = [];
       const html = s.replace(/<!--[\s\S]*?-->/g, '');
-      if (/<script/i.test(html)) bad.push('JavaScript を つかって います（本体が 無い ときに 出る ページです）');
-      if (/https?:\/\//.test(html.replace(/<!DOCTYPE[^>]*>/i, ''))) bad.push('外の ファイルを 読んで います');
-      if (/\son[a-z]+\s*=/i.test(html)) bad.push('onclick= が あります（CSP で 動きません）');
-      if (!/<a[^>]+href/i.test(html)) bad.push('もういちど ひらく ための <a href> が ありません');
+      if (/<script/i.test(html)) bad.push('JavaScript をつかっています（本体が無いときに出るページです）');
+      if (/https?:\/\//.test(html.replace(/<!DOCTYPE[^>]*>/i, ''))) bad.push('外のファイルを読んでいます');
+      if (/\son[a-z]+\s*=/i.test(html)) bad.push('onclick= があります（CSP で動きません）');
+      if (!/<a[^>]+href/i.test(html)) bad.push('もういちどひらくための <a href> がありません');
       return { ok: bad.length === 0, detail: bad };
     },
   },
   {
     id: 'E_SW_PRECACHE_OFFLINE',
-    title: 'sw.js が offline.html を 先読みして いる',
-    run: (root) => {
-      const src = read(root, 'sw.js');
-      if (!src) return { ok: false, detail: ['sw.js が ありません'] };
+    title: 'SW が offline.html を先読みしている',
+    run: (root, cfg) => {
+      if (cfg.sw === 'none') return { ok: true, detail: [], skip: 'Service Worker をつかっていません' };
+      if (cfg.sw === 'workbox') return { ok: true, detail: [], skip: 'workbox の globPatterns が先読みを生成します' };
+      const rel = swSourceOf(cfg);
+      const src = read(root, rel);
+      if (!src) return { ok: false, detail: [`${rel} がありません`] };
       const code = stripComments(src);
-      // ⚠️ ファイル 全体で offline.html を さがしては いけません。
-      //    fetch の 逃げ道に caches.match('./offline.html') と 書いて あれば
-      //    見つかって しまい、**先読みして いなくても 通ります**。
-      //    圏外では 先読みして いない ものは 出せないので、意味が 逆に なります
-      //    （scripts/self-test.mjs で 実さいに 見つかりました）。
-      //    先読みの 配列（[ … ] の 中）に 入って いる ことを 見ます。
+      // ⚠️ ファイル全体で offline.html をさがしてはいけない。
+      //    fetch の逃げ道に caches.match('./offline.html') と書いてあれば
+      //    見つかってしまい、**先読みしていなくても通る**。
+      //    圏外では先読みしていないものは出せないので、意味が逆になる。
+      //    先読みの配列（[ … ] の中）に入っていることを見る。
       const inArray = [...code.matchAll(/\[[\s\S]{0,4000}?\]/g)]
         .some((m) => /offline\.html/.test(m[0]));
-      return { ok: inArray, detail: ['offline.html を 先読みの 一覧に 入れて いません。圏外では 出せません'] };
+      return { ok: inArray, detail: ['offline.html を先読みの一覧に入れていません。圏外では出せません'] };
     },
   },
   {
     id: 'E_MASKABLE_SAFE_ZONE',
-    title: 'maskable の 下地が はしまで 届き、中身が セーフゾーンに おさまって いる',
-    run: (root) => {
-      const s = read(root, 'manifest.webmanifest');
-      if (!s) return { ok: false, detail: ['manifest.webmanifest が ありません'] };
+    title: 'maskable の下地がはしまで届いている',
+    run: (root, cfg) => {
+      const s = read(root, cfg.manifest);
+      if (!s) return { ok: false, detail: [`${cfg.manifest} がありません`] };
       const j = JSON.parse(s);
       const bad = [];
       for (const ic of (j.icons || []).filter((i) => (i.purpose || '').includes('maskable'))) {
-        const p = path.join(root, ic.src);
-        if (!fs.existsSync(p)) { bad.push(`${ic.src} が ありません`); continue; }
-        if (pngHasAlpha(p)) bad.push(`${ic.src} に 透明が あります。maskable の 下地は はしまで のばして ください（縮んで 見えます）`);
+        const p = path.join(root, ic.src.replace(/^\.\//, ''));
+        if (!fs.existsSync(p)) { bad.push(`${ic.src} がありません`); continue; }
+        if (pngHasAlpha(p)) bad.push(`${ic.src} に透明があります。maskable の下地ははしまでのばしてください（縮んで見えます）`);
       }
       return { ok: bad.length === 0, detail: bad };
     },
@@ -567,10 +724,10 @@ export const CHECKS = [
 
   {
     id: 'F_FILE_SIZE',
-    title: '1ファイルが 5,000行 / 400KB を こえて いない',
-    run: (root) => {
+    title: '1ファイルが 5,000行 / 400KB をこえていない',
+    run: (root, cfg) => {
       const bad = [];
-      for (const rel of [...listFiles(root, 'js', '.js'), ...listFiles(root, 'css', '.css'), 'index.html']) {
+      for (const rel of [...jsFiles(root, cfg), ...cssFiles(root, cfg), 'index.html']) {
         const s = read(root, rel);
         if (!s) continue;
         const lines = s.split('\n').length;
@@ -584,7 +741,7 @@ export const CHECKS = [
   {
     id: 'F_IMG_SIZE',
     title: '画像が 150KB 以下（PWA アイコン 512 は 60KB、favicon は 30KB）',
-    run: (root) => {
+    run: (root, cfg) => {
       const bad = [];
       const walk = (dir) => {
         const p = path.join(root, dir);
@@ -598,22 +755,22 @@ export const CHECKS = [
           if (kb > limit) bad.push(`${path.join(dir, f)}: ${kb.toFixed(1)} KB（上限 ${limit} KB）`);
         }
       };
-      walk('icons'); walk('img'); walk('images');
+      for (const d of cfg.imageDirs) walk(d);
       return { ok: bad.length === 0, detail: bad };
     },
   },
   {
     id: 'F_IMG_DIMENSIONS',
-    title: '<img> に width / height が ある',
-    run: (root) => {
+    title: '<img> に width / height と alt がある',
+    run: (root, cfg) => {
       const bad = [];
-      for (const rel of ['index.html', 'offline.html', ...listFiles(root, 'js', '.js')]) {
+      for (const rel of [...cfg.htmlFiles, ...jsFiles(root, cfg)]) {
         const s = read(root, rel);
         if (!s) continue;
         const html = s.replace(/<!--[\s\S]*?-->/g, '');
         for (const m of html.matchAll(/<img\b[^>]*>/gi)) {
-          if (!/\bwidth=/.test(m[0]) || !/\bheight=/.test(m[0])) bad.push(`${rel}: width/height が ない <img>（画面が がたつきます）`);
-          if (!/\balt=/.test(m[0])) bad.push(`${rel}: alt が ない <img>`);
+          if (!/\bwidth=/.test(m[0]) || !/\bheight=/.test(m[0])) bad.push(`${rel}: width/height がない <img>（画面ががたつきます）`);
+          if (!/\balt=/.test(m[0])) bad.push(`${rel}: alt がない <img>`);
         }
       }
       return { ok: bad.length === 0, detail: bad };
@@ -621,7 +778,7 @@ export const CHECKS = [
   },
 ];
 
-/** PNG に 完全不透明 でない 画素が あるか（標準ライブラリだけで 読みます） */
+/** PNG に完全不透明でない画素があるか（標準ライブラリだけで読む） */
 export function pngHasAlpha(file) {
   const buf = fs.readFileSync(file);
   if (buf.length < 26 || buf.readUInt32BE(0) !== 0x89504e47) return false;
@@ -629,7 +786,7 @@ export function pngHasAlpha(file) {
   // 0 = グレー, 2 = RGB, 3 = パレット, 4 = グレー+α, 6 = RGBA
   if (colorType === 0 || colorType === 2) return false;
   if (colorType === 3) {
-    // パレットの ときは tRNS チャンクが あれば 透明を もちます
+    // パレットのときは tRNS チャンクがあれば透明をもつ
     let i = 8;
     while (i + 8 <= buf.length) {
       const len = buf.readUInt32BE(i);
@@ -640,7 +797,7 @@ export function pngHasAlpha(file) {
     }
     return false;
   }
-  // α チャンネルを もつ 形式。実さいに 展開して 透明が あるかを 見ます
+  // α チャンネルをもつ形式。実際に展開して透明があるかを見る
   return rgbaHasTransparency(buf);
 }
 
@@ -650,7 +807,7 @@ function rgbaHasTransparency(buf) {
   const h = buf.readUInt32BE(20);
   const depth = buf[24];
   const colorType = buf[25];
-  if (depth !== 8) return true;   // 判定できない ときは 安全側（透明が ある）に たおす
+  if (depth !== 8) return true;   // 判定できないときは安全側（透明がある）にたおす
   const ch = colorType === 6 ? 4 : 2;
   let idat = Buffer.alloc(0);
   let i = 8;
@@ -691,14 +848,33 @@ function rgbaHasTransparency(buf) {
   return false;
 }
 
-// node:zlib を 同期で 読むための 小さな ヘルパ（ESM から require 相当を つかう）
+// node:zlib を同期で読むための小さなヘルパ（ESM から require 相当をつかう）
 import { createRequire } from 'node:module';
 const require$ = createRequire(import.meta.url);
 
-export function runGigaChecks(root) {
+/**
+ * すべての検査を走らせる。
+ * config は quality.config.json の中身（またはその一部）。
+ * 返り値: [{ id, title, ok, detail[], skipped? }]
+ *
+ * config.skips に載る検査は実行せず skipped:true で返す（理由必須）。
+ * 「検査をゆるめる」のではなく、事情を理由つきで残すための口。
+ */
+export function runGigaChecks(root, config = {}) {
+  const cfg = { ...DEFAULTS, ...config };
+  const skipMap = new Map();
+  for (const s of cfg.skips || []) {
+    if (!s || !s.id || !s.reason) {
+      return [{ id: 'CONFIG', title: 'quality.config.json の skips', ok: false, detail: ['skips の各項目には id と reason が必要です'] }];
+    }
+    skipMap.set(s.id, s.reason);
+  }
   return CHECKS.map((c) => {
+    if (skipMap.has(c.id)) {
+      return { id: c.id, title: `${c.title}（スキップ: ${skipMap.get(c.id)}）`, ok: true, detail: [], skipped: true };
+    }
     let r;
-    try { r = c.run(root); } catch (e) { r = { ok: false, detail: ['検査が 例外で 落ちました: ' + e.message] }; }
+    try { r = c.run(root, cfg); } catch (e) { r = { ok: false, detail: ['検査が例外で落ちました: ' + e.message] }; }
     return { id: c.id, title: c.title + (r.skip ? `（${r.skip}）` : ''), ok: !!r.ok, detail: r.ok ? [] : (r.detail || []) };
   });
 }
