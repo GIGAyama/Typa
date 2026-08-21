@@ -8,6 +8,7 @@
   "scripts": {
     "check": "node tools/build-sw.mjs --check && node scripts/check-project.mjs",
     "check:self-test": "node scripts/self-test.mjs",
+    "test": "node --test tests/*.test.mjs",
     "check:lessons": "node tools/check-lessons.js",
     "check:mastery": "node tools/check-mastery.js",
     "check:progress": "node tools/check-progress.js",

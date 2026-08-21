@@ -18,6 +18,8 @@ jobs:
       # Typa は 実行時の 依存が 0 個なので npm install は いりません
       - name: 品質ゲート（Part I の 検査 と アプリの 中身の 検査）
         run: npm run check
+      - name: 学習ログの 受け渡し口の テスト
+        run: npm test
 
   # 正本（GIGAyama.github.io/standards/）との一致。コピーだけ直すと他リポジトリに修正が届かないため。
   drift:
