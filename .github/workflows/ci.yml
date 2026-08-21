@@ -6,6 +6,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  # 手動でも 回せるように して おく（Webhook が 落ちた ときの 保険）
+  workflow_dispatch:
 
 jobs:
   check:
