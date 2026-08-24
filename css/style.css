@@ -419,6 +419,9 @@ body:not([data-screen="play"]) .view {
   box-shadow: 0 var(--press) 0 var(--line), var(--shadow);
   transition: transform .09s ease, box-shadow .09s ease, filter .15s ease;
 }
+/* .btn は <button> に付ける前提だったが、外へのリンクにも使う。
+   <a> は既定で下線が付き、ボタンの形の中で浮くので、そこだけ消す */
+a.btn { text-decoration: none; }
 .btn:hover { filter: brightness(1.04); }
 .btn:active { transform: translateY(var(--press)); box-shadow: 0 0 0 transparent, var(--shadow); }
 .btn-primary {

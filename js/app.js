@@ -2344,7 +2344,14 @@
         <div class="reset-confirm" id="reset-confirm" hidden>
           <button class="btn btn-danger-solid" id="reset-yes">けす</button>
           <button class="btn btn-ghost" id="reset-no">やめる</button>
-        </div>`)}`;
+        </div>`)}
+
+      ${card(`
+        <p class="lead">${icon('info')} せんせいへ</p>
+        <p class="muted">じゅぎょうでの つかいどころや、ローマ字の おしえ方を
+        giga-school.com に かいて あります。</p>
+        <a class="btn btn-outline" href="https://giga-school.com/apps/typa/"
+           target="_blank" rel="noopener noreferrer">使い方を 読む</a>`)}`;
   }
 
   // ------------------------------------------------------------------
