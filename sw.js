@@ -29,7 +29,7 @@
  */
 const CACHE_PREFIX = 'typa-';
 // APP_VERSION は手で上げない。node tools/build-sw.mjs が先読み対象の中身から自動で決める
-const APP_VERSION = 'v64d2b42e'; /* __APP_VERSION__ */
+const APP_VERSION = 'vf8014ab1'; /* __APP_VERSION__ */
 const VERSION = CACHE_PREFIX + APP_VERSION;
 const ASSETS = [
   './',
@@ -60,6 +60,10 @@ const ASSETS = [
   './js/play.js',
   './js/shortcut.js',
   './js/app.js',
+  // 利用規約・プライバシーの行き先を出す部品。並べておかないと、圏外で
+  // 開いたときだけリンクが 1 本も出ない（行き先そのものは開けなくても、
+  // どこにあるかは見えているほうがいい）。
+  './web/giga-app-links.js',
   './manifest.webmanifest',
   './icons/favicon-32.png',
   './icons/icon-192.png',
