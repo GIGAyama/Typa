@@ -29,7 +29,7 @@
  */
 const CACHE_PREFIX = 'typa-';
 // APP_VERSION は手で上げない。node tools/build-sw.mjs が先読み対象の中身から自動で決める
-const APP_VERSION = 'v817da674'; /* __APP_VERSION__ */
+const APP_VERSION = 'vf8014ab1'; /* __APP_VERSION__ */
 const VERSION = CACHE_PREFIX + APP_VERSION;
 const ASSETS = [
   './',
