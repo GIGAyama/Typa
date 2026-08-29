@@ -172,6 +172,17 @@
 <script src="./js/nav.js"></script>
 <script src="./js/play.js"></script>
 <script src="./js/shortcut.js"></script>
+<!-- 行き先（利用規約・プライバシー）。中身は 正本の 部品
+     standards/web/giga-app-links.js（配布物 web/giga-app-links.js）が 出す。
+
+     ⚠️ この アプリには フッターが 無く、画面は すべて JS が 描く。
+        置き場所の <div data-giga-links> を 設定画面の 中に 置いても、
+        その 画面を 開くまで 存在しないので 部品は 見つけられない。
+        置き場所を 作らず、部品の 既定（画面の いちばん下に 出す）に まかせる。
+
+     ⚠️ data-links は <script> に 書く。まだ docs/manual/ が 無いので
+        「つかいかた」を 外して ある。マニュアルを 書いたら この 属性を 消す。 -->
+<script src="./web/giga-app-links.js" data-links="terms,privacy" defer></script>
 <script src="./js/app.js"></script>
 <!-- 学習ログを記録ハブ（まなびクエスト）へ写す。読むだけで、このアプリの記録には触れない -->
 <script src="./js/records-hub-client.js" defer></script>
