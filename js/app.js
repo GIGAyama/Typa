@@ -2351,7 +2351,7 @@
         <p class="muted">じゅぎょうでの つかいどころや、ローマ字の おしえ方を
         giga-school.com に かいて あります。</p>
         <a class="btn btn-outline" href="https://giga-school.com/apps/typa/"
-           target="_blank" rel="noopener noreferrer">使い方を 読む</a>`)}`;
+           target="_blank" rel="noopener noreferrer">しょうかいページを 読む</a>`)}`;
   }
 
   // ------------------------------------------------------------------
