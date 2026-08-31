@@ -180,9 +180,11 @@
         その 画面を 開くまで 存在しないので 部品は 見つけられない。
         置き場所を 作らず、部品の 既定（画面の いちばん下に 出す）に まかせる。
 
-     ⚠️ data-links は <script> に 書く。まだ docs/manual/ が 無いので
-        「つかいかた」を 外して ある。マニュアルを 書いたら この 属性を 消す。 -->
-<script src="./web/giga-app-links.js" data-links="terms,privacy" defer></script>
+     ⚠️ data-links は 書かない。docs/manual/manual.md を 置いたので、
+        部品の 既定（つかいかた・利用規約・プライバシーの 3つ）を そのまま 出す。
+        「つかいかた」の 行き先は giga-school.com/apps/typa/manual/ で、
+        毎朝 ポータルが docs/manual/manual.md から 組み直す。 -->
+<script src="./web/giga-app-links.js" defer></script>
 <script src="./js/app.js"></script>
 <!-- 学習ログを記録ハブ（まなびクエスト）へ写す。読むだけで、このアプリの記録には触れない -->
 <script src="./js/records-hub-client.js" defer></script>
