@@ -898,15 +898,23 @@ body[data-screen="play"] .play > *:not(.play-lower) {
 .buddy { width: 100%; }
 .buddy-svg {
   display: block; width: 100%; height: auto;
+  overflow: hidden;
   /* 絵の 中の 色は 決めうちです。まわりの 色に つられて
      キャラクターの 顔色が 変わって しまわない ように します。
      わくは まわりと そろえて、キャラクターも「1まいの カード」に 見せます */
   border-radius: var(--radius-s);
-  background: linear-gradient(180deg, #dceafa 0%, #eef5fd 62%, #ffffff 100%);
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, .72);
+  background: linear-gradient(180deg, #cfe3fa 0%, #e7f2fd 54%, #f8fbff 100%);
 }
-html[data-theme="dark"] .buddy-svg { background: linear-gradient(180deg, #1c2a3d 0%, #24344a 62%, #2c3d55 100%); }
+html[data-theme="dark"] .buddy-svg {
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, .10);
+  background: linear-gradient(180deg, #182538 0%, #22344d 58%, #2a3f5c 100%);
+}
 @media (prefers-color-scheme: dark) {
-  html[data-theme="auto"] .buddy-svg { background: linear-gradient(180deg, #1c2a3d 0%, #24344a 62%, #2c3d55 100%); }
+  html[data-theme="auto"] .buddy-svg {
+    box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, .10);
+    background: linear-gradient(180deg, #182538 0%, #22344d 58%, #2a3f5c 100%);
+  }
 }
 
 /* 打つ 画面の ならび。
